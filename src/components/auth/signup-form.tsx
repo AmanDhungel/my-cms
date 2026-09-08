@@ -12,13 +12,21 @@ import {
   fieldLabelClass,
   inputClass,
 } from "@/components/auth/field"
-import { CREW_SIZES, signupSchema, type SignupValues } from "@/lib/validations/auth"
+import { ApiRequestError, apiFetch } from "@/lib/api-client"
+import {
+  CREW_SIZES,
+  signupSchema,
+  type SignupValues,
+} from "@/lib/validations/auth"
+import type { BusinessDTO } from "@/models/business"
+import type { UserDTO } from "@/models/user"
 
 export function SignupForm() {
   const {
     register,
     handleSubmit,
     setValue,
+    setError,
     control,
     formState: { errors, isSubmitting },
   } = useForm<SignupValues>({
@@ -37,8 +45,29 @@ export function SignupForm() {
   const crewSize = useWatch({ control, name: "crewSize" })
 
   async function onSubmit(values: SignupValues) {
-    // Step 2 (crew invites) and the create-workspace call go here.
-    toast.success(`${values.business} is valid. Auth API isn't wired up.`)
+    try {
+      const { business } = await apiFetch<{
+        user: UserDTO
+        business: BusinessDTO
+      }>("/api/auth/signup", {
+        method: "POST",
+        body: JSON.stringify(values),
+      })
+      // Workspace created and the owner is signed in. Step 2 (crew invites)
+      // hooks in here.
+      toast.success(`${business.name} is ready. You're signed in as the owner.`)
+    } catch (error) {
+      if (error instanceof ApiRequestError) {
+        for (const [path, messages] of Object.entries(
+          error.fieldErrors ?? {}
+        )) {
+          setError(path as keyof SignupValues, { message: messages[0] })
+        }
+        toast.error(error.message)
+        return
+      }
+      toast.error("Could not reach the server")
+    }
   }
 
   return (

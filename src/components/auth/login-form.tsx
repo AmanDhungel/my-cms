@@ -6,12 +6,15 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
+import { ApiRequestError, apiFetch } from "@/lib/api-client"
 import { loginSchema, type LoginValues } from "@/lib/validations/auth"
+import type { UserDTO } from "@/models/user"
 
 export function LoginForm() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -19,8 +22,25 @@ export function LoginForm() {
   })
 
   async function onSubmit(values: LoginValues) {
-    // No auth API yet — this is where the sign-in call goes.
-    toast.success(`Details valid for ${values.email}. Auth API isn't wired up.`)
+    try {
+      const { user } = await apiFetch<{ user: UserDTO }>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify(values),
+      })
+      // The session cookie is set. Redirect here once a dashboard exists.
+      toast.success(`Welcome back, ${user.name}.`)
+    } catch (error) {
+      if (error instanceof ApiRequestError) {
+        for (const [path, messages] of Object.entries(
+          error.fieldErrors ?? {}
+        )) {
+          setError(path as keyof LoginValues, { message: messages[0] })
+        }
+        toast.error(error.message)
+        return
+      }
+      toast.error("Could not reach the server")
+    }
   }
 
   return (
