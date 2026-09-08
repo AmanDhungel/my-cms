@@ -1,16 +1,17 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { signIn } from "next-auth/react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
-import { ApiRequestError, apiFetch } from "@/lib/api-client"
 import { loginSchema, type LoginValues } from "@/lib/validations/auth"
-import type { UserDTO } from "@/models/user"
 
 export function LoginForm() {
+  const router = useRouter()
   const {
     register,
     handleSubmit,
@@ -22,25 +23,23 @@ export function LoginForm() {
   })
 
   async function onSubmit(values: LoginValues) {
-    try {
-      const { user } = await apiFetch<{ user: UserDTO }>("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify(values),
-      })
-      // The session cookie is set. Redirect here once a dashboard exists.
-      toast.success(`Welcome back, ${user.name}.`)
-    } catch (error) {
-      if (error instanceof ApiRequestError) {
-        for (const [path, messages] of Object.entries(
-          error.fieldErrors ?? {}
-        )) {
-          setError(path as keyof LoginValues, { message: messages[0] })
-        }
-        toast.error(error.message)
-        return
-      }
-      toast.error("Could not reach the server")
+    const result = await signIn("credentials", {
+      email: values.email,
+      password: values.password,
+      redirect: false,
+    })
+
+    if (!result || result.error) {
+      // Deliberately vague: never confirm whether the address is registered.
+      const message = "Email or password is incorrect"
+      setError("password", { message })
+      toast.error(message)
+      return
     }
+
+    // /dashboard picks the owner or crew shell from the session's role.
+    router.push("/dashboard")
+    router.refresh()
   }
 
   return (
@@ -114,7 +113,9 @@ export function LoginForm() {
 
       <button
         type="button"
-        onClick={() => toast.info("Invite links land with the auth API.")}
+        onClick={() =>
+          toast.info("Open the join link your workspace owner sent you.")
+        }
         className="border-n-300 text-p-700 hover:bg-n-100 rounded-md border bg-white px-5 py-3 text-[14.5px] font-semibold transition-colors"
       >
         Continue with an invite link

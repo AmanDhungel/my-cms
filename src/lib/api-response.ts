@@ -7,6 +7,17 @@ export type ApiError = {
   fieldErrors?: Record<string, string[]>
 }
 
+/** Thrown by route guards; `handleApiError` turns it into the right status. */
+export class HttpError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = "HttpError"
+    this.status = status
+  }
+}
+
 export function ok<T>(data: T, status = 200) {
   return NextResponse.json(data, { status })
 }
@@ -17,6 +28,10 @@ export function fail(message: string, status = 400, fieldErrors?: ApiError["fiel
 
 /** Maps thrown errors to a consistent JSON body so the client can rely on `error`. */
 export function handleApiError(error: unknown) {
+  if (error instanceof HttpError) {
+    return fail(error.message, error.status)
+  }
+
   if (error instanceof ZodError) {
     return fail("Validation failed", 422, z_flatten(error))
   }

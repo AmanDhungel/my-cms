@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { signIn } from "next-auth/react"
 import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
@@ -22,6 +24,7 @@ import type { BusinessDTO } from "@/models/business"
 import type { UserDTO } from "@/models/user"
 
 export function SignupForm() {
+  const router = useRouter()
   const {
     register,
     handleSubmit,
@@ -45,17 +48,16 @@ export function SignupForm() {
   const crewSize = useWatch({ control, name: "crewSize" })
 
   async function onSubmit(values: SignupValues) {
+    let business: BusinessDTO
+
     try {
-      const { business } = await apiFetch<{
+      ;({ business } = await apiFetch<{
         user: UserDTO
         business: BusinessDTO
-      }>("/api/auth/signup", {
+      }>("/api/register", {
         method: "POST",
         body: JSON.stringify(values),
-      })
-      // Workspace created and the owner is signed in. Step 2 (crew invites)
-      // hooks in here.
-      toast.success(`${business.name} is ready. You're signed in as the owner.`)
+      }))
     } catch (error) {
       if (error instanceof ApiRequestError) {
         for (const [path, messages] of Object.entries(
@@ -67,7 +69,25 @@ export function SignupForm() {
         return
       }
       toast.error("Could not reach the server")
+      return
     }
+
+    // The workspace exists; sign the owner in with what they just typed.
+    const result = await signIn("credentials", {
+      email: values.email,
+      password: values.password,
+      redirect: false,
+    })
+
+    if (!result || result.error) {
+      toast.success(`${business.name} is ready — log in to continue.`)
+      router.push("/login")
+      return
+    }
+
+    // Step 2 (inviting the crew) lives on the dashboard's People page.
+    router.push("/dashboard/people")
+    router.refresh()
   }
 
   return (

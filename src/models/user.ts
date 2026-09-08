@@ -7,7 +7,7 @@ import {
   type Model,
 } from "mongoose"
 
-export const USER_ROLES = ["owner", "employee"] as const
+export const USER_ROLES = ["owner", "supervisor", "employee"] as const
 export type UserRole = (typeof USER_ROLES)[number]
 
 const userSchema = new Schema(
@@ -30,6 +30,8 @@ const userSchema = new Schema(
       default: "employee",
     },
     business: { type: Schema.Types.ObjectId, ref: "Business", required: true },
+    /** Working hours, set from the invite. Owners have none by default. */
+    shift: { type: String, trim: true, maxlength: 32 },
   },
   { timestamps: true }
 )
@@ -50,6 +52,7 @@ export type UserDTO = {
   email: string
   phone: string
   role: UserRole
+  shift: string | null
   businessId: string
 }
 
@@ -61,6 +64,7 @@ export function toUserDTO(user: HydratedDocument<UserDocument>): UserDTO {
     email: user.email,
     phone: user.phone,
     role: user.role,
+    shift: user.shift ?? null,
     businessId: String(user.business),
   }
 }
