@@ -32,6 +32,7 @@ export const keys = {
   projects: (status?: string) => ["projects", status ?? "all"] as const,
   notifications: (unread?: boolean) =>
     ["notifications", unread ? "unread" : "all"] as const,
+  unreadCount: () => ["notifications", "count"] as const,
 }
 
 type TasksResponse = { tasks: TaskDTO[] }
@@ -296,5 +297,20 @@ export function useMarkRead() {
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["notifications"] })
     },
+  })
+}
+
+/**
+ * Just the badge number. Shares the "notifications" key prefix, so marking
+ * anything read invalidates it along with the feed itself.
+ */
+export function useUnreadCount(initial: number) {
+  return useQuery({
+    queryKey: keys.unreadCount(),
+    queryFn: () =>
+      apiFetch<{ unread: number }>("/api/notifications?count=1"),
+    initialData: { unread: initial },
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   })
 }

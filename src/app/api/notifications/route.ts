@@ -13,7 +13,19 @@ export async function GET(request: NextRequest) {
     const viewer = await requireUser()
     await connectToDatabase()
 
-    const unreadOnly = request.nextUrl.searchParams.get("unread") === "1"
+    const params = request.nextUrl.searchParams
+
+    // The sidebar badge polls for a number, not a hundred rows.
+    if (params.get("count") === "1") {
+      return ok({
+        unread: await Notification.countDocuments({
+          user: viewer.id,
+          readAt: { $exists: false },
+        }),
+      })
+    }
+
+    const unreadOnly = params.get("unread") === "1"
     const filter: Record<string, unknown> = { user: viewer.id }
     if (unreadOnly) filter.readAt = { $exists: false }
 

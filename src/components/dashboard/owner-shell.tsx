@@ -15,6 +15,7 @@ import {
 } from "@/components/dashboard/nav-icons"
 import { SignOutButton } from "@/components/dashboard/sign-out-button"
 import { initialsOf, type Viewer } from "@/components/dashboard/viewer"
+import { useUnreadCount } from "@/lib/queries"
 
 type NavItem = {
   href: string
@@ -22,7 +23,10 @@ type NavItem = {
   icon: React.ComponentType<{ className?: string }>
   /** Rendered as a monospace count chip. `null` means no store backs it yet. */
   count?: number | null
+  /** Marigold pill: something is waiting, but nothing is wrong. */
   accent?: boolean
+  /** Red circle: unread, and it should catch the eye across the room. */
+  alert?: boolean
 }
 
 export function OwnerShell({
@@ -42,6 +46,9 @@ export function OwnerShell({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  // Seeded by the server render, then polled so the badge clears without a
+  // full navigation once the feed is read.
+  const unread = useUnreadCount(counts.unread).data.unread
 
   const workspace: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
@@ -77,8 +84,8 @@ export function OwnerShell({
       href: "/dashboard/notifications",
       label: "Notifications",
       icon: BellIcon,
-      count: counts.unread,
-      accent: true,
+      count: unread,
+      alert: true,
     },
     {
       href: "/dashboard/settings",
@@ -229,6 +236,13 @@ function NavCount({
   item: NavItem
   pendingInvites: number
 }) {
+  // Unread notifications get the one red badge in the nav, so it reads as
+  // "look at this" rather than as another count.
+  if (item.alert) {
+    if (!item.count) return null
+    return <AlertBadge count={item.count} />
+  }
+
   // People carries a second, marigold chip for invites that haven't been
   // accepted yet — the one number an owner acts on from the sidebar.
   if (item.href === "/dashboard/people") {
@@ -262,6 +276,31 @@ function NavCount({
   return null
 }
 
+/**
+ * The unread badge. Red, circular and never showing a zero — it exists to be
+ * noticed from across a desk, so it carries the count and an accessible label
+ * rather than colour alone.
+ */
+function AlertBadge({
+  count,
+  className,
+}: {
+  count: number
+  className?: string
+}) {
+  return (
+    <span
+      aria-label={`${count} unread`}
+      className={cn(
+        "bg-s-overdue grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 font-mono text-[10.5px] leading-none font-semibold text-white tabular-nums",
+        className
+      )}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  )
+}
+
 function MobileNav({
   items,
   pathname,
@@ -285,7 +324,17 @@ function MobileNav({
               active ? "text-p-700 bg-white font-semibold" : "text-n-500"
             )}
           >
-            <Icon className="size-[17px]" />
+            <span className="relative">
+              <Icon className="size-[17px]" />
+              {item.alert && item.count ? (
+                // Sits on the icon here — there is no room for a trailing chip
+                // in a bottom bar.
+                <AlertBadge
+                  count={item.count}
+                  className="absolute -top-1.5 -right-2.5"
+                />
+              ) : null}
+            </span>
             {item.label.replace("Organization ", "")}
           </Link>
         )
