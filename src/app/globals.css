@@ -185,40 +185,6 @@
   --sidebar-ring: var(--p-500);
 }
 
-/*
- * The guide is light-only. This dark scheme keeps its warmth by staying on the
- * same neutral ramp and lifting the teal to p-400 so it holds contrast.
- */
-.dark {
-  --background: var(--n-900);
-  --foreground: var(--n-100);
-  --card: var(--n-800);
-  --card-foreground: var(--n-100);
-  --popover: var(--n-800);
-  --popover-foreground: var(--n-100);
-  --primary: var(--p-400);
-  --primary-foreground: var(--p-900);
-  --secondary: var(--n-700);
-  --secondary-foreground: var(--n-100);
-  --muted: var(--n-700);
-  --muted-foreground: var(--n-400);
-  --accent: var(--n-700);
-  --accent-foreground: var(--n-100);
-  --destructive: #ff6369;
-  --border: var(--n-700);
-  --input: var(--n-700);
-  --ring: var(--p-400);
-
-  --sidebar: var(--n-800);
-  --sidebar-foreground: var(--n-100);
-  --sidebar-primary: var(--p-400);
-  --sidebar-primary-foreground: var(--p-900);
-  --sidebar-accent: var(--n-700);
-  --sidebar-accent-foreground: var(--n-100);
-  --sidebar-border: var(--n-700);
-  --sidebar-ring: var(--p-400);
-}
-
 @keyframes ems-view-in {
   from {
     opacity: 0;
@@ -264,6 +230,18 @@
   }
   html {
     @apply font-sans;
+  }
+
+  /*
+   * Guide: links are petrol teal with no underline. This sits in the base
+   * layer, so any explicit `text-*` utility still wins.
+   */
+  a {
+    color: var(--p-600);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--p-700);
   }
 
   /*

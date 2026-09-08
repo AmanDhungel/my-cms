@@ -13,10 +13,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      {/*
+        The EMS style guide is light-only, so the theme is pinned rather than
+        following the OS. `next-themes` stays in place because the sonner
+        Toaster reads `useTheme()`.
+      */}
       <ThemeProvider
         attribute="class"
-        defaultTheme="system"
-        enableSystem
+        defaultTheme="light"
+        forcedTheme="light"
         disableTransitionOnChange
       >
         {children}

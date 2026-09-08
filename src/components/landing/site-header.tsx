@@ -7,7 +7,8 @@ import Link from "next/link"
 export function SiteHeader() {
   return (
     <header className="border-n-200 sticky top-0 z-50 flex items-center justify-between gap-6 border-b bg-[rgba(250,249,247,0.82)] px-6 py-4 backdrop-blur-[14px] sm:px-10">
-      <Link href="/" className="flex items-center gap-2.5">
+      {/* The wordmark stays neutral; the base `a` rule would tint it teal. */}
+      <Link href="/" className="text-foreground flex items-center gap-2.5">
         <span
           aria-hidden
           className="bg-p-500 flex size-[26px] items-center justify-center rounded-lg"

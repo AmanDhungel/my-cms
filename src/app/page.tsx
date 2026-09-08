@@ -1,18 +1,18 @@
-import Link from "next/link"
+import Link from "next/link";
 
-import { ScrollEffects } from "@/components/landing/scroll-effects"
-import { SiteFooter } from "@/components/landing/site-footer"
-import { SiteHeader } from "@/components/landing/site-header"
-import { TaskBeacon } from "@/components/landing/task-beacon"
-import { StatusBadge } from "@/components/status-badge"
-import { TaskCard } from "@/components/task-card"
-import type { TaskStatus } from "@/lib/task-status"
+import { ScrollEffects } from "@/components/landing/scroll-effects";
+import { SiteFooter } from "@/components/landing/site-footer";
+import { SiteHeader } from "@/components/landing/site-header";
+import { TaskBeacon } from "@/components/landing/task-beacon";
+import { StatusBadge } from "@/components/status-badge";
+import { TaskCard } from "@/components/task-card";
+import type { TaskStatus } from "@/lib/task-status";
 
 const STATS = [
   { value: "100 m", label: "GEOFENCE RADIUS" },
   { value: "6 states", label: "TASK LIFECYCLE" },
   { value: "Offline", label: "CHECK-IN QUEUE" },
-]
+];
 
 const STEPS = [
   {
@@ -40,7 +40,7 @@ const STEPS = [
     note: "audit trail kept",
     accent: true,
   },
-]
+];
 
 /** The chip row; "In progress" is carried by the card beside it. */
 const CHIP_STATUSES: TaskStatus[] = [
@@ -49,7 +49,7 @@ const CHIP_STATUSES: TaskStatus[] = [
   "time",
   "done",
   "overdue",
-]
+];
 
 export default function Home() {
   return (
@@ -58,8 +58,7 @@ export default function Home() {
 
       <div
         aria-hidden
-        className="fixed inset-x-0 top-0 z-60 h-[3px] bg-[rgba(27,24,21,0.06)]"
-      >
+        className="fixed inset-x-0 top-0 z-60 h-[3px] bg-[rgba(27,24,21,0.06)]">
         <div data-scroll-progress className="bg-p-500 h-full w-0" />
       </div>
 
@@ -76,22 +75,19 @@ export default function Home() {
           <div className="relative flex max-w-[620px] flex-col gap-[22px] pt-16 lg:pt-0">
             <p
               data-reveal
-              className="text-p-600 font-mono text-xs tracking-[0.08em] uppercase"
-            >
+              className="text-p-600 font-mono text-xs tracking-[0.08em] uppercase">
               Employee management · v1
             </p>
             <h1
               data-reveal
               data-delay="60"
-              className="font-heading text-[40px] leading-[1.04] font-bold tracking-[-0.02em] text-balance sm:text-[52px] lg:text-[62px]"
-            >
+              className="font-heading text-[40px] leading-[1.04] font-bold tracking-[-0.02em] text-balance sm:text-[52px] lg:text-[62px]">
               Assign the work. Watch it land on site.
             </h1>
             <p
               data-reveal
               data-delay="120"
-              className="text-n-600 max-w-[520px] text-[17px] leading-[1.65] text-pretty"
-            >
+              className="text-n-600 max-w-[520px] text-[17px] leading-[1.65] text-pretty">
               Owners create located tasks. Employees check in inside the
               geofence. Status flows back the moment it changes — no phone
               calls, no guessing where the crew is.
@@ -99,26 +95,22 @@ export default function Home() {
             <div
               data-reveal
               data-delay="180"
-              className="flex flex-wrap items-center gap-3"
-            >
+              className="flex flex-wrap items-center gap-3">
               <Link
                 href="/signup"
-                className="bg-p-500 rounded-md px-6 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_rgba(14,124,123,0.24)] transition-[transform,filter] hover:-translate-y-0.5 hover:brightness-[1.06]"
-              >
+                className="bg-p-500 rounded-md px-6 py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_rgba(14,124,123,0.24)] transition-[transform,filter] hover:-translate-y-0.5 hover:brightness-[1.06]">
                 Create a workspace
               </Link>
               <Link
                 href="/login"
-                className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border px-[22px] py-3.5 text-[15px] font-semibold transition-colors"
-              >
+                className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border px-[22px] py-3.5 text-[15px] font-semibold transition-colors">
                 I already have an account
               </Link>
             </div>
             <dl
               data-reveal
               data-delay="240"
-              className="border-n-300 flex flex-wrap gap-5 border-t border-dashed pt-2.5"
-            >
+              className="border-n-300 flex flex-wrap gap-5 border-t border-dashed pt-2.5">
               {STATS.map((stat) => (
                 <div key={stat.label} className="flex flex-col gap-0.5">
                   <dt className="font-heading text-xl font-semibold">
@@ -136,8 +128,7 @@ export default function Home() {
 
           <div
             aria-hidden
-            className="text-n-500 absolute bottom-6 left-6 flex items-center gap-2.5 font-mono text-[11px] tracking-[0.1em] sm:left-10"
-          >
+            className="text-n-500 absolute bottom-6 left-6 flex items-center gap-2.5 font-mono text-[11px] tracking-[0.1em] sm:left-10">
             <span className="bg-n-300 block h-[34px] w-px [animation:ems-cue-drop_2.2s_ease-in-out_infinite]" />
             SCROLL
           </div>
@@ -149,26 +140,25 @@ export default function Home() {
             aria-hidden
             className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,42,41,0.86),rgba(5,42,41,0.42))]"
           />
-          <div data-para="0.10" className="relative max-w-[900px] px-6 sm:px-10">
+          <div
+            data-para="0.10"
+            className="relative max-w-[900px] px-6 sm:px-10">
             <p
               data-reveal
-              className="text-p-200 mb-[18px] font-mono text-xs tracking-[0.1em] uppercase"
-            >
+              className="text-p-200 mb-[18px] font-mono text-xs tracking-[0.1em] uppercase">
               01 — The problem
             </p>
             <h2
               data-reveal
               data-delay="80"
-              className="font-heading text-p-50 max-w-[760px] text-[32px] leading-[1.16] font-semibold tracking-[-0.015em] text-pretty sm:text-[46px]"
-            >
+              className="font-heading text-p-50 max-w-[760px] text-[32px] leading-[1.16] font-semibold tracking-[-0.015em] text-pretty sm:text-[46px]">
               A check-in button that anyone can press from the couch isn&rsquo;t
               a check-in.
             </h2>
             <p
               data-reveal
               data-delay="160"
-              className="text-p-100 mt-[22px] max-w-[560px] text-[17px] leading-[1.7]"
-            >
+              className="text-p-100 mt-[22px] max-w-[560px] text-[17px] leading-[1.7]">
               So every arrival is measured against the task&rsquo;s coordinates,
               logged with distance, and stamped in the audit trail. The owner
               sees it the second it happens.
@@ -183,21 +173,18 @@ export default function Home() {
         <section
           id="flow"
           data-fill-scope
-          className="bg-n-50 px-6 pt-[110px] pb-[120px] sm:px-10"
-        >
+          className="bg-n-50 px-6 pt-[110px] pb-[120px] sm:px-10">
           <div className="mx-auto flex max-w-[1080px] flex-col gap-11">
             <div className="flex max-w-[640px] flex-col gap-3">
               <p
                 data-reveal
-                className="text-p-600 font-mono text-xs tracking-[0.08em] uppercase"
-              >
+                className="text-p-600 font-mono text-xs tracking-[0.08em] uppercase">
                 02 — The loop
               </p>
               <h2
                 data-reveal
                 data-delay="60"
-                className="font-heading text-[30px] leading-[1.2] font-semibold tracking-[-0.015em] sm:text-[38px]"
-              >
+                className="font-heading text-[30px] leading-[1.2] font-semibold tracking-[-0.015em] sm:text-[38px]">
                 Four steps, and the day reports itself.
               </h2>
             </div>
@@ -218,15 +205,13 @@ export default function Home() {
                     key={item.step}
                     data-reveal
                     data-delay={index * 110}
-                    className="flex flex-col gap-3.5"
-                  >
+                    className="flex flex-col gap-3.5">
                     <span
                       className={
                         item.accent
                           ? "bg-a-50 border-a-400 text-a-700 font-heading flex size-[54px] items-center justify-center rounded-full border-2 text-base font-semibold"
                           : "bg-n-50 border-p-500 text-p-700 font-heading flex size-[54px] items-center justify-center rounded-full border-2 text-base font-semibold"
-                      }
-                    >
+                      }>
                       {item.step}
                     </span>
                     <h3 className="font-heading text-lg font-semibold">
@@ -271,8 +256,7 @@ export default function Home() {
               data-reveal
               data-delay="120"
               data-para="0.05"
-              className="lg:justify-self-end"
-            >
+              className="lg:justify-self-end">
               <TaskCard
                 task={{
                   id: "#TASK-0412",
@@ -294,26 +278,25 @@ export default function Home() {
             aria-hidden
             className="absolute inset-0 bg-[linear-gradient(90deg,rgba(51,31,3,0.82),rgba(51,31,3,0.35))]"
           />
-          <div data-para="0.10" className="relative max-w-[900px] px-6 sm:px-10">
+          <div
+            data-para="0.10"
+            className="relative max-w-[900px] px-6 sm:px-10">
             <p
               data-reveal
-              className="text-a-200 mb-[18px] font-mono text-xs tracking-[0.1em] uppercase"
-            >
+              className="text-a-200 mb-[18px] font-mono text-xs tracking-[0.1em] uppercase">
               04 — Marigold is a request
             </p>
             <h2
               data-reveal
               data-delay="80"
-              className="font-heading text-a-50 max-w-[720px] text-[30px] leading-[1.16] font-semibold tracking-[-0.015em] text-pretty sm:text-[44px]"
-            >
+              className="font-heading text-a-50 max-w-[720px] text-[30px] leading-[1.16] font-semibold tracking-[-0.015em] text-pretty sm:text-[44px]">
               If it&rsquo;s this colour, somebody needs a hand raised. Nothing
               else gets to use it.
             </h2>
             <p
               data-reveal
               data-delay="160"
-              className="text-a-100 mt-[22px] max-w-[540px] text-[17px] leading-[1.7]"
-            >
+              className="text-a-100 mt-[22px] max-w-[540px] text-[17px] leading-[1.7]">
               Leave requests, advance payments, blocked tasks waiting on
               material. Everything else stays quiet in warm neutrals.
             </p>
@@ -327,8 +310,7 @@ export default function Home() {
         <section className="bg-n-50 px-6 py-[120px] sm:px-10">
           <div
             data-reveal
-            className="mx-auto flex max-w-[760px] flex-col items-center gap-[22px] text-center"
-          >
+            className="mx-auto flex max-w-[760px] flex-col items-center gap-[22px] text-center">
             <p className="text-p-600 font-mono text-xs tracking-[0.08em] uppercase">
               Start the loop
             </p>
@@ -342,14 +324,12 @@ export default function Home() {
             <div className="flex flex-wrap justify-center gap-3">
               <Link
                 href="/signup"
-                className="bg-p-500 rounded-md px-[26px] py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_rgba(14,124,123,0.24)] transition-transform hover:-translate-y-0.5"
-              >
+                className="bg-p-500 rounded-md px-[26px] py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_14px_rgba(14,124,123,0.24)] transition-transform hover:-translate-y-0.5">
                 Create a workspace
               </Link>
               <Link
                 href="/login"
-                className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border px-6 py-3.5 text-[15px] font-semibold transition-colors"
-              >
+                className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border px-6 py-3.5 text-[15px] font-semibold transition-colors">
                 Log in
               </Link>
             </div>
@@ -359,5 +339,5 @@ export default function Home() {
 
       <SiteFooter />
     </>
-  )
+  );
 }
