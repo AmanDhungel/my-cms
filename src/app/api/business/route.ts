@@ -16,7 +16,13 @@ export async function PATCH(request: Request) {
 
     const business = await Business.findByIdAndUpdate(
       owner.businessId,
-      { $set: { name: values.name, crewSize: values.crewSize } },
+      {
+        $set: {
+          name: values.name,
+          crewSize: values.crewSize,
+          timeZone: values.timeZone,
+        },
+      },
       { new: true, runValidators: true }
     ).orFail()
 

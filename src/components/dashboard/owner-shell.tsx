@@ -31,15 +31,32 @@ export function OwnerShell({
   children,
 }: {
   viewer: Viewer
-  counts: { people: number; pendingInvites: number }
+  counts: {
+    people: number
+    pendingInvites: number
+    projects: number
+    tasks: number
+    approvals: number
+    unread: number
+  }
   children: React.ReactNode
 }) {
   const pathname = usePathname()
 
   const workspace: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
-    { href: "/dashboard/projects", label: "Projects", icon: ProjectsIcon },
-    { href: "/dashboard/tasks", label: "All tasks", icon: TasksIcon },
+    {
+      href: "/dashboard/projects",
+      label: "Projects",
+      icon: ProjectsIcon,
+      count: counts.projects,
+    },
+    {
+      href: "/dashboard/tasks",
+      label: "All tasks",
+      icon: TasksIcon,
+      count: counts.tasks,
+    },
     {
       href: "/dashboard/people",
       label: "People",
@@ -50,12 +67,19 @@ export function OwnerShell({
       href: "/dashboard/approvals",
       label: "Approvals",
       icon: ApprovalsIcon,
+      count: counts.approvals,
       accent: true,
     },
   ]
 
   const account: NavItem[] = [
-    { href: "/dashboard/notifications", label: "Notifications", icon: BellIcon },
+    {
+      href: "/dashboard/notifications",
+      label: "Notifications",
+      icon: BellIcon,
+      count: counts.unread,
+      accent: true,
+    },
     {
       href: "/dashboard/settings",
       label: "Organization settings",
@@ -216,6 +240,17 @@ function NavCount({
           </span>
         ) : null}
         <span className="text-n-500 font-mono text-[11px]">{item.count}</span>
+      </span>
+    )
+  }
+
+  // Approvals and notifications wear the marigold chip, but only when there
+  // is actually something waiting — a "0" badge is just noise.
+  if (item.accent) {
+    if (!item.count) return null
+    return (
+      <span className="bg-a-400 text-a-900 rounded-full px-1.5 py-px font-mono text-[11px] font-medium">
+        {item.count}
       </span>
     )
   }

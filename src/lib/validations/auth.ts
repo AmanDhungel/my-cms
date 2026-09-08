@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { isValidTimeZone } from "@/lib/time"
+
 /** What the Credentials provider accepts. Kept loose — the DB decides. */
 export const credentialsSchema = z.object({
   email: z.email(),
@@ -65,6 +67,10 @@ export type AcceptInviteValues = z.infer<typeof acceptInviteSchema>
 export const businessSettingsSchema = z.object({
   name: z.string().trim().min(2, "Business name is required"),
   crewSize: z.enum(CREW_SIZES),
+  // Attendance day boundaries and lateness are judged in this zone.
+  timeZone: z
+    .string()
+    .refine(isValidTimeZone, "That isn't a time zone this system knows"),
 })
 
 export type BusinessSettingsValues = z.infer<typeof businessSettingsSchema>

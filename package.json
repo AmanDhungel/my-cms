@@ -15,7 +15,7 @@
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6",
-    "jose": "^6.2.12",
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.42.0",
     "mongoose": "^9.9.5",
     "next": "16.3.4",
@@ -33,6 +33,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

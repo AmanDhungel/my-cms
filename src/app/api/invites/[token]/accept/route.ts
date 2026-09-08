@@ -4,6 +4,7 @@ import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { findPendingInvite } from "@/lib/auth/invites"
 import { hashPassword } from "@/lib/auth/password"
 import { connectToDatabase } from "@/lib/mongodb"
+import { notifySupervisors } from "@/lib/notify"
 import { acceptInviteSchema } from "@/lib/validations/auth"
 import { Invite } from "@/models/invite"
 import { User, toUserDTO } from "@/models/user"
@@ -68,6 +69,14 @@ export async function POST(
     }
 
     const user = await User.findById(userId).orFail()
+
+    await notifySupervisors({
+      businessId: invite.businessId,
+      kind: "member_joined",
+      title: `${invite.name} joined the workspace`,
+      body: `${invite.role} · shift ${invite.shift}`,
+      href: "/dashboard/people",
+    })
 
     return ok({ user: toUserDTO(user) }, 201)
   } catch (error) {

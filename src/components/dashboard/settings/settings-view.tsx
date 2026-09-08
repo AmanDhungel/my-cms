@@ -17,6 +17,7 @@ import {
   secondaryButtonClass,
 } from "@/components/dashboard/ui"
 import { ApiRequestError, apiFetch } from "@/lib/api-client"
+import { TIME_ZONES } from "@/lib/time"
 import {
   CREW_SIZES,
   businessSettingsSchema,
@@ -48,6 +49,7 @@ export function SettingsView({
     defaultValues: {
       name: business.name,
       crewSize: business.crewSize as BusinessSettingsValues["crewSize"],
+      timeZone: business.timeZone,
     },
   })
 
@@ -61,6 +63,7 @@ export function SettingsView({
       reset({
         name: saved.name,
         crewSize: saved.crewSize as BusinessSettingsValues["crewSize"],
+        timeZone: saved.timeZone,
       })
       toast.success("Workspace updated")
       router.refresh()
@@ -164,6 +167,29 @@ export function SettingsView({
                 <FieldError message={errors.crewSize?.message} />
               </label>
             </div>
+
+            <label className="flex max-w-[320px] flex-col gap-[7px]">
+              <FieldLabel>Time zone</FieldLabel>
+              <select
+                disabled={!canEdit}
+                className={cn(
+                  inputClass,
+                  "cursor-pointer",
+                  !canEdit && "bg-n-100 text-n-600"
+                )}
+                {...register("timeZone")}
+              >
+                {zoneOptions(business.timeZone).map((zone) => (
+                  <option key={zone} value={zone}>
+                    {zone.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
+              <span className="text-n-400 text-[12px]">
+                Attendance days and lateness are judged here, not on the server.
+              </span>
+              <FieldError message={errors.timeZone?.message} />
+            </label>
           </div>
         </Panel>
       </form>
@@ -241,4 +267,11 @@ function Row({
       </span>
     </div>
   )
+}
+
+/** Keeps a workspace's saved zone selectable even if it isn't in the list. */
+function zoneOptions(current: string) {
+  return TIME_ZONES.includes(current as (typeof TIME_ZONES)[number])
+    ? [...TIME_ZONES]
+    : [current, ...TIME_ZONES]
 }

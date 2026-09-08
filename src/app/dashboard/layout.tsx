@@ -6,6 +6,10 @@ import { OwnerShell } from "@/components/dashboard/owner-shell"
 import { connectToDatabase } from "@/lib/mongodb"
 import { Business } from "@/models/business"
 import { Invite } from "@/models/invite"
+import { Notification } from "@/models/notification"
+import { Project } from "@/models/project"
+import { WorkRequest } from "@/models/request"
+import { Task } from "@/models/task"
 import { User } from "@/models/user"
 
 /** Sessions are per-request; nothing under /dashboard may be cached. */
@@ -46,16 +50,33 @@ export default async function DashboardLayout({
     )
   }
 
-  const [people, pendingInvites] = await Promise.all([
-    User.countDocuments({ business: business._id }),
-    Invite.countDocuments({
-      business: business._id,
-      acceptedAt: { $exists: false },
-    }),
-  ])
+  const [people, pendingInvites, projects, tasks, approvals, unread] =
+    await Promise.all([
+      User.countDocuments({ business: business._id }),
+      Invite.countDocuments({
+        business: business._id,
+        acceptedAt: { $exists: false },
+      }),
+      Project.countDocuments({ business: business._id, status: "active" }),
+      Task.countDocuments({
+        business: business._id,
+        status: { $nin: ["done", "cancelled"] },
+      }),
+      WorkRequest.countDocuments({
+        business: business._id,
+        status: "pending",
+      }),
+      Notification.countDocuments({
+        user: session.user.id,
+        readAt: { $exists: false },
+      }),
+    ])
 
   return (
-    <OwnerShell viewer={viewer} counts={{ people, pendingInvites }}>
+    <OwnerShell
+      viewer={viewer}
+      counts={{ people, pendingInvites, projects, tasks, approvals, unread }}
+    >
       {children}
     </OwnerShell>
   )
