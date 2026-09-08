@@ -1,7 +1,8 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  // Keep mongoose out of the bundler: it loads native/optional deps at runtime.
+  serverExternalPackages: ["mongoose"],
+}
 
-export default nextConfig;
+export default nextConfig

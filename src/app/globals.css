@@ -1,26 +1,298 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * EMS colour & style guide v1 — see EMS-Design-System.html.
+ * The three ramps below are the source of truth. The shadcn semantic tokens
+ * further down are derived from them, so both systems stay in step.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Primary — petrol teal: brand, primary actions, focus, links */
+  --p-50: #eaf6f5;
+  --p-100: #cfedea;
+  --p-200: #9ddbd4;
+  --p-300: #64c2b9;
+  --p-400: #35a79c;
+  --p-500: #0e7c7b;
+  --p-600: #0b6362;
+  --p-700: #094f4e;
+  --p-800: #073c3b;
+  --p-900: #052a29;
+
+  /* Accent — marigold: CTAs, highlights, "needs attention" nudges */
+  --a-50: #fdf6e9;
+  --a-100: #fae8c4;
+  --a-200: #f6d48c;
+  --a-300: #f1bb55;
+  --a-400: #e89a1c;
+  --a-500: #c87f0f;
+  --a-600: #a3660a;
+  --a-700: #7c4e07;
+  --a-800: #563605;
+  --a-900: #331f03;
+
+  /* Neutral — warm grey: backgrounds, borders, text */
+  --n-50: #faf9f7;
+  --n-100: #f2f0ec;
+  --n-200: #e4e1da;
+  --n-300: #cfcac0;
+  --n-400: #a39d8f;
+  --n-500: #78715f;
+  --n-600: #5a5447;
+  --n-700: #423d33;
+  --n-800: #2b2721;
+  --n-900: #1b1815;
+
+  /* Status — task lifecycle. Never used without its text label. */
+  --s-pending: #64748b;
+  --s-progress: #2f7de1;
+  --s-material: #e8a317;
+  --s-time: #8b5cf6;
+  --s-done: #1da76b;
+  --s-overdue: #e5484d;
 }
 
 @theme inline {
+  /* Ramps, named as the style guide names them. */
+  --color-p-50: var(--p-50);
+  --color-p-100: var(--p-100);
+  --color-p-200: var(--p-200);
+  --color-p-300: var(--p-300);
+  --color-p-400: var(--p-400);
+  --color-p-500: var(--p-500);
+  --color-p-600: var(--p-600);
+  --color-p-700: var(--p-700);
+  --color-p-800: var(--p-800);
+  --color-p-900: var(--p-900);
+
+  --color-a-50: var(--a-50);
+  --color-a-100: var(--a-100);
+  --color-a-200: var(--a-200);
+  --color-a-300: var(--a-300);
+  --color-a-400: var(--a-400);
+  --color-a-500: var(--a-500);
+  --color-a-600: var(--a-600);
+  --color-a-700: var(--a-700);
+  --color-a-800: var(--a-800);
+  --color-a-900: var(--a-900);
+
+  --color-n-50: var(--n-50);
+  --color-n-100: var(--n-100);
+  --color-n-200: var(--n-200);
+  --color-n-300: var(--n-300);
+  --color-n-400: var(--n-400);
+  --color-n-500: var(--n-500);
+  --color-n-600: var(--n-600);
+  --color-n-700: var(--n-700);
+  --color-n-800: var(--n-800);
+  --color-n-900: var(--n-900);
+
+  --color-s-pending: var(--s-pending);
+  --color-s-progress: var(--s-progress);
+  --color-s-material: var(--s-material);
+  --color-s-time: var(--s-time);
+  --color-s-done: var(--s-done);
+  --color-s-overdue: var(--s-overdue);
+
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+  --font-heading: var(--font-sora);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --shadow-sm: 0 1px 2px rgb(27 24 21 / 0.07);
+  --shadow-md: 0 4px 14px rgb(27 24 21 / 0.09);
+  --shadow-lg: 0 14px 34px rgb(27 24 21 / 0.13);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* shadcn semantic tokens, derived from the ramps above. */
+:root {
+  --background: var(--n-50);
+  --foreground: var(--n-900);
+  --card: #ffffff;
+  --card-foreground: var(--n-900);
+  --popover: #ffffff;
+  --popover-foreground: var(--n-900);
+  --primary: var(--p-500);
+  --primary-foreground: #ffffff;
+  --secondary: var(--n-100);
+  --secondary-foreground: var(--n-800);
+  --muted: var(--n-100);
+  --muted-foreground: var(--n-600);
+  --accent: var(--n-100);
+  --accent-foreground: var(--n-800);
+  --destructive: var(--s-overdue);
+  --border: var(--n-200);
+  --input: var(--n-300);
+  --ring: var(--p-500);
+
+  --chart-1: var(--p-500);
+  --chart-2: var(--a-400);
+  --chart-3: var(--s-progress);
+  --chart-4: var(--s-time);
+  --chart-5: var(--s-done);
+
+  --radius: 0.625rem; /* 10px — guide radius-md */
+
+  --sidebar: var(--n-100);
+  --sidebar-foreground: var(--n-900);
+  --sidebar-primary: var(--p-500);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--n-200);
+  --sidebar-accent-foreground: var(--n-800);
+  --sidebar-border: var(--n-200);
+  --sidebar-ring: var(--p-500);
+}
+
+/*
+ * The guide is light-only. This dark scheme keeps its warmth by staying on the
+ * same neutral ramp and lifting the teal to p-400 so it holds contrast.
+ */
+.dark {
+  --background: var(--n-900);
+  --foreground: var(--n-100);
+  --card: var(--n-800);
+  --card-foreground: var(--n-100);
+  --popover: var(--n-800);
+  --popover-foreground: var(--n-100);
+  --primary: var(--p-400);
+  --primary-foreground: var(--p-900);
+  --secondary: var(--n-700);
+  --secondary-foreground: var(--n-100);
+  --muted: var(--n-700);
+  --muted-foreground: var(--n-400);
+  --accent: var(--n-700);
+  --accent-foreground: var(--n-100);
+  --destructive: #ff6369;
+  --border: var(--n-700);
+  --input: var(--n-700);
+  --ring: var(--p-400);
+
+  --sidebar: var(--n-800);
+  --sidebar-foreground: var(--n-100);
+  --sidebar-primary: var(--p-400);
+  --sidebar-primary-foreground: var(--p-900);
+  --sidebar-accent: var(--n-700);
+  --sidebar-accent-foreground: var(--n-100);
+  --sidebar-border: var(--n-700);
+  --sidebar-ring: var(--p-400);
+}
+
+@keyframes ems-view-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes ems-cue-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes ems-dot-pulse {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+
+  /*
+   * Scroll reveals. The hidden state is scoped to `.reveal-ready`, which the
+   * scroll controller sets on mount — without JS the content just renders.
+   */
+  .reveal-ready [data-reveal] {
+    opacity: 0;
+    transform: translateY(26px);
+    transition:
+      opacity 0.8s cubic-bezier(0.2, 0.7, 0.2, 1),
+      transform 0.8s cubic-bezier(0.2, 0.7, 0.2, 1);
+    will-change: opacity, transform;
+  }
+  .reveal-ready [data-reveal][data-revealed] {
+    opacity: 1;
+    transform: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+    .reveal-ready [data-reveal] {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }

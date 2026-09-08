@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EMS Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* Primary — petrol teal: brand, primary actions, focus, links */
+    --p-50:#EAF6F5; --p-100:#CFEDEA; --p-200:#9DDBD4; --p-300:#64C2B9; --p-400:#35A79C;
+    --p-500:#0E7C7B; --p-600:#0B6362; --p-700:#094F4E; --p-800:#073C3B; --p-900:#052A29;
+
+    /* Accent — marigold: CTAs, highlights, "needs attention" nudges */
+    --a-50:#FDF6E9; --a-100:#FAE8C4; --a-200:#F6D48C; --a-300:#F1BB55; --a-400:#E89A1C;
+    --a-500:#C87F0F; --a-600:#A3660A; --a-700:#7C4E07; --a-800:#563605; --a-900:#331F03;
+
+    /* Neutral — warm gray: backgrounds, borders, text */
+    --n-50:#FAF9F7; --n-100:#F2F0EC; --n-200:#E4E1DA; --n-300:#CFCAC0; --n-400:#A39D8F;
+    --n-500:#78715F; --n-600:#5A5447; --n-700:#423D33; --n-800:#2B2721; --n-900:#1B1815;
+
+    /* Status — task lifecycle */
+    --s-pending:#64748B; --s-progress:#2F7DE1; --s-material:#E8A317;
+    --s-time:#8B5CF6; --s-done:#1DA76B; --s-overdue:#E5484D;
+
+    --font-display:'Sora',sans-serif;
+    --font-body:'Inter',sans-serif;
+    --font-mono:'JetBrains Mono',monospace;
+
+    --radius-sm:6px; --radius-md:10px; --radius-lg:16px; --radius-pill:999px;
+    --shadow-sm:0 1px 2px rgba(27,24,21,0.07);
+    --shadow-md:0 4px 14px rgba(27,24,21,0.09);
+    --shadow-lg:0 14px 34px rgba(27,24,21,0.13);
+
+    --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px; --sp-7:48px; --sp-8:64px;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--n-50); color:var(--n-900);
+    font-family:var(--font-body); font-size:15px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--p-600);}
+  :focus-visible{outline:2px solid var(--p-500); outline-offset:2px; border-radius:4px;}
+
+  .wrap{max-width:1080px; margin:0 auto; padding:var(--sp-7) var(--sp-5) var(--sp-8);}
+
+  header.hero{padding-bottom:var(--sp-6); border-bottom:1px dashed var(--n-300); margin-bottom:var(--sp-7);}
+  .eyebrow{
+    font-family:var(--font-mono); font-size:12px; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--p-600); margin:0 0 var(--sp-2);
+  }
+  h1.title{font-family:var(--font-display); font-weight:700; font-size:38px; line-height:1.15; margin:0 0 var(--sp-3); color:var(--n-900);}
+  .hero p{max-width:640px; color:var(--n-600); font-size:16px; margin:0;}
+
+  section{margin-bottom:var(--sp-8);}
+  h2.section-title{
+    font-family:var(--font-display); font-weight:600; font-size:22px; margin:0 0 var(--sp-2); color:var(--n-900);
+  }
+  .section-note{color:var(--n-500); font-size:14px; margin:0 0 var(--sp-5); max-width:620px;}
+
+  /* Color scales */
+  .scale{display:grid; grid-template-columns:repeat(9,1fr); gap:var(--sp-2); margin-bottom:var(--sp-3);}
+  .swatch{
+    position:relative; height:76px; border-radius:var(--radius-sm); cursor:pointer; border:none;
+    display:flex; align-items:flex-end; padding:var(--sp-2); font-family:var(--font-mono); font-size:10.5px;
+    box-shadow:inset 0 0 0 1px rgba(27,24,21,0.06); transition:transform .12s ease;
+  }
+  .swatch:hover{transform:translateY(-2px);}
+  .swatch .step{opacity:.75;}
+  .swatch .copied{
+    position:absolute; top:6px; right:6px; font-size:9px; background:rgba(0,0,0,0.65); color:#fff;
+    padding:2px 6px; border-radius:var(--radius-pill); opacity:0; transition:opacity .15s ease;
+  }
+  .swatch.show-copied .copied{opacity:1;}
+  .scale-label{font-size:13px; color:var(--n-600); font-weight:500;}
+
+  /* Status chips */
+  .status-row{display:flex; flex-wrap:wrap; gap:var(--sp-3);}
+  .badge{
+    display:inline-flex; align-items:center; gap:7px; padding:6px 12px 6px 10px;
+    border-radius:var(--radius-pill); font-size:13px; font-weight:500; background:var(--n-100); color:var(--n-800);
+  }
+  .badge .dot{width:8px; height:8px; border-radius:50%; flex:none; position:relative;}
+  .badge.pending .dot{background:var(--s-pending);}
+  .badge.progress .dot{background:var(--s-progress);}
+  .badge.material .dot{background:var(--s-material);}
+  .badge.time .dot{background:var(--s-time);}
+  .badge.done .dot{background:var(--s-done);}
+  .badge.overdue .dot{background:var(--s-overdue);}
+  .badge.progress .dot::after{
+    content:''; position:absolute; inset:-5px; border-radius:50%; border:1.5px solid var(--s-progress);
+    animation:pulse 1.8s ease-out infinite;
+  }
+  @keyframes pulse{0%{opacity:.6; transform:scale(0.6);} 100%{opacity:0; transform:scale(1.8);}}
+  @media (prefers-reduced-motion:reduce){.badge.progress .dot::after{animation:none; display:none;}}
+  .hex-tag{font-family:var(--font-mono); font-size:11px; color:var(--n-500); margin-left:2px;}
+
+  /* Typography */
+  .type-row{display:flex; align-items:baseline; justify-content:space-between; gap:var(--sp-4); padding:var(--sp-4) 0; border-bottom:1px solid var(--n-200);}
+  .type-row:last-child{border-bottom:none;}
+  .type-sample.display{font-family:var(--font-display); font-weight:700; font-size:34px;}
+  .type-sample.h1{font-family:var(--font-display); font-weight:600; font-size:26px;}
+  .type-sample.h2{font-family:var(--font-display); font-weight:600; font-size:19px;}
+  .type-sample.label{font-family:var(--font-body); font-weight:600; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--n-600);}
+  .type-sample.body{font-family:var(--font-body); font-weight:400; font-size:15px;}
+  .type-sample.mono{font-family:var(--font-mono); font-weight:400; font-size:13px;}
+  .type-meta{font-family:var(--font-mono); font-size:12px; color:var(--n-500); white-space:nowrap;}
+
+  /* Buttons */
+  .btn-row{display:flex; flex-wrap:wrap; gap:var(--sp-3); align-items:center;}
+  .btn{
+    font-family:var(--font-body); font-weight:600; font-size:14px; padding:10px 18px; border-radius:var(--radius-sm);
+    border:1px solid transparent; cursor:pointer; transition:filter .12s ease, transform .12s ease;
+  }
+  .btn:hover{filter:brightness(1.06); transform:translateY(-1px);}
+  .btn.primary{background:var(--p-500); color:#fff;}
+  .btn.accent{background:var(--a-400); color:var(--a-900);}
+  .btn.secondary{background:#fff; color:var(--p-700); border-color:var(--n-300);}
+  .btn.ghost{background:transparent; color:var(--n-700);}
+  .btn.danger{background:var(--s-overdue); color:#fff;}
+  .btn.disabled{background:var(--n-200); color:var(--n-400); cursor:not-allowed;}
+
+  /* Card demo */
+  .card{
+    background:#fff; border-radius:var(--radius-lg); padding:var(--sp-5); box-shadow:var(--shadow-md);
+    max-width:420px; border:1px solid var(--n-200);
+  }
+  .card-top{display:flex; justify-content:space-between; align-items:flex-start; gap:var(--sp-3);}
+  .card-title{font-family:var(--font-display); font-weight:600; font-size:17px; margin:0 0 4px;}
+  .card-sub{display:flex; align-items:center; gap:5px; color:var(--n-500); font-size:13px;}
+  .avatar{
+    width:32px; height:32px; border-radius:50%; background:var(--p-100); color:var(--p-700);
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; font-family:var(--font-display); flex:none;
+  }
+  .card-meta{display:flex; gap:var(--sp-4); margin-top:var(--sp-4); padding-top:var(--sp-4); border-top:1px dashed var(--n-200);}
+  .meta-item{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--n-600);}
+  .geofence{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--p-600); margin-top:var(--sp-3);}
+  .geofence .ring{width:10px; height:10px; border-radius:50%; border:1.5px solid var(--p-400); flex:none;}
+
+  /* Spacing / radius scales */
+  .scale-row{display:flex; align-items:flex-end; gap:var(--sp-4); flex-wrap:wrap;}
+  .sp-box{background:var(--p-200); border-radius:4px;}
+  .rad-box{width:56px; height:56px; background:var(--p-100); border:1.5px solid var(--p-400);}
+  .scale-item{text-align:center; font-family:var(--font-mono); font-size:11px; color:var(--n-500);}
+
+  /* Principles */
+  .principles{display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-4);}
+  .principle{background:#fff; border:1px solid var(--n-200); border-radius:var(--radius-md); padding:var(--sp-4);}
+  .principle h3{font-family:var(--font-display); font-size:14.5px; font-weight:600; margin:0 0 6px; color:var(--n-900);}
+  .principle p{margin:0; font-size:13.5px; color:var(--n-600); line-height:1.55;}
+
+  pre{
+    background:var(--n-900); color:var(--n-100); padding:var(--sp-5); border-radius:var(--radius-md);
+    overflow-x:auto; font-family:var(--font-mono); font-size:12.5px; line-height:1.7; box-shadow:var(--shadow-md);
+  }
+
+  @media (max-width:720px){
+    .scale{grid-template-columns:repeat(5,1fr);}
+    .principles{grid-template-columns:1fr;}
+    h1.title{font-size:28px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">Design system · v1</p>
+    <h1 class="title">EMS colour &amp; style guide</h1>
+    <p>A warm, low-strain palette for a system people check in on all day — soft neutral surfaces for the long dashboard sessions, a confident teal for trust and direction, and marigold reserved for the moments that need a hand raised. Click any swatch to copy its hex.</p>
+  </header>
+
+  <section>
+    <h2 class="section-title">Primary — petrol teal</h2>
+    <p class="section-note">Brand colour, primary buttons, links, active navigation, focus rings. Deliberately deeper than a typical SaaS blue — reads as steady and trustworthy rather than loud.</p>
+    <div class="scale" id="scale-p"></div>
+    <div class="scale-label">Main: <span class="hex-tag">#0E7C7B</span> (500)</div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Accent — marigold</h2>
+    <p class="section-note">Used sparingly: primary CTAs, unread badges, "this needs you" moments. If more than one thing on screen is marigold, something else should probably be quieter.</p>
+    <div class="scale" id="scale-a"></div>
+    <div class="scale-label">Main: <span class="hex-tag">#E89A1C</span> (400) for fills · <span class="hex-tag">#A3660A</span> (600) for text on light backgrounds</div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Neutral — warm grey</h2>
+    <p class="section-note">Backgrounds and text. A warm off-white page (#FAF9F7) instead of pure white, and a soft near-black for text instead of pure black — the pairing that actually reduces eye strain on a screen someone stares at all day, versus a stark black-on-white dashboard.</p>
+    <div class="scale" id="scale-n"></div>
+    <div class="scale-label">Page background: <span class="hex-tag">#FAF9F7</span> (50) · Body text: <span class="hex-tag">#1B1815</span> (900)</div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Status — task lifecycle</h2>
+    <p class="section-note">One colour per state, matched to your workflow. Colour is always paired with a text label — never colour alone — so it still reads correctly for colour-blind users.</p>
+    <div class="status-row">
+      <span class="badge pending"><span class="dot"></span>Pending<span class="hex-tag">#64748B</span></span>
+      <span class="badge progress"><span class="dot"></span>In progress<span class="hex-tag">#2F7DE1</span></span>
+      <span class="badge material"><span class="dot"></span>Need material<span class="hex-tag">#E8A317</span></span>
+      <span class="badge time"><span class="dot"></span>Need more time<span class="hex-tag">#8B5CF6</span></span>
+      <span class="badge done"><span class="dot"></span>Completed<span class="hex-tag">#1DA76B</span></span>
+      <span class="badge overdue"><span class="dot"></span>Overdue<span class="hex-tag">#E5484D</span></span>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Typography</h2>
+    <p class="section-note"><strong style="font-weight:600">Sora</strong> for headings — geometric and confident without tipping into decorative. <strong style="font-weight:600">Inter</strong> for everything else — it stays legible at the small sizes a dense dashboard needs. <strong style="font-weight:600">JetBrains Mono</strong> for anything that's really data: timestamps, coordinates, task IDs.</p>
+    <div class="type-row"><span class="type-sample display">Assign a task</span><span class="type-meta">Sora 700 · 34px</span></div>
+    <div class="type-row"><span class="type-sample h1">Today's tasks</span><span class="type-meta">Sora 600 · 26px</span></div>
+    <div class="type-row"><span class="type-sample h2">Warehouse restock — Bay 3</span><span class="type-meta">Sora 600 · 19px</span></div>
+    <div class="type-row"><span class="type-sample label">Assigned to</span><span class="type-meta">Inter 600 · 13px · uppercase</span></div>
+    <div class="type-row"><span class="type-sample body">Employee checks in once they arrive within the task's radius.</span><span class="type-meta">Inter 400 · 15px</span></div>
+    <div class="type-row"><span class="type-sample mono">27.7172° N, 85.3240° E · 09:41</span><span class="type-meta">JetBrains Mono 400 · 13px</span></div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Buttons</h2>
+    <div class="btn-row">
+      <button class="btn primary">Assign task</button>
+      <button class="btn accent">Approve request</button>
+      <button class="btn secondary">Cancel</button>
+      <button class="btn ghost">View details</button>
+      <button class="btn danger">Delete task</button>
+      <button class="btn disabled" disabled>Checked in</button>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Applied: a task card</h2>
+    <p class="section-note">Putting the tokens together — this is the card an owner sees on their dashboard.</p>
+    <div class="card">
+      <div class="card-top">
+        <div>
+          <p class="card-title">Warehouse restock — Bay 3</p>
+          <div class="card-sub">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+            Balaju Industrial Area
+          </div>
+        </div>
+        <div class="avatar">RS</div>
+      </div>
+      <div style="margin-top:14px;">
+        <span class="badge progress"><span class="dot"></span>In progress</span>
+      </div>
+      <div class="geofence"><span class="ring"></span>Check-in verified within 100m</div>
+      <div class="card-meta">
+        <span class="meta-item">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          Deadline 5:00 PM
+        </span>
+        <span class="meta-item" style="font-family:var(--font-mono)">#TASK-0412</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Spacing &amp; radius</h2>
+    <div class="scale-row" style="margin-bottom:var(--sp-6)">
+      <div class="scale-item"><div class="sp-box" style="width:4px;height:20px"></div>4</div>
+      <div class="scale-item"><div class="sp-box" style="width:8px;height:20px"></div>8</div>
+      <div class="scale-item"><div class="sp-box" style="width:12px;height:20px"></div>12</div>
+      <div class="scale-item"><div class="sp-box" style="width:16px;height:20px"></div>16</div>
+      <div class="scale-item"><div class="sp-box" style="width:24px;height:20px"></div>24</div>
+      <div class="scale-item"><div class="sp-box" style="width:32px;height:20px"></div>32</div>
+      <div class="scale-item"><div class="sp-box" style="width:48px;height:20px"></div>48</div>
+      <div class="scale-item"><div class="sp-box" style="width:64px;height:20px"></div>64</div>
+    </div>
+    <div class="scale-row">
+      <div class="scale-item"><div class="rad-box" style="border-radius:6px"></div>sm · 6px</div>
+      <div class="scale-item"><div class="rad-box" style="border-radius:10px"></div>md · 10px</div>
+      <div class="scale-item"><div class="rad-box" style="border-radius:16px"></div>lg · 16px</div>
+      <div class="scale-item"><div class="rad-box" style="border-radius:999px"></div>pill</div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Principles</h2>
+    <div class="principles">
+      <div class="principle"><h3>Colour is small, not loud</h3><p>Saturated colour lives in buttons, badges, and dots. Large surfaces — cards, backgrounds, panels — stay in the neutral 50–100 range so nothing fatigues the eye over a full shift.</p></div>
+      <div class="principle"><h3>Never colour alone</h3><p>Every status dot ships with a text label. It has to work for a colour-blind supervisor glancing at a phone screen in bright sunlight.</p></div>
+      <div class="principle"><h3>Warm, not stark</h3><p>No pure #FFFFFF backgrounds, no pure #000000 text. The warm-grey scale keeps contrast high without the glare of true black-on-white.</p></div>
+      <div class="principle"><h3>Marigold is a request, not decoration</h3><p>If it's marigold, it means someone needs to act. Don't spend the accent colour on things that are just informative.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">Implementation</h2>
+    <p class="section-note">Drop straight into <span class="hex-tag" style="font-size:12.5px">globals.css</span>.</p>
+    <pre id="css-tokens">:root {
+  --p-500: #0E7C7B;  /* primary */
+  --p-600: #0B6362;  /* primary hover */
+  --p-100: #CFEDEA;  /* primary tint */
+  --a-400: #E89A1C;  /* accent */
+  --a-600: #A3660A;  /* accent text-on-light */
+  --n-50:  #FAF9F7;  /* page background */
+  --n-900: #1B1815;  /* body text */
+  --n-200: #E4E1DA;  /* borders */
+  --status-pending:  #64748B;
+  --status-progress: #2F7DE1;
+  --status-material: #E8A317;
+  --status-time:     #8B5CF6;
+  --status-done:     #1DA76B;
+  --status-overdue:  #E5484D;
+  --font-display: 'Sora', sans-serif;
+  --font-body:    'Inter', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px;
+}</pre>
+  </section>
+
+</div>
+
+<script>
+  const scales = {
+    'scale-p': ['50','100','200','300','400','500','600','700','800','900'].map(s=>({step:s,varName:'--p-'+s})),
+    'scale-a': ['50','100','200','300','400','500','600','700','800','900'].map(s=>({step:s,varName:'--a-'+s})),
+    'scale-n': ['50','100','200','300','400','500','600','700','800','900'].map(s=>({step:s,varName:'--n-'+s})),
+  };
+  const root = getComputedStyle(document.documentElement);
+
+  function textColorFor(step){ return (parseInt(step) >= 500) ? '#fff' : '#1B1815'; }
+
+  Object.entries(scales).forEach(([containerId, items]) => {
+    const container = document.getElementById(containerId);
+    items.forEach(({step, varName}) => {
+      const hex = root.getPropertyValue(varName).trim();
+      const btn = document.createElement('button');
+      btn.className = 'swatch';
+      btn.style.background = hex;
+      btn.style.color = textColorFor(step);
+      btn.innerHTML = '<span class="step">'+step+'</span><span class="copied">copied</span>';
+      btn.setAttribute('aria-label', 'Copy hex code ' + hex);
+      btn.addEventListener('click', () => {
+        navigator.clipboard?.writeText(hex).catch(()=>{});
+        btn.classList.add('show-copied');
+        setTimeout(()=>btn.classList.remove('show-copied'), 900);
+      });
+      container.appendChild(btn);
+    });
+  });
+</script>
+</body>
+</html>
