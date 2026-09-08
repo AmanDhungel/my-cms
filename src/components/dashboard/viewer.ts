@@ -6,6 +6,8 @@ export type Viewer = {
   email: string
   role: UserRole
   businessName: string
+  /** Only loaded for the crew shell, which shows it in the sidebar. */
+  shift?: string | null
 }
 
 /** "Balaju Logistics" -> "BL". Used for the workspace and avatar chips. */

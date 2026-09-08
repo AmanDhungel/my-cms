@@ -15,9 +15,9 @@ const NAV = [
 ]
 
 /**
- * The crew view. The design draws it as a 390px phone; on a real phone the
- * frame drops away and the app fills the screen, so the same markup serves
- * both without a second layout.
+ * The crew view has two shapes. Below `lg` it is the design's phone app —
+ * full-bleed on a handset, framed on a tablet. From `lg` up the frame is
+ * dropped for a real desktop layout: sidebar on the left, page fills the rest.
  */
 export function EmployeeShell({
   viewer,
@@ -29,8 +29,8 @@ export function EmployeeShell({
   const pathname = usePathname()
 
   return (
-    <div className="bg-n-50 flex min-h-screen flex-col sm:bg-[repeating-linear-gradient(118deg,var(--n-100)_0_26px,#edeae4_26px_52px)]">
-      <header className="border-n-200 sticky top-0 z-40 flex items-center justify-between gap-4 border-b bg-[rgba(250,249,247,0.9)] px-5 py-3 backdrop-blur-[14px]">
+    <div className="bg-n-50 min-h-screen">
+      <header className="border-n-200 sticky top-0 z-40 flex items-center justify-between gap-4 border-b bg-[rgba(250,249,247,0.9)] px-5 py-3 backdrop-blur-[14px] lg:px-7">
         <div className="flex items-center gap-2.5">
           <span
             aria-hidden
@@ -45,7 +45,14 @@ export function EmployeeShell({
             {viewer.businessName.toUpperCase()}
           </span>
         </div>
-        <div className="flex items-center gap-3">
+
+        <div className="flex items-center gap-3 lg:gap-4">
+          <div className="hidden flex-col items-end lg:flex">
+            <span className="text-[13px] font-semibold">{viewer.name}</span>
+            <span className="text-n-500 font-mono text-[10.5px] tracking-[0.05em]">
+              {viewer.role.toUpperCase()}
+            </span>
+          </div>
           <span
             aria-hidden
             className="font-heading bg-p-100 text-p-700 flex size-8 items-center justify-center rounded-full text-[12px] font-semibold"
@@ -56,19 +63,32 @@ export function EmployeeShell({
         </div>
       </header>
 
-      <div className="flex flex-1 justify-center px-0 py-0 sm:px-8 sm:py-9">
-        <div className="border-n-300 bg-n-50 flex w-full flex-1 flex-col sm:max-w-[390px] sm:flex-none sm:rounded-[26px] sm:border sm:shadow-[0_18px_44px_rgba(27,24,21,0.16)]">
-          <div className="flex-1 [animation:ems-view-in_.35s_cubic-bezier(.2,.7,.2,1)_both] sm:overflow-hidden sm:rounded-t-[26px]">
-            {children}
+      <div className="grid min-h-[calc(100vh-49px)] lg:grid-cols-[236px_1fr]">
+        <aside className="border-n-200 bg-n-100 top-[49px] hidden h-[calc(100vh-49px)] flex-col gap-[26px] self-start border-r px-4 py-6 lg:sticky lg:flex">
+          <div className="flex items-center gap-2.5 px-2">
+            <span
+              aria-hidden
+              className="font-heading bg-p-100 text-p-700 flex size-8 shrink-0 items-center justify-center rounded-[9px] text-[13px] font-semibold"
+            >
+              {initialsOf(viewer.businessName)}
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="font-heading truncate text-sm font-semibold">
+                {viewer.businessName}
+              </span>
+              <span className="text-n-500 font-mono text-[10.5px] tracking-[0.05em]">
+                {viewer.role.toUpperCase()}
+              </span>
+            </span>
           </div>
 
-          <nav className="border-n-200 bg-n-100 sticky bottom-0 grid grid-cols-4 gap-1 border-t px-3 pt-2.5 pb-4 sm:rounded-b-[26px]">
+          <nav className="flex flex-col gap-0.5">
+            <span className="text-n-400 px-2 pb-1.5 font-mono text-[10.5px] tracking-[0.08em] uppercase">
+              Your day
+            </span>
             {NAV.map((item) => {
               const Icon = item.icon
-              const active =
-                item.href === "/dashboard"
-                  ? pathname === item.href
-                  : pathname.startsWith(item.href)
+              const active = isActive(pathname, item.href)
 
               return (
                 <Link
@@ -76,8 +96,10 @@ export function EmployeeShell({
                   href={item.href}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex flex-col items-center gap-1 py-1.5 text-[11px]",
-                    active ? "text-p-700 font-semibold" : "text-n-500"
+                    "flex items-center gap-2.5 rounded-lg px-2 py-2 text-[13.5px] transition-colors",
+                    active
+                      ? "text-p-700 bg-white font-semibold shadow-[0_1px_2px_rgba(27,24,21,0.05)]"
+                      : "text-n-700 hover:bg-n-200/60 font-medium"
                   )}
                 >
                   <Icon />
@@ -86,10 +108,60 @@ export function EmployeeShell({
               )
             })}
           </nav>
+
+          <div className="border-n-200 mt-auto flex flex-col gap-2 rounded-[10px] border bg-white p-3.5">
+            <span className="text-n-500 font-mono text-[10.5px] tracking-[0.06em]">
+              YOUR SHIFT
+            </span>
+            <span className="text-[15px] font-semibold">
+              {viewer.shift ?? "Not set"}
+            </span>
+            <p className="text-n-600 m-0 text-[12.5px] leading-[1.55]">
+              Check in from inside a task&rsquo;s geofence to start the day.
+            </p>
+          </div>
+        </aside>
+
+        {/* Below lg this column carries the phone board and frame; from lg up
+            those wrappers collapse and the page fills the column. */}
+        <div className="flex min-w-0 flex-col sm:max-lg:items-center sm:max-lg:bg-[repeating-linear-gradient(118deg,var(--n-100)_0_26px,#edeae4_26px_52px)] sm:max-lg:px-8 sm:max-lg:py-9">
+          <div className="sm:max-lg:border-n-300 sm:max-lg:bg-n-50 flex w-full flex-1 flex-col sm:max-lg:max-w-[390px] sm:max-lg:flex-none sm:max-lg:rounded-[26px] sm:max-lg:border sm:max-lg:shadow-[0_18px_44px_rgba(27,24,21,0.16)]">
+            <div className="flex-1 [animation:ems-view-in_.35s_cubic-bezier(.2,.7,.2,1)_both] sm:max-lg:overflow-hidden sm:max-lg:rounded-t-[26px]">
+              {children}
+            </div>
+
+            <nav className="border-n-200 bg-n-100 sticky bottom-0 grid grid-cols-4 gap-1 border-t px-3 pt-2.5 pb-4 sm:max-lg:rounded-b-[26px] lg:hidden">
+              {NAV.map((item) => {
+                const Icon = item.icon
+                const active = isActive(pathname, item.href)
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex flex-col items-center gap-1 py-1.5 text-[11px]",
+                      active ? "text-p-700 font-semibold" : "text-n-500"
+                    )}
+                  >
+                    <Icon />
+                    {item.label}
+                  </Link>
+                )
+              })}
+            </nav>
+          </div>
         </div>
       </div>
     </div>
   )
+}
+
+/** /dashboard only matches exactly; the rest match their subtree. */
+function isActive(pathname: string, href: string) {
+  if (href === "/dashboard") return pathname === href
+  return pathname === href || pathname.startsWith(`${href}/`)
 }
 
 const glyph = {
@@ -99,6 +171,7 @@ const glyph = {
   fill: "none",
   stroke: "currentColor",
   strokeWidth: 2,
+  className: "size-[19px] lg:size-[15px]",
 } as const
 
 function HomeGlyph() {

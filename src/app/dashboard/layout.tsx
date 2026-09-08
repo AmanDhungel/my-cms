@@ -38,7 +38,12 @@ export default async function DashboardLayout({
   }
 
   if (session.user.role === "employee") {
-    return <EmployeeShell viewer={viewer}>{children}</EmployeeShell>
+    const me = await User.findById(session.user.id).select("shift")
+    return (
+      <EmployeeShell viewer={{ ...viewer, shift: me?.shift ?? null }}>
+        {children}
+      </EmployeeShell>
+    )
   }
 
   const [people, pendingInvites] = await Promise.all([
