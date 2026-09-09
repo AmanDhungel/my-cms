@@ -90,10 +90,7 @@ export async function DELETE(
 
     // An open check-in would be stranded: they can no longer reach the app to
     // close it, so the owner has to settle the task first.
-    const openTask = await Task.findOne({
-      assignee: member._id,
-      checkedInAt: { $ne: null },
-    })
+    const openTask = await Task.findOne({ "openCheckIns.user": member._id })
 
     if (openTask) {
       throw new HttpError(
@@ -109,7 +106,7 @@ export async function DELETE(
     // Work nobody has started goes back on the shelf; anything in progress or
     // finished stays as it is, because it is history now.
     const cancelled = await Task.updateMany(
-      { assignee: member._id, status: "pending" },
+      { assignees: member._id, status: "pending" },
       { $set: { status: "cancelled" } }
     )
 

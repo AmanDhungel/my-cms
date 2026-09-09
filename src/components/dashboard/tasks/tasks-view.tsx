@@ -3,9 +3,10 @@
 import * as React from "react"
 import { cn } from "cn"
 
-import { PlusIcon } from "@/components/dashboard/nav-icons"
+import { EyeIcon, PlusIcon } from "@/components/dashboard/nav-icons"
 import { RowsSkeleton, StatGridSkeleton } from "@/components/dashboard/skeletons"
 import { TaskBoard } from "@/components/dashboard/tasks/task-board"
+import { TaskDetailDialog } from "@/components/dashboard/tasks/task-detail-dialog"
 import { TaskDialog } from "@/components/dashboard/tasks/task-dialog"
 import { TaskStatusBadge } from "@/components/dashboard/task-status-badge"
 import {
@@ -40,6 +41,7 @@ export function TasksView({
   const [scope, setScope] = React.useState<TaskScope>("today")
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<TaskDTO | null>(null)
+  const [viewing, setViewing] = React.useState<TaskDTO | null>(null)
 
   const query = useTasks(scope)
   const tasks = query.data?.tasks ?? []
@@ -172,6 +174,7 @@ export function TasksView({
           timeZone={timeZone}
           canMove={canAssign}
           onEdit={setEditing}
+          onView={setViewing}
         />
       ) : (
         <Panel className="overflow-hidden">
@@ -224,8 +227,16 @@ export function TasksView({
                 ) : null}
               </div>
 
-              {canAssign ? (
-                <div className="flex lg:justify-end">
+              <div className="flex gap-1.5 lg:justify-end">
+                <button
+                    type="button"
+                    aria-label="View details"
+                    onClick={() => setViewing(task)}
+                    className="border-n-300 text-n-700 hover:bg-n-100 flex items-center justify-center rounded-md border bg-white px-2 py-1.5"
+                  >
+                    <EyeIcon className="size-3.5" />
+                  </button>
+                {canAssign ? (
                   <button
                     type="button"
                     onClick={() => setEditing(task)}
@@ -236,12 +247,22 @@ export function TasksView({
                   >
                     Edit
                   </button>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
             </div>
           ))}
         </Panel>
       )}
+
+      {viewing ? (
+        <TaskDetailDialog
+          key={viewing.id}
+          task={viewing}
+          timeZone={timeZone}
+          open
+          onClose={() => setViewing(null)}
+        />
+      ) : null}
 
       {canAssign ? (
         <>

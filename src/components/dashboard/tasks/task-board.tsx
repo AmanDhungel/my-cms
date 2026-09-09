@@ -4,7 +4,7 @@ import * as React from "react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
-import { PinIcon } from "@/components/dashboard/nav-icons"
+import { EyeIcon, PinIcon } from "@/components/dashboard/nav-icons"
 import { initialsOf } from "@/components/dashboard/viewer"
 import { reportMutationError, useMoveTask } from "@/lib/queries"
 import type { TaskStatus } from "@/lib/work-constants"
@@ -65,11 +65,13 @@ export function TaskBoard({
   timeZone,
   canMove,
   onEdit,
+  onView,
 }: {
   tasks: TaskDTO[]
   timeZone: string
   canMove: boolean
   onEdit: (task: TaskDTO) => void
+  onView: (task: TaskDTO) => void
 }) {
   const [dragging, setDragging] = React.useState<TaskDTO | null>(null)
   const [over, setOver] = React.useState<Column["status"] | null>(null)
@@ -88,7 +90,7 @@ export function TaskBoard({
         onSuccess: () => toast.success(`Moved to ${labelOf(status)}`),
         onError: (error) => reportMutationError(error),
         onSettled: () => setMoving(null),
-      }
+      },
     )
   }
 
@@ -111,7 +113,9 @@ export function TaskBoard({
               event.preventDefault()
               setOver(column.status)
             }}
-            onDragLeave={() => setOver((at) => (at === column.status ? null : at))}
+            onDragLeave={() =>
+              setOver((at) => (at === column.status ? null : at))
+            }
             onDrop={(event) => {
               event.preventDefault()
               setOver(null)
@@ -119,7 +123,7 @@ export function TaskBoard({
             }}
             className={cn(
               "border-n-200 bg-n-100/60 flex min-h-[160px] flex-col gap-2.5 rounded-[14px] border p-3 transition-colors",
-              isTarget && "border-p-400 bg-p-50"
+              isTarget && "border-p-400 bg-p-50",
             )}
           >
             <header className="flex items-center justify-between gap-2 px-1">
@@ -154,6 +158,7 @@ export function TaskBoard({
                   busy={moving === task.id}
                   onMove={(status) => moveTo(task, status)}
                   onEdit={() => onEdit(task)}
+                  onView={() => onView(task)}
                   onDragStart={() => setDragging(task)}
                   onDragEnd={() => {
                     setDragging(null)
@@ -175,6 +180,7 @@ function Card({
   canMove,
   busy,
   onEdit,
+  onView,
   onMove,
   onDragStart,
   onDragEnd,
@@ -184,6 +190,7 @@ function Card({
   canMove: boolean
   busy: boolean
   onEdit: () => void
+  onView: () => void
   onMove: (status: Column["status"]) => void
   onDragStart: () => void
   onDragEnd: () => void
@@ -201,7 +208,7 @@ function Card({
         "flex flex-col gap-2 rounded-[10px] border bg-white p-3 transition-[opacity,box-shadow]",
         blocked ? "border-a-400" : "border-n-200",
         canMove && !pending && "cursor-grab active:cursor-grabbing",
-        pending && "opacity-50"
+        pending && "opacity-50",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -214,7 +221,7 @@ function Card({
               "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] tracking-[0.05em] uppercase",
               task.priority === "critical"
                 ? "text-s-overdue bg-[#fdecec]"
-                : "text-a-700 bg-a-50"
+                : "text-a-700 bg-a-50",
             )}
           >
             {task.priority}
@@ -250,7 +257,7 @@ function Card({
                     "font-heading flex size-[22px] shrink-0 items-center justify-center rounded-full text-[9.5px] font-semibold",
                     task.onSite.some((entry) => entry.id === member.id)
                       ? "bg-p-500 text-white"
-                      : "bg-n-100 text-n-600"
+                      : "bg-n-100 text-n-600",
                   )}
                 >
                   {initialsOf(member.name)}
@@ -274,44 +281,55 @@ function Card({
           {task.onSite.length} ON SITE ·{" "}
           {clock(
             task.onSite.reduce((first, entry) =>
-              entry.at < first.at ? entry : first
+              entry.at < first.at ? entry : first,
             ).at,
-            timeZone
+            timeZone,
           )}
         </span>
       ) : null}
 
-      {canMove ? (
-        <div className="flex items-center gap-1.5">
-          {/* Dragging doesn't exist on touch, so the same move is always
-              available as a plain select. */}
-          <label className="sr-only" htmlFor={`move-${task.id}`}>
-            Move {task.title}
-          </label>
-          <select
-            id={`move-${task.id}`}
-            value={here ?? ""}
-            disabled={pending}
-            onChange={(event) =>
-              onMove(event.target.value as Column["status"])
-            }
-            className="border-n-300 text-n-700 min-w-0 flex-1 cursor-pointer rounded-md border bg-white px-2 py-1 text-[12px] font-semibold disabled:opacity-60"
-          >
-            {COLUMNS.map((option) => (
-              <option key={option.status} value={option.status}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={onEdit}
-            className="border-n-300 text-n-700 hover:bg-n-100 shrink-0 rounded-md border bg-white px-2.5 py-1 text-[12px] font-semibold"
-          >
-            Edit
-          </button>
-        </div>
-      ) : null}
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          aria-label="View details"
+          onClick={onView}
+          className="border-n-300 text-n-700 hover:bg-n-100 flex shrink-0 items-center justify-center rounded-md border bg-white px-2 py-1"
+        >
+          <EyeIcon className="size-3.5" />
+        </button>
+
+        {canMove ? (
+          <>
+            {/* Dragging doesn't exist on touch, so the same move is always
+                available as a plain select. */}
+            <label className="sr-only" htmlFor={`move-${task.id}`}>
+              Move {task.title}
+            </label>
+            <select
+              id={`move-${task.id}`}
+              value={here ?? ""}
+              disabled={pending}
+              onChange={(event) =>
+                onMove(event.target.value as Column["status"])
+              }
+              className="border-n-300 text-n-700 min-w-0 flex-1 cursor-pointer rounded-md border bg-white px-2 py-1 text-[12px] font-semibold disabled:opacity-60"
+            >
+              {COLUMNS.map((option) => (
+                <option key={option.status} value={option.status}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={onEdit}
+              className="border-n-300 text-n-700 hover:bg-n-100 shrink-0 rounded-md border bg-white px-2.5 py-1 text-[12px] font-semibold"
+            >
+              Edit
+            </button>
+          </>
+        ) : null}
+      </div>
     </article>
   )
 }

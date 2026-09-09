@@ -5,8 +5,9 @@ import { cn } from "cn"
 
 import { CheckInDialog } from "@/components/dashboard/employee/check-in-dialog"
 import { StatusDialog } from "@/components/dashboard/employee/status-dialog"
-import { PinIcon } from "@/components/dashboard/nav-icons"
+import { EyeIcon, PinIcon } from "@/components/dashboard/nav-icons"
 import { TaskStatusBadge } from "@/components/dashboard/task-status-badge"
+import { TaskDetailDialog } from "@/components/dashboard/tasks/task-detail-dialog"
 import { formatDistance } from "@/lib/geo"
 import type { TaskDTO } from "@/models/task"
 
@@ -18,9 +19,9 @@ export function EmployeeTaskCard({
   task: TaskDTO
   timeZone: string
 }) {
-  const [dialog, setDialog] = React.useState<"in" | "out" | "status" | null>(
-    null
-  )
+  const [dialog, setDialog] = React.useState<
+    "in" | "out" | "status" | "detail" | null
+  >(null)
 
   const checkedIn = Boolean(task.myCheckedInAt)
   const closed = task.status === "done" || task.status === "cancelled"
@@ -48,7 +49,17 @@ export function EmployeeTaskCard({
             {task.site} · fence {formatDistance(task.radiusM)}
           </span>
         </div>
-        <TaskStatusBadge status={task.status} />
+        <div className="flex shrink-0 items-center gap-1.5">
+          <TaskStatusBadge status={task.status} />
+          <button
+            type="button"
+            aria-label="View details"
+            onClick={() => setDialog("detail")}
+            className="border-n-300 text-n-700 hover:bg-n-100 flex items-center justify-center rounded-md border bg-white px-2 py-1.5"
+          >
+            <EyeIcon className="size-3.5" />
+          </button>
+        </div>
       </div>
 
       {task.description ? (
@@ -117,6 +128,12 @@ export function EmployeeTaskCard({
       <StatusDialog
         task={task}
         open={dialog === "status"}
+        onClose={() => setDialog(null)}
+      />
+      <TaskDetailDialog
+        task={task}
+        timeZone={timeZone}
+        open={dialog === "detail"}
         onClose={() => setDialog(null)}
       />
     </div>

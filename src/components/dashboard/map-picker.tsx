@@ -27,11 +27,14 @@ export function MapPicker({
   radiusM,
   onChange,
   className,
+  readOnly = false,
 }: {
   value: Pin | null
   radiusM: number
   onChange: (pin: Pin) => void
   className?: string
+  /** Shows the pin without the search, the button, or any way to move it. */
+  readOnly?: boolean
 }) {
   const holder = React.useRef<HTMLDivElement | null>(null)
   const map = React.useRef<LeafletTypes.Map | null>(null)
@@ -78,7 +81,7 @@ export function MapPicker({
         iconAnchor: [13, 26],
       })
 
-      const pin = L.marker([start.lat, start.lng], { icon, draggable: true })
+      const pin = L.marker([start.lat, start.lng], { icon, draggable: !readOnly })
       const circle = L.circle([start.lat, start.lng], {
         radius: radiusM,
         color: "#0e7c7b",
@@ -100,13 +103,15 @@ export function MapPicker({
         emit.current({ lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) })
       }
 
-      instance.on("click", (event: LeafletTypes.LeafletMouseEvent) => {
-        place(event.latlng.lat, event.latlng.lng)
-      })
-      pin.on("dragend", () => {
-        const at = pin.getLatLng()
-        place(at.lat, at.lng)
-      })
+      if (!readOnly) {
+        instance.on("click", (event: LeafletTypes.LeafletMouseEvent) => {
+          place(event.latlng.lat, event.latlng.lng)
+        })
+        pin.on("dragend", () => {
+          const at = pin.getLatLng()
+          place(at.lat, at.lng)
+        })
+      }
 
       map.current = instance
       marker.current = pin
@@ -170,7 +175,7 @@ export function MapPicker({
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      <PlaceSearch onPick={(hit) => place(hit.lat, hit.lng)} />
+      {readOnly ? null : <PlaceSearch onPick={(hit) => place(hit.lat, hit.lng)} />}
 
       <div className="border-n-300 relative overflow-hidden rounded-lg border">
         <div
@@ -188,7 +193,11 @@ export function MapPicker({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-n-500 text-[12.5px]">
-          {value ? (
+          {readOnly ? (
+            <span className="font-mono">
+              {value?.lat.toFixed(5)}, {value?.lng.toFixed(5)}
+            </span>
+          ) : value ? (
             <>
               Pinned at{" "}
               <span className="font-mono">
@@ -200,14 +209,16 @@ export function MapPicker({
             "Search for the place, or tap the map to drop the marker."
           )}
         </span>
-        <button
-          type="button"
-          onClick={() => void jumpToMe()}
-          disabled={locating}
-          className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-3 py-1.5 text-[12.5px] font-semibold disabled:opacity-60"
-        >
-          {locating ? "Locating…" : "Use my location"}
-        </button>
+        {readOnly ? null : (
+          <button
+            type="button"
+            onClick={() => void jumpToMe()}
+            disabled={locating}
+            className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-3 py-1.5 text-[12.5px] font-semibold disabled:opacity-60"
+          >
+            {locating ? "Locating…" : "Use my location"}
+          </button>
+        )}
       </div>
 
       {error ? (
