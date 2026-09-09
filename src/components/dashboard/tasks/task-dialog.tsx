@@ -25,19 +25,26 @@ import {
   useCreateTask,
   usePeople,
   useProjects,
+  useUpdateTask,
 } from "@/lib/queries"
 import { taskSchema } from "@/lib/validations/work"
 import { DEFAULT_RADIUS_M, TASK_PRIORITIES } from "@/lib/work-constants"
+import type { TaskDTO } from "@/models/task"
 
 type Errors = Partial<Record<string, string>>
 
+/** Pass `task` to edit it; leave it out to assign a new one. */
 export function TaskDialog({
   open,
   onClose,
+  task,
 }: {
   open: boolean
   onClose: () => void
+  task?: TaskDTO
 }) {
+  const editing = Boolean(task)
+
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
       <DialogContent
@@ -46,28 +53,33 @@ export function TaskDialog({
       >
         <DialogHeader>
           <DialogTitle className="font-heading text-[19px] font-semibold">
-            New task
+            {editing ? "Edit task" : "New task"}
           </DialogTitle>
           <DialogDescription className="text-n-500 text-[13.5px]">
             Pin where the work is; the assignee checks in from inside that area.
           </DialogDescription>
         </DialogHeader>
-        {/* Mounted only while open, so each visit starts from a blank form. */}
-        {open ? <Body onClose={onClose} /> : null}
+        {/* Mounted only while open, so each visit starts from the task as it
+            stands rather than from whatever was typed last time. */}
+        {open ? <Body onClose={onClose} task={task} /> : null}
       </DialogContent>
     </Dialog>
   )
 }
 
-function Body({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = React.useState(() => blank())
-  const [pin, setPin] = React.useState<Pin | null>(null)
+function Body({ onClose, task }: { onClose: () => void; task?: TaskDTO }) {
+  const [form, setForm] = React.useState(() => blank(task))
+  const [pin, setPin] = React.useState<Pin | null>(
+    task ? { lat: task.lat, lng: task.lng } : null
+  )
   const [errors, setErrors] = React.useState<Errors>({})
   const [projectDialogOpen, setProjectDialogOpen] = React.useState(false)
 
   const people = usePeople()
   const projects = useProjects("active")
-  const mutation = useCreateTask()
+  const create = useCreateTask()
+  const update = useUpdateTask(task?.id ?? "")
+  const mutation = task ? update : create
 
   const assignable = (people.data?.members ?? []).filter(
     (member) => member.role !== "owner"
@@ -124,7 +136,7 @@ function Body({ onClose }: { onClose: () => void }) {
 
     mutation.mutate(parsed.data, {
       onSuccess: () => {
-        toast.success("Task assigned")
+        toast.success(task ? "Task updated" : "Task assigned")
         onClose()
       },
       onError: (error) =>
@@ -321,7 +333,13 @@ function Body({ onClose }: { onClose: () => void }) {
           disabled={mutation.isPending}
           className="bg-p-500 rounded-md px-[18px] py-2.5 text-sm font-semibold text-white hover:brightness-[1.06] disabled:opacity-60"
         >
-          {mutation.isPending ? "Assigning…" : "Assign task"}
+          {mutation.isPending
+            ? task
+              ? "Saving…"
+              : "Assigning…"
+            : task
+              ? "Save changes"
+              : "Assign task"}
         </button>
       </DialogFooter>
 
@@ -348,18 +366,27 @@ function Body({ onClose }: { onClose: () => void }) {
   )
 }
 
-function blank() {
+function blank(task?: TaskDTO) {
   return {
-    title: "",
-    description: "",
-    projectId: "",
-    site: "",
-    radiusM: String(DEFAULT_RADIUS_M),
-    startAt: "",
-    endAt: "",
-    assigneeId: "",
-    priority: "normal" as (typeof TASK_PRIORITIES)[number],
+    title: task?.title ?? "",
+    description: task?.description ?? "",
+    projectId: task?.project?.id ?? "",
+    site: task?.site ?? "",
+    radiusM: String(task?.radiusM ?? DEFAULT_RADIUS_M),
+    startAt: toLocal(task?.startAt),
+    endAt: toLocal(task?.endAt),
+    assigneeId: task?.assignee?.id ?? "",
+    priority: (task?.priority ?? "normal") as (typeof TASK_PRIORITIES)[number],
   }
+}
+
+/** The inverse of `toIso`: an instant back into the input's wall clock. */
+function toLocal(iso?: string) {
+  if (!iso) return ""
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return ""
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`
 }
 
 /** `datetime-local` gives a wall-clock string; the API takes an instant. */

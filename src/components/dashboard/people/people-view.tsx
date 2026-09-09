@@ -6,6 +6,8 @@ import { toast } from "sonner"
 import { cn } from "cn"
 
 import { InviteDialog } from "@/components/dashboard/people/invite-dialog"
+import { MemberDialog } from "@/components/dashboard/people/member-dialog"
+import { RemoveMemberDialog } from "@/components/dashboard/people/remove-member-dialog"
 import { initialsOf } from "@/components/dashboard/viewer"
 import { PlusIcon } from "@/components/dashboard/nav-icons"
 import {
@@ -19,23 +21,26 @@ import {
 import type { InviteDTO } from "@/models/invite"
 import type { UserDTO } from "@/models/user"
 
-type Filter = "all" | "owner" | "supervisor" | "employee"
+type Filter = "all" | "owner" | "supervisor" | "employee" | "removed"
 
 const FILTERS: { value: Filter; label: string }[] = [
   { value: "all", label: "Everyone" },
   { value: "owner", label: "Owners" },
   { value: "supervisor", label: "Supervisors" },
   { value: "employee", label: "Employees" },
+  { value: "removed", label: "Removed" },
 ]
 
 export function PeopleView({
-  canInvite,
+  canManage,
   viewerId,
+  ownerId,
   members,
   invites,
 }: {
-  canInvite: boolean
+  canManage: boolean
   viewerId: string
+  ownerId: string
   members: UserDTO[]
   invites: InviteDTO[]
 }) {
@@ -43,10 +48,19 @@ export function PeopleView({
   const [filter, setFilter] = React.useState<Filter>("all")
   const [query, setQuery] = React.useState("")
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [editing, setEditing] = React.useState<UserDTO | null>(null)
+  const [removing, setRemoving] = React.useState<UserDTO | null>(null)
 
   const needle = query.trim().toLowerCase()
   const visible = members.filter((member) => {
-    if (filter !== "all" && member.role !== filter) return false
+    if (filter === "removed") {
+      if (member.status !== "removed") return false
+    } else {
+      // Removed people only show under their own filter, so the crew list
+      // reads as who is actually here.
+      if (member.status === "removed") return false
+      if (filter !== "all" && member.role !== filter) return false
+    }
     if (!needle) return true
     return (
       member.name.toLowerCase().includes(needle) ||
@@ -55,9 +69,12 @@ export function PeopleView({
     )
   })
 
+  const active = members.filter((m) => m.status === "active")
   const counts = {
-    supervisors: members.filter((m) => m.role === "supervisor").length,
-    employees: members.filter((m) => m.role === "employee").length,
+    active: active.length,
+    removed: members.length - active.length,
+    supervisors: active.filter((m) => m.role === "supervisor").length,
+    employees: active.filter((m) => m.role === "employee").length,
   }
 
   return (
@@ -69,7 +86,7 @@ export function PeopleView({
           counts.supervisors === 1 ? "" : "s"
         } · ${invites.length} invite${invites.length === 1 ? "" : "s"} pending`}
         actions={
-          canInvite ? (
+          canManage ? (
             <button
               type="button"
               onClick={() => setDialogOpen(true)}
@@ -83,7 +100,7 @@ export function PeopleView({
       />
 
       <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="TOTAL MEMBERS" value={members.length} />
+        <StatCard label="ACTIVE MEMBERS" value={counts.active} />
         <StatCard label="SUPERVISORS" value={counts.supervisors} />
         <StatCard label="EMPLOYEES" value={counts.employees} />
         <StatCard
@@ -125,8 +142,8 @@ export function PeopleView({
           </label>
         </div>
 
-        <div className="border-n-200 bg-n-100 hidden grid-cols-[1.4fr_150px_130px_110px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
-          {["NAME / ROLE", "EMAIL", "PHONE", "SHIFT"].map((head) => (
+        <div className="border-n-200 bg-n-100 hidden grid-cols-[1.4fr_150px_130px_100px_130px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
+          {["NAME / ROLE", "EMAIL", "PHONE", "SHIFT", ""].map((head) => (
             <span
               key={head}
               className="text-n-500 font-mono text-[10.5px] tracking-[0.07em]"
@@ -139,7 +156,10 @@ export function PeopleView({
         {visible.map((member) => (
           <div
             key={member.id}
-            className="border-n-200/70 hover:bg-n-50 grid gap-3.5 border-b px-[18px] py-3.5 lg:grid-cols-[1.4fr_150px_130px_110px] lg:items-center"
+            className={cn(
+              "border-n-200/70 hover:bg-n-50 grid gap-3.5 border-b px-[18px] py-3.5 lg:grid-cols-[1.4fr_150px_130px_100px_130px] lg:items-center",
+              member.status === "removed" && "opacity-55"
+            )}
           >
             <div className="flex min-w-0 items-center gap-2.5">
               <span
@@ -157,8 +177,13 @@ export function PeopleView({
                     </span>
                   ) : null}
                 </span>
-                <span className="text-n-500 text-xs capitalize">
+                <span className="text-n-500 flex items-center gap-1.5 text-xs capitalize">
                   {member.role}
+                  {member.status === "removed" ? (
+                    <span className="text-s-overdue border-s-overdue/40 rounded-full border px-1.5 font-mono text-[10px] tracking-[0.05em] uppercase">
+                      removed
+                    </span>
+                  ) : null}
                 </span>
               </span>
             </div>
@@ -171,6 +196,29 @@ export function PeopleView({
             <span className="text-n-600 text-[12.5px]">
               {member.shift ?? "—"}
             </span>
+
+            {canManage && member.status === "active" ? (
+              <div className="flex gap-2 lg:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditing(member)}
+                  className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold"
+                >
+                  Edit
+                </button>
+                {member.id === viewerId || member.id === ownerId ? null : (
+                  <button
+                    type="button"
+                    onClick={() => setRemoving(member)}
+                    className="border-n-300 text-s-overdue hover:bg-[#fdecec] rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            ) : (
+              <span />
+            )}
           </div>
         ))}
 
@@ -183,7 +231,8 @@ export function PeopleView({
         ) : null}
 
         <div className="text-n-500 px-[18px] py-3 text-[13px]">
-          Showing {visible.length} of {members.length}
+          Showing {visible.length} of {counts.active}
+          {counts.removed > 0 ? ` · ${counts.removed} removed` : ""}
         </div>
       </Panel>
 
@@ -202,7 +251,7 @@ export function PeopleView({
             <EmptyState
               message="No invites outstanding. Every account in this workspace was created through one — there is no open sign-up."
               action={
-                canInvite ? (
+                canManage ? (
                   <button
                     type="button"
                     onClick={() => setDialogOpen(true)}
@@ -234,7 +283,32 @@ export function PeopleView({
         )}
       </Panel>
 
-      {canInvite ? (
+      {editing ? (
+        <MemberDialog
+          key={editing.id}
+          member={editing}
+          isWorkspaceOwner={editing.id === ownerId}
+          open
+          onClose={() => {
+            setEditing(null)
+            router.refresh()
+          }}
+        />
+      ) : null}
+
+      {removing ? (
+        <RemoveMemberDialog
+          key={removing.id}
+          member={removing}
+          open
+          onClose={() => {
+            setRemoving(null)
+            router.refresh()
+          }}
+        />
+      ) : null}
+
+      {canManage ? (
         <InviteDialog
           open={dialogOpen}
           onClose={() => setDialogOpen(false)}

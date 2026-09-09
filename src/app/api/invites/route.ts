@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
 
     await connectToDatabase()
 
-    if (await User.exists({ email })) {
+    // A removed account is invitable — that is how someone rejoins, here or
+    // at another workspace. An active one is already somewhere.
+    if (await User.exists({ email, status: { $ne: "removed" } })) {
       return fail("Someone already signs in with that email", 409, {
         email: ["Someone already signs in with that email"],
       })

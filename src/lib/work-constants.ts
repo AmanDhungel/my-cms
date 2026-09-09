@@ -56,3 +56,6 @@ export const NOTIFICATION_KINDS = [
   "member_joined",
 ] as const
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
+
+export const MEMBER_STATUSES = ["active", "removed"] as const
+export type MemberStatus = (typeof MEMBER_STATUSES)[number]

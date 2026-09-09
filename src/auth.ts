@@ -32,6 +32,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         )
         if (!user || !valid) return null
 
+        // Removed members keep their row so history resolves, but they get no
+        // way back in until another workspace's invite re-activates them.
+        if (user.status === "removed") return null
+
         return {
           id: String(user._id),
           name: user.name,

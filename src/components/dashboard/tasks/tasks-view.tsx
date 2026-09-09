@@ -17,9 +17,11 @@ import {
 } from "@/components/dashboard/ui"
 import { formatDistance } from "@/lib/geo"
 import { useTasks, type TaskScope } from "@/lib/queries"
+import type { TaskDTO } from "@/models/task"
 
 const SCOPES: { value: TaskScope; label: string }[] = [
   { value: "today", label: "Today" },
+  { value: "in_progress", label: "In progress" },
   { value: "upcoming", label: "Upcoming" },
   { value: "done", label: "Done" },
   { value: "all", label: "All" },
@@ -34,6 +36,7 @@ export function TasksView({
 }) {
   const [scope, setScope] = React.useState<TaskScope>("today")
   const [dialogOpen, setDialogOpen] = React.useState(false)
+  const [editing, setEditing] = React.useState<TaskDTO | null>(null)
 
   const query = useTasks(scope)
   const tasks = query.data?.tasks ?? []
@@ -137,8 +140,8 @@ export function TasksView({
         />
       ) : (
         <Panel className="overflow-hidden">
-          <div className="border-n-200 bg-n-100 hidden grid-cols-[1.5fr_150px_180px_150px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
-            {["TASK / SITE", "ASSIGNEE", "WINDOW", "STATUS"].map((head) => (
+          <div className="border-n-200 bg-n-100 hidden grid-cols-[1.5fr_150px_170px_150px_84px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
+            {["TASK / SITE", "ASSIGNEE", "WINDOW", "STATUS", ""].map((head) => (
               <span
                 key={head}
                 className="text-n-500 font-mono text-[10.5px] tracking-[0.07em]"
@@ -151,7 +154,7 @@ export function TasksView({
           {tasks.map((task) => (
             <div
               key={task.id}
-              className="border-n-200/70 hover:bg-n-50 grid gap-2.5 border-b px-[18px] py-3.5 last:border-b-0 lg:grid-cols-[1.5fr_150px_180px_150px] lg:items-center lg:gap-3.5"
+              className="border-n-200/70 hover:bg-n-50 grid gap-2.5 border-b px-[18px] py-3.5 last:border-b-0 lg:grid-cols-[1.5fr_150px_170px_150px_84px] lg:items-center lg:gap-3.5"
             >
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-[14.5px] font-semibold">
@@ -185,13 +188,40 @@ export function TasksView({
                   </span>
                 ) : null}
               </div>
+
+              {canAssign ? (
+                <div className="flex lg:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setEditing(task)}
+                    disabled={
+                      task.status === "done" || task.status === "cancelled"
+                    }
+                    className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold disabled:opacity-40"
+                  >
+                    Edit
+                  </button>
+                </div>
+              ) : null}
             </div>
           ))}
         </Panel>
       )}
 
       {canAssign ? (
-        <TaskDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+        <>
+          <TaskDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+          {/* Keyed on the task so reopening on a different row rebuilds the
+              form rather than reusing the last one's state. */}
+          {editing ? (
+            <TaskDialog
+              key={editing.id}
+              task={editing}
+              open
+              onClose={() => setEditing(null)}
+            />
+          ) : null}
+        </>
       ) : null}
     </DashboardMain>
   )

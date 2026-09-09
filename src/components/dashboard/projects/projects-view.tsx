@@ -164,6 +164,7 @@ function ProjectCard({
   project: ProjectWithCounts
   canManage: boolean
 }) {
+  const [editOpen, setEditOpen] = React.useState(false)
   const mutation = useSetProjectStatus(project.id)
   const archived = project.status === "archived"
 
@@ -221,18 +222,32 @@ function ProjectCard({
       </div>
 
       {canManage ? (
-        <button
-          type="button"
-          onClick={toggle}
-          disabled={mutation.isPending}
-          className="border-n-300 text-n-700 hover:bg-n-100 self-start rounded-md border bg-white px-3 py-2 text-[12.5px] font-semibold disabled:opacity-60"
-        >
-          {mutation.isPending
-            ? "Saving…"
-            : archived
-              ? "Reopen project"
-              : "Archive project"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-3 py-2 text-[12.5px] font-semibold"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={toggle}
+            disabled={mutation.isPending}
+            className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-3 py-2 text-[12.5px] font-semibold disabled:opacity-60"
+          >
+            {mutation.isPending
+              ? "Saving…"
+              : archived
+                ? "Reopen project"
+                : "Archive project"}
+          </button>
+          <ProjectDialog
+            open={editOpen}
+            project={project}
+            onClose={() => setEditOpen(false)}
+          />
+        </div>
       ) : null}
 
       {!archived ? null : (

@@ -7,6 +7,10 @@ import {
   type Model,
 } from "mongoose"
 
+import { MEMBER_STATUSES, type MemberStatus } from "@/lib/work-constants"
+
+export { MEMBER_STATUSES, type MemberStatus }
+
 export const USER_ROLES = ["owner", "supervisor", "employee"] as const
 export type UserRole = (typeof USER_ROLES)[number]
 
@@ -32,6 +36,18 @@ const userSchema = new Schema(
     business: { type: Schema.Types.ObjectId, ref: "Business", required: true },
     /** Working hours, set from the invite. Owners have none by default. */
     shift: { type: String, trim: true, maxlength: 32 },
+    /**
+     * "removed" keeps the row (tasks, check-ins and attendance all point at
+     * it) while revoking every way in. Accepting another workspace's invite
+     * with the same email moves the account there and makes it active again.
+     */
+    status: {
+      type: String,
+      required: true,
+      enum: MEMBER_STATUSES,
+      default: "active",
+    },
+    removedAt: { type: Date },
   },
   { timestamps: true }
 )
@@ -53,6 +69,7 @@ export type UserDTO = {
   phone: string
   role: UserRole
   shift: string | null
+  status: MemberStatus
   businessId: string
 }
 
@@ -65,6 +82,7 @@ export function toUserDTO(user: HydratedDocument<UserDocument>): UserDTO {
     phone: user.phone,
     role: user.role,
     shift: user.shift ?? null,
+    status: user.status,
     businessId: String(user.business),
   }
 }

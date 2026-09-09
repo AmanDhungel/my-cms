@@ -26,11 +26,17 @@ export async function POST(
 
     const connection = await connectToDatabase()
 
-    if (await User.exists({ email: invite.email })) {
+    const existing = await User.findOne({ email: invite.email }).select(
+      "status"
+    )
+
+    // An active account already belongs somewhere; a removed one is free to be
+    // adopted, which is how someone let go by one workspace joins another.
+    if (existing && existing.status !== "removed") {
       throw new HttpError(409, "That email already has an account")
     }
 
-    const userId = new Types.ObjectId()
+    const userId = existing?._id ?? new Types.ObjectId()
     const passwordHash = await hashPassword(values.password)
     const session = await connection.startSession()
 
@@ -48,21 +54,31 @@ export async function POST(
           throw new HttpError(409, "That invite has already been used")
         }
 
-        await User.create(
-          [
-            {
-              _id: userId,
-              name: invite.name,
-              email: invite.email,
-              phone: invite.phone,
-              passwordHash,
-              role: invite.role,
-              business: invite.businessId,
-              shift: invite.shift,
-            },
-          ],
-          { session }
-        )
+        const membership = {
+          name: invite.name,
+          email: invite.email,
+          phone: invite.phone,
+          passwordHash,
+          role: invite.role,
+          business: invite.businessId,
+          shift: invite.shift,
+          status: "active" as const,
+        }
+
+        if (existing) {
+          // Guarded on "removed" so two racing invites can't both adopt them.
+          const adopted = await User.updateOne(
+            { _id: userId, status: "removed" },
+            { $set: membership, $unset: { removedAt: "" } },
+            { session }
+          )
+
+          if (adopted.modifiedCount !== 1) {
+            throw new HttpError(409, "That email already has an account")
+          }
+        } else {
+          await User.create([{ _id: userId, ...membership }], { session })
+        }
       })
     } finally {
       await session.endSession()

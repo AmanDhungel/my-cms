@@ -74,3 +74,13 @@ export const businessSettingsSchema = z.object({
 })
 
 export type BusinessSettingsValues = z.infer<typeof businessSettingsSchema>
+
+/** The owner editing someone's record from People. */
+export const memberUpdateSchema = z.object({
+  name: z.string().trim().min(2, "A name is required"),
+  phone: z.string().trim().min(7, "Enter a contact number"),
+  role: z.enum(["owner", "supervisor", "employee"]),
+  shift: z.enum(SHIFTS).optional(),
+})
+
+export type MemberUpdateValues = z.infer<typeof memberUpdateSchema>

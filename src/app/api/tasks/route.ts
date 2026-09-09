@@ -14,7 +14,7 @@ import { User } from "@/models/user"
 
 export const runtime = "nodejs"
 
-const SCOPES = ["today", "upcoming", "done", "all"] as const
+const SCOPES = ["today", "in_progress", "upcoming", "done", "all"] as const
 type Scope = (typeof SCOPES)[number]
 
 /**
@@ -53,6 +53,10 @@ export async function GET(request: NextRequest) {
       )
       filter.startAt = { $gte: start, $lt: end }
       filter.status = { $nin: ["cancelled"] }
+    } else if (scope === "in_progress") {
+      // Live work, whenever it was scheduled: an overrunning task from
+      // yesterday still matters more than one starting tomorrow.
+      filter.status = "in_progress"
     } else if (scope === "upcoming") {
       filter.startAt = { $gte: new Date() }
       filter.status = { $in: ["pending", "in_progress", "blocked"] }

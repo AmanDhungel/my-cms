@@ -17,7 +17,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
-import { reportMutationError, useCreateProject } from "@/lib/queries"
+import {
+  reportMutationError,
+  useCreateProject,
+  useUpdateProject,
+} from "@/lib/queries"
 import { projectSchema } from "@/lib/validations/work"
 import type { ProjectDTO } from "@/models/project"
 
@@ -31,10 +35,13 @@ export function ProjectDialog({
   open,
   onClose,
   onCreated,
+  project,
 }: {
   open: boolean
   onClose: () => void
   onCreated?: (project: ProjectDTO) => void
+  /** Present when editing an existing project. */
+  project?: ProjectDTO
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
@@ -44,13 +51,15 @@ export function ProjectDialog({
       >
         <DialogHeader>
           <DialogTitle className="font-heading text-[19px] font-semibold">
-            New project
+            {project ? "Edit project" : "New project"}
           </DialogTitle>
           <DialogDescription className="text-n-500 text-[13.5px]">
             A project groups the tasks that belong to one job or site.
           </DialogDescription>
         </DialogHeader>
-        {open ? <Body onClose={onClose} onCreated={onCreated} /> : null}
+        {open ? (
+          <Body onClose={onClose} onCreated={onCreated} project={project} />
+        ) : null}
       </DialogContent>
     </Dialog>
   )
@@ -59,16 +68,22 @@ export function ProjectDialog({
 function Body({
   onClose,
   onCreated,
+  project,
 }: {
   onClose: () => void
   onCreated?: (project: ProjectDTO) => void
+  project?: ProjectDTO
 }) {
-  const [name, setName] = React.useState("")
-  const [site, setSite] = React.useState("")
-  const [description, setDescription] = React.useState("")
+  const [name, setName] = React.useState(project?.name ?? "")
+  const [site, setSite] = React.useState(project?.site ?? "")
+  const [description, setDescription] = React.useState(
+    project?.description ?? ""
+  )
   const [errors, setErrors] = React.useState<Errors>({})
 
-  const mutation = useCreateProject()
+  const create = useCreateProject()
+  const update = useUpdateProject(project?.id ?? "")
+  const mutation = project ? update : create
 
   function submit() {
     if (mutation.isPending) return
@@ -89,9 +104,11 @@ function Body({
     }
 
     mutation.mutate(parsed.data, {
-      onSuccess: ({ project }) => {
-        toast.success(`${project.name} created`)
-        onCreated?.(project)
+      onSuccess: (result) => {
+        toast.success(
+          project ? `${result.project.name} updated` : `${result.project.name} created`
+        )
+        if (!project) onCreated?.(result.project)
         onClose()
       },
       onError: (error) =>
@@ -159,7 +176,11 @@ function Body({
           disabled={mutation.isPending}
           className="bg-p-500 rounded-md px-[18px] py-2.5 text-sm font-semibold text-white hover:brightness-[1.06] disabled:opacity-60"
         >
-          {mutation.isPending ? "Creating…" : "Create project"}
+          {mutation.isPending
+            ? "Saving…"
+            : project
+              ? "Save changes"
+              : "Create project"}
         </button>
       </DialogFooter>
     </>

@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
 import { EmployeeShell } from "@/components/dashboard/employee-shell";
 import { OwnerShell } from "@/components/dashboard/owner-shell";
-import { connectToDatabase } from "@/lib/mongodb";
+import { loadViewer } from "@/lib/auth/page-guards";
 import { Business } from "@/models/business";
 import { Invite } from "@/models/invite";
 import { Notification } from "@/models/notification";
@@ -18,33 +17,28 @@ export const dynamic = "force-dynamic";
 export default async function DashboardLayout({
   children,
 }: LayoutProps<"/dashboard">) {
-  const session = await auth();
+  // `proxy.ts` already blocks anonymous requests; `loadViewer` is the second
+  // gate, and the one that re-checks membership against the database so a
+  // still-valid token can't outlive being removed.
+  const me = await loadViewer();
 
-  // `proxy.ts` already blocks anonymous requests; this is the second
-  // gate, so a misconfigured matcher can't leak a page.
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
-
-  await connectToDatabase();
-
-  const business = await Business.findById(session.user.businessId);
+  const business = await Business.findById(me.businessId);
 
   if (!business) {
     redirect("/login");
   }
 
   const viewer = {
-    name: session.user.name ?? "",
-    email: session.user.email ?? "",
-    role: session.user.role,
+    name: me.name,
+    email: me.email,
+    role: me.role,
     businessName: business.name,
   };
 
-  if (session.user.role === "employee") {
-    const me = await User.findById(session.user.id).select("shift");
+  if (me.role === "employee") {
+    const shift = await User.findById(me.id).select("shift");
     return (
-      <EmployeeShell viewer={{ ...viewer, shift: me?.shift ?? null }}>
+      <EmployeeShell viewer={{ ...viewer, shift: shift?.shift ?? null }}>
         {children}
       </EmployeeShell>
     );
@@ -52,7 +46,7 @@ export default async function DashboardLayout({
 
   const [people, pendingInvites, projects, tasks, approvals, unread] =
     await Promise.all([
-      User.countDocuments({ business: business._id }),
+      User.countDocuments({ business: business._id, status: "active" }),
       Invite.countDocuments({
         business: business._id,
         acceptedAt: { $exists: false },
@@ -67,7 +61,7 @@ export default async function DashboardLayout({
         status: "pending",
       }),
       Notification.countDocuments({
-        user: session.user.id,
+        user: me.id,
         readAt: { $exists: false },
       }),
     ]);

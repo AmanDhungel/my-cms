@@ -19,7 +19,7 @@ import type { ProjectStatus, RequestStatus } from "@/lib/work-constants"
 import type { TaskDTO } from "@/models/task"
 import type { UserDTO } from "@/models/user"
 
-export type TaskScope = "today" | "upcoming" | "done" | "all"
+export type TaskScope = "today" | "in_progress" | "upcoming" | "done" | "all"
 
 /** One place for every key, so invalidation can't drift from the fetches. */
 export const keys = {
@@ -28,7 +28,8 @@ export const keys = {
   attendance: (month?: string, userId?: string) =>
     ["attendance", month ?? "current", userId ?? "me"] as const,
   requests: (status?: RequestStatus) => ["requests", status ?? "all"] as const,
-  people: () => ["people"] as const,
+  people: (includeRemoved?: boolean) =>
+    ["people", includeRemoved ? "all" : "active"] as const,
   projects: (status?: string) => ["projects", status ?? "all"] as const,
   notifications: (unread?: boolean) =>
     ["notifications", unread ? "unread" : "all"] as const,
@@ -89,10 +90,13 @@ export function useRequests(status?: RequestStatus) {
   })
 }
 
-export function usePeople() {
+export function usePeople(includeRemoved = false) {
   return useQuery({
-    queryKey: keys.people(),
-    queryFn: () => apiFetch<{ members: UserDTO[] }>("/api/people"),
+    queryKey: keys.people(includeRemoved),
+    queryFn: () =>
+      apiFetch<{ members: UserDTO[] }>(
+        `/api/people${includeRemoved ? "?includeRemoved=1" : ""}`
+      ),
   })
 }
 
@@ -313,4 +317,67 @@ export function useUnreadCount(initial: number) {
     refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   })
+}
+
+export function useUpdateTask(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ task: TaskDTO }>(`/api/tasks/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateWork(client),
+  })
+}
+
+export function useUpdateProject(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ project: ProjectDTO }>(`/api/projects/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["projects"] })
+      void client.invalidateQueries({ queryKey: ["tasks"] })
+    },
+  })
+}
+
+export function useUpdateMember(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ member: UserDTO }>(`/api/people/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidatePeople(client),
+  })
+}
+
+/** Removal cancels their unstarted tasks, so task lists move too. */
+export function useRemoveMember(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ member: UserDTO; cancelledTasks: number }>(
+        `/api/people/${id}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () => {
+      invalidatePeople(client)
+      void client.invalidateQueries({ queryKey: ["tasks"] })
+    },
+  })
+}
+
+function invalidatePeople(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: ["people"] })
 }

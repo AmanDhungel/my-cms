@@ -127,6 +127,11 @@ export const projectSchema = z.object({
 
 export type ProjectValues = z.infer<typeof projectSchema>
 
-export const projectUpdateSchema = z.object({
-  status: z.enum(["active", "archived"]),
-})
+/**
+ * Editing a project. Either the fields or the status moves, never both, so
+ * archiving stays one click and doesn't have to resend the whole form.
+ */
+export const projectUpdateSchema = z.union([
+  z.object({ status: z.enum(["active", "archived"]) }),
+  projectSchema,
+])
