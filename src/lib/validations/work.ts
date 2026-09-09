@@ -59,7 +59,13 @@ export type CheckInValues = z.infer<typeof checkInSchema>
 /** Status changes the assignee can make from the phone. */
 export const taskStatusSchema = z
   .object({
-    status: z.enum(["in_progress", "blocked", "done"]),
+    status: z.enum([
+      "pending",
+      "in_progress",
+      "in_review",
+      "blocked",
+      "done",
+    ]),
     blockedReason: z.string().trim().max(500).optional(),
   })
   .refine(

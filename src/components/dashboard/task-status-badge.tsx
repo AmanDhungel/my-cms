@@ -11,6 +11,7 @@ const LOOK: Record<TaskStatus, { label: string; dot: string; pulse?: boolean }> 
   {
     pending: { label: "Pending", dot: "bg-s-pending" },
     in_progress: { label: "In progress", dot: "bg-s-progress", pulse: true },
+    in_review: { label: "In review", dot: "bg-s-time" },
     blocked: { label: "Blocked", dot: "bg-s-material" },
     done: { label: "Completed", dot: "bg-s-done" },
     cancelled: { label: "Cancelled", dot: "bg-n-400" },

@@ -20,12 +20,20 @@ import { inputClass } from "@/components/auth/field"
 import { reportMutationError, useTaskStatus } from "@/lib/queries"
 import type { TaskDTO } from "@/models/task"
 
-type Next = "in_progress" | "blocked" | "done"
+type Next = "in_progress" | "blocked" | "in_review"
 
+/**
+ * What the crew can set. Signing work off is the owner's move, so the last
+ * step here is handing it over rather than closing it.
+ */
 const CHOICES: { value: Next; label: string; hint: string }[] = [
   { value: "in_progress", label: "In progress", hint: "Working on it now" },
   { value: "blocked", label: "Blocked", hint: "Waiting on something" },
-  { value: "done", label: "Completed", hint: "Finished, nothing left" },
+  {
+    value: "in_review",
+    label: "Ready for review",
+    hint: "Done my part — over to the owner",
+  },
 ]
 
 export function StatusDialog({
@@ -142,9 +150,10 @@ function Body({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
           </label>
         ) : null}
 
-        {choice === "done" && task.checkedInAt ? (
+        {choice === "in_review" && task.checkedInAt ? (
           <p className="text-n-500 m-0 text-[12.5px] leading-relaxed">
-            You&rsquo;re still checked in — finishing will check you out too.
+            You&rsquo;re still checked in — handing it over will check you out
+            too.
           </p>
         ) : null}
       </div>

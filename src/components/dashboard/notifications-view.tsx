@@ -25,6 +25,7 @@ const DOT: Record<NotificationKind, string> = {
   check_in: "bg-s-done",
   check_out: "bg-s-pending",
   task_blocked: "bg-s-material",
+  task_in_review: "bg-s-time",
   task_done: "bg-s-done",
   task_assigned: "bg-s-progress",
   request_raised: "bg-a-400",

@@ -19,7 +19,13 @@ import type { ProjectStatus, RequestStatus } from "@/lib/work-constants"
 import type { TaskDTO } from "@/models/task"
 import type { UserDTO } from "@/models/user"
 
-export type TaskScope = "today" | "in_progress" | "upcoming" | "done" | "all"
+export type TaskScope =
+  | "today"
+  | "in_progress"
+  | "in_review"
+  | "upcoming"
+  | "done"
+  | "all"
 
 /** One place for every key, so invalidation can't drift from the fetches. */
 export const keys = {
@@ -380,4 +386,21 @@ export function useRemoveMember(id: string) {
 
 function invalidatePeople(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["people"] })
+}
+
+/**
+ * Board moves: the id comes with the call rather than the hook, so one
+ * mutation serves every card instead of one hook per task.
+ */
+export function useMoveTask() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      apiFetch<{ task: TaskDTO }>(`/api/tasks/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    onSuccess: () => invalidateWork(client),
+  })
 }

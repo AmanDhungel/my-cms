@@ -4,9 +4,15 @@
  * into the client bundle; importing a type from one does not.
  */
 
+/**
+ * The task lifecycle. "blocked" is a flag on work already under way rather
+ * than a stage of its own, which is why the board shows four columns and
+ * draws blocked cards inside "In progress".
+ */
 export const TASK_STATUSES = [
   "pending",
   "in_progress",
+  "in_review",
   "blocked",
   "done",
   "cancelled",
@@ -49,6 +55,7 @@ export const NOTIFICATION_KINDS = [
   "check_in",
   "check_out",
   "task_blocked",
+  "task_in_review",
   "task_done",
   "task_assigned",
   "request_raised",

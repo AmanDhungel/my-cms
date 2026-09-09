@@ -5,6 +5,7 @@ import { cn } from "cn"
 
 import { PlusIcon } from "@/components/dashboard/nav-icons"
 import { RowsSkeleton, StatGridSkeleton } from "@/components/dashboard/skeletons"
+import { TaskBoard } from "@/components/dashboard/tasks/task-board"
 import { TaskDialog } from "@/components/dashboard/tasks/task-dialog"
 import { TaskStatusBadge } from "@/components/dashboard/task-status-badge"
 import {
@@ -22,6 +23,7 @@ import type { TaskDTO } from "@/models/task"
 const SCOPES: { value: TaskScope; label: string }[] = [
   { value: "today", label: "Today" },
   { value: "in_progress", label: "In progress" },
+  { value: "in_review", label: "In review" },
   { value: "upcoming", label: "Upcoming" },
   { value: "done", label: "Done" },
   { value: "all", label: "All" },
@@ -34,6 +36,7 @@ export function TasksView({
   canAssign: boolean
   timeZone: string
 }) {
+  const [view, setView] = React.useState<"board" | "list">("board")
   const [scope, setScope] = React.useState<TaskScope>("today")
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<TaskDTO | null>(null)
@@ -45,7 +48,7 @@ export function TasksView({
     open: tasks.filter(
       (t) => t.status === "pending" || t.status === "in_progress"
     ).length,
-    onSite: tasks.filter((t) => t.checkedInAt).length,
+    inReview: tasks.filter((t) => t.status === "in_review").length,
     blocked: tasks.filter((t) => t.status === "blocked").length,
     done: tasks.filter((t) => t.status === "done").length,
   }
@@ -75,7 +78,11 @@ export function TasksView({
       ) : (
         <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="OPEN" value={counts.open} />
-          <StatCard label="ON SITE NOW" value={counts.onSite} />
+          <StatCard
+            label="IN REVIEW"
+            value={counts.inReview}
+            accent={counts.inReview > 0}
+          />
           <StatCard
             label="BLOCKED"
             value={counts.blocked}
@@ -85,7 +92,8 @@ export function TasksView({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
         {SCOPES.map((chip) => (
           <button
             key={chip.value}
@@ -102,6 +110,26 @@ export function TasksView({
             {chip.label}
           </button>
         ))}
+        </div>
+
+        <div className="border-n-200 flex gap-0.5 rounded-md border bg-white p-0.5">
+          {(["board", "list"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setView(option)}
+              aria-pressed={view === option}
+              className={cn(
+                "rounded-[5px] px-3 py-1.5 text-[12.5px] capitalize transition-colors",
+                view === option
+                  ? "bg-p-100 text-p-700 font-semibold"
+                  : "text-n-600 hover:bg-n-100 font-medium"
+              )}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
       </div>
 
       {query.isPending ? (
@@ -137,6 +165,13 @@ export function TasksView({
               </button>
             ) : undefined
           }
+        />
+      ) : view === "board" ? (
+        <TaskBoard
+          tasks={tasks}
+          timeZone={timeZone}
+          canMove={canAssign}
+          onEdit={setEditing}
         />
       ) : (
         <Panel className="overflow-hidden">
