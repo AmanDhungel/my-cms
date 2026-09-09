@@ -1,7 +1,7 @@
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
-import { memberUpdateSchema } from "@/lib/validations/auth"
+import { composeShift, memberUpdateSchema } from "@/lib/validations/auth"
 import { getWorkspace } from "@/lib/workspace"
 import { Task } from "@/models/task"
 import { User, toUserDTO } from "@/models/user"
@@ -42,7 +42,10 @@ export async function PATCH(
     member.name = values.name
     member.phone = values.phone
     member.role = values.role
-    member.shift = values.role === "owner" ? undefined : values.shift
+    member.shift =
+      values.role === "owner" || !values.shiftStart || !values.shiftEnd
+        ? undefined
+        : composeShift(values.shiftStart, values.shiftEnd)
 
     await member.save()
 

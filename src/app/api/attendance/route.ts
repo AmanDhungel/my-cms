@@ -3,7 +3,11 @@ import { Types } from "mongoose"
 
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
-import { markArrival, markDeparture } from "@/lib/attendance"
+import {
+  autoCloseFinishedShifts,
+  markArrival,
+  markDeparture,
+} from "@/lib/attendance"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone } from "@/lib/time"
 import { attendanceActionSchema } from "@/lib/validations/work"
@@ -37,6 +41,15 @@ export async function GET(request: NextRequest) {
         userId = requested
       }
     }
+
+    // Close anything the shift has outlasted before reading, so a day nobody
+    // ended doesn't sit open forever.
+    const owner = await User.findById(userId).select("shift")
+    await autoCloseFinishedShifts({
+      userId,
+      fallbackShift: owner?.shift,
+      timeZone: business.timeZone,
+    })
 
     const records = await Attendance.find({
       user: userId,

@@ -1,4 +1,4 @@
-import mongoose, { type Mongoose } from "mongoose"
+import mongoose, { type Mongoose } from "mongoose";
 
 /**
  * Next.js hot-reloads modules in dev and runs route handlers in a long-lived
@@ -6,30 +6,30 @@ import mongoose, { type Mongoose } from "mongoose"
  * a new pool on every request / recompile.
  */
 type MongooseCache = {
-  conn: Mongoose | null
-  promise: Promise<Mongoose> | null
-}
+  conn: Mongoose | null;
+  promise: Promise<Mongoose> | null;
+};
 
 declare global {
-  var _mongooseCache: MongooseCache | undefined
+  var _mongooseCache: MongooseCache | undefined;
 }
 
 const cached: MongooseCache = globalThis._mongooseCache ?? {
   conn: null,
   promise: null,
-}
+};
 
-globalThis._mongooseCache = cached
+globalThis._mongooseCache = cached;
 
 export async function connectToDatabase(): Promise<Mongoose> {
-  if (cached.conn) return cached.conn
+  if (cached.conn) return cached.conn;
 
-  const uri = process.env.MONGODB_URI
+  const uri = process.env.MONGODB_URI;
 
   if (!uri) {
     throw new Error(
-      "Missing MONGODB_URI environment variable. Add it to .env.local"
-    )
+      "Missing MONGODB_URI environment variable. Add it to .env.local",
+    );
   }
 
   if (!cached.promise) {
@@ -40,11 +40,11 @@ export async function connectToDatabase(): Promise<Mongoose> {
       })
       .catch((error) => {
         // Reset so the next request can retry instead of reusing a failed promise.
-        cached.promise = null
-        throw error
-      })
+        cached.promise = null;
+        throw error;
+      });
   }
 
-  cached.conn = await cached.promise
-  return cached.conn
+  cached.conn = await cached.promise;
+  return cached.conn;
 }

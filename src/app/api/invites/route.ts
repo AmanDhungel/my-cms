@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server"
 import { fail, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
-import { inviteSchema } from "@/lib/validations/auth"
+import { composeShift, inviteSchema } from "@/lib/validations/auth"
 import {
   INVITE_TTL_MS,
   Invite,
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       email,
       phone: values.phone,
       role: values.role,
-      shift: values.shift,
+      shift: composeShift(values.shiftStart, values.shiftEnd),
       message: values.message,
       tokenHash,
       invitedBy: owner.id,

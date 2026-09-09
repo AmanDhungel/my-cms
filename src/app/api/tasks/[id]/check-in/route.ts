@@ -4,6 +4,8 @@ import { HttpError, fail, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { markArrival } from "@/lib/attendance"
 import { distanceInMetres, formatDistance } from "@/lib/geo"
+import { clockInZone } from "@/lib/time"
+import { CHECK_IN_OPENS_MIN } from "@/lib/work-constants"
 import { notifySupervisors } from "@/lib/notify"
 import { connectToDatabase } from "@/lib/mongodb"
 import { loadTaskForViewer } from "@/lib/tasks"
@@ -15,6 +17,7 @@ import { toTaskDTO } from "@/models/task"
 import { User } from "@/models/user"
 
 export const runtime = "nodejs"
+
 
 /**
  * Arrival at a task. The distance is measured here, never in the browser —
@@ -32,9 +35,21 @@ export async function POST(
     await connectToDatabase()
 
     const task = await loadTaskForViewer(id, viewer)
+    const business = await getWorkspace(viewer.businessId)
 
     if (task.status === "done" || task.status === "cancelled") {
       throw new HttpError(409, "That task is already closed")
+    }
+
+    // Check-in opens shortly before the task does, so nobody can start their
+    // day against a job that isn't due for hours.
+    const opensAt = new Date(task.startAt.getTime() - CHECK_IN_OPENS_MIN * 60_000)
+
+    if (Date.now() < opensAt.getTime()) {
+      throw new HttpError(
+        409,
+        `Check-in opens at ${clockInZone(opensAt, business.timeZone)}, ${CHECK_IN_OPENS_MIN} minutes before the task starts`
+      )
     }
 
     // Per person, not per task: with a crew on one job, someone else being
@@ -88,10 +103,7 @@ export async function POST(
     }
     await task.save()
 
-    const [business, me] = await Promise.all([
-      getWorkspace(viewer.businessId),
-      User.findById(viewer.id).select("shift"),
-    ])
+    const me = await User.findById(viewer.id).select("shift")
 
     const attendance = await markArrival({
       businessId: task.business,

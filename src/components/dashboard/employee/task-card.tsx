@@ -9,6 +9,7 @@ import { EyeIcon, PinIcon } from "@/components/dashboard/nav-icons"
 import { TaskStatusBadge } from "@/components/dashboard/task-status-badge"
 import { TaskDetailDialog } from "@/components/dashboard/tasks/task-detail-dialog"
 import { formatDistance } from "@/lib/geo"
+import { CHECK_IN_OPENS_MIN } from "@/lib/work-constants"
 import type { TaskDTO } from "@/models/task"
 
 /** One assignment on the crew app, with whatever action it's ready for. */
@@ -25,6 +26,24 @@ export function EmployeeTaskCard({
 
   const checkedIn = Boolean(task.myCheckedInAt)
   const closed = task.status === "done" || task.status === "cancelled"
+
+  // The server refuses an early check-in; showing when it opens is kinder
+  // than letting someone tap and be told no. The clock is read on a timer
+  // rather than during render, and ticks so the button unlocks on its own.
+  const [now, setNow] = React.useState<number | null>(null)
+
+  React.useEffect(() => {
+    const read = () => setNow(Date.now())
+    const first = setTimeout(read, 0)
+    const timer = setInterval(read, 30_000)
+    return () => {
+      clearTimeout(first)
+      clearInterval(timer)
+    }
+  }, [])
+
+  const opensAt = new Date(task.startAt).getTime() - CHECK_IN_OPENS_MIN * 60_000
+  const tooEarly = !checkedIn && now !== null && now < opensAt
 
   return (
     <div
@@ -104,9 +123,12 @@ export function EmployeeTaskCard({
             <button
               type="button"
               onClick={() => setDialog("in")}
-              className="bg-p-500 flex-1 rounded-md px-3 py-2.5 text-[13.5px] font-semibold text-white hover:brightness-[1.06]"
+              disabled={tooEarly}
+              className="bg-p-500 flex-1 rounded-md px-3 py-2.5 text-[13.5px] font-semibold text-white hover:brightness-[1.06] disabled:opacity-45"
             >
-              Check in
+              {tooEarly
+                ? `Opens ${clock(new Date(opensAt).toISOString(), timeZone)}`
+                : "Check in"}
             </button>
           )}
           <button

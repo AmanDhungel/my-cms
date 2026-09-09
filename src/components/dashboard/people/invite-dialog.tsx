@@ -2,18 +2,15 @@
 
 import * as React from "react"
 import { useMutation } from "@tanstack/react-query"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 import { cn } from "cn"
 
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import { ApiRequestError, apiFetch } from "@/lib/api-client"
-import {
-  SHIFTS,
-  inviteSchema,
-  type InviteValues,
-} from "@/lib/validations/auth"
+import { ShiftPicker } from "@/components/dashboard/shift-picker"
+import { inviteSchema, type InviteValues } from "@/lib/validations/auth"
 import type { InviteDTO } from "@/models/invite"
 
 type InviteResponse = { invite: InviteDTO; joinUrl: string }
@@ -34,6 +31,8 @@ export function InviteDialog({
     handleSubmit,
     reset,
     setError,
+    setValue,
+    control,
     formState: { errors },
   } = useForm<InviteValues>({
     resolver: zodResolver(inviteSchema),
@@ -42,10 +41,14 @@ export function InviteDialog({
       email: "",
       phone: "",
       role: "employee",
-      shift: SHIFTS[0],
+      shiftStart: "08:00",
+      shiftEnd: "17:00",
       message: "",
     },
   })
+
+  const shiftStart = useWatch({ control, name: "shiftStart" })
+  const shiftEnd = useWatch({ control, name: "shiftEnd" })
 
   const mutation = useMutation({
     mutationFn: (values: InviteValues) =>
@@ -165,20 +168,19 @@ export function InviteDialog({
                     <option value="supervisor">Supervisor</option>
                   </select>
                 </label>
-                <label className="flex flex-col gap-[7px]">
-                  <FieldLabel>Shift</FieldLabel>
-                  <select
-                    className={cn(inputClass, "cursor-pointer")}
-                    {...register("shift")}
-                  >
-                    {SHIFTS.map((shift) => (
-                      <option key={shift} value={shift}>
-                        {shift}
-                      </option>
-                    ))}
-                  </select>
-                </label>
               </div>
+
+              <ShiftPicker
+                start={shiftStart}
+                end={shiftEnd}
+                onStart={(value) =>
+                  setValue("shiftStart", value, { shouldValidate: true })
+                }
+                onEnd={(value) =>
+                  setValue("shiftEnd", value, { shouldValidate: true })
+                }
+                error={errors.shiftEnd?.message ?? errors.shiftStart?.message}
+              />
 
               <label className="flex flex-col gap-[7px]">
                 <FieldLabel>Message</FieldLabel>

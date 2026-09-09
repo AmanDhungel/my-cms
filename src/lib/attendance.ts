@@ -1,6 +1,11 @@
 import type { QueryFilter, Types } from "mongoose"
 
-import { dayKeyInZone, lateByMinutes } from "@/lib/time"
+import {
+  dayKeyInZone,
+  dayRangeInZone,
+  lateByMinutes,
+  parseShift,
+} from "@/lib/time"
 import {
   Attendance,
   LATE_GRACE_MIN,
@@ -152,4 +157,46 @@ function isDuplicateKey(error: unknown) {
     "code" in error &&
     (error as { code: unknown }).code === 11000
   )
+}
+
+/**
+ * Closes days that were opened but never ended, once the person's shift is
+ * over. There's no scheduler here, so this runs lazily whenever attendance is
+ * read — which is the moment anyone would notice the day still hanging open.
+ *
+ * Manual and derived departures are left alone; this only fills the gap.
+ */
+export async function autoCloseFinishedShifts({
+  userId,
+  fallbackShift,
+  timeZone,
+}: {
+  userId: string | Types.ObjectId
+  fallbackShift?: string | null
+  timeZone: string
+}) {
+  const open = await Attendance.find({
+    user: userId,
+    inAt: { $ne: null },
+    outAt: { $exists: false },
+  })
+
+  const now = Date.now()
+
+  for (const record of open) {
+    // The row's own snapshot wins: editing someone's shift shouldn't rewrite
+    // how a day that already happened gets closed.
+    const parsed = parseShift(record.shift ?? fallbackShift)
+    if (!parsed) continue
+
+    const { start } = dayRangeInZone(record.day, timeZone)
+    const endsAt = new Date(start.getTime() + parsed.endMin * 60_000)
+
+    if (endsAt.getTime() > now) continue
+
+    await Attendance.updateOne(
+      { _id: record._id, outAt: { $exists: false } },
+      { $set: { outAt: endsAt, outSource: "auto" } }
+    )
+  }
 }

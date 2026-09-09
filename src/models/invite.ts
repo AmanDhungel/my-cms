@@ -8,8 +8,6 @@ import {
   type Model,
 } from "mongoose"
 
-import { SHIFTS } from "@/lib/validations/auth"
-
 export const INVITE_ROLES = ["supervisor", "employee"] as const
 export type InviteRole = (typeof INVITE_ROLES)[number]
 
@@ -23,7 +21,12 @@ const inviteSchema = new Schema(
     email: { type: String, required: true, trim: true, lowercase: true },
     phone: { type: String, required: true, trim: true, maxlength: 32 },
     role: { type: String, required: true, enum: INVITE_ROLES },
-    shift: { type: String, required: true, enum: SHIFTS },
+    /** Stored as "HH:MM–HH:MM"; the owner picks the two ends. */
+    shift: {
+      type: String,
+      required: true,
+      match: /^\d{2}:\d{2}[–—-]\d{2}:\d{2}$/,
+    },
     message: { type: String, trim: true, maxlength: 500 },
     /**
      * Only the hash is stored. The raw token exists once, in the link handed

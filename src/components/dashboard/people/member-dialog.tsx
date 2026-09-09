@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/dialog"
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import { reportMutationError, useUpdateMember } from "@/lib/queries"
-import { SHIFTS, memberUpdateSchema } from "@/lib/validations/auth"
+import { ShiftPicker } from "@/components/dashboard/shift-picker"
+import { memberUpdateSchema, splitShift } from "@/lib/validations/auth"
 import type { UserDTO } from "@/models/user"
 
 type Errors = Partial<Record<string, string>>
@@ -73,7 +74,9 @@ function Body({
   const [name, setName] = React.useState(member.name)
   const [phone, setPhone] = React.useState(member.phone)
   const [role, setRole] = React.useState(member.role)
-  const [shift, setShift] = React.useState(member.shift ?? SHIFTS[0])
+  const initial = splitShift(member.shift)
+  const [shiftStart, setShiftStart] = React.useState(initial.shiftStart)
+  const [shiftEnd, setShiftEnd] = React.useState(initial.shiftEnd)
   const [errors, setErrors] = React.useState<Errors>({})
 
   const mutation = useUpdateMember(member.id)
@@ -85,7 +88,8 @@ function Body({
       name,
       phone,
       role,
-      shift: role === "owner" ? undefined : shift,
+      shiftStart: role === "owner" ? undefined : shiftStart,
+      shiftEnd: role === "owner" ? undefined : shiftEnd,
     })
 
     if (!parsed.success) {
@@ -168,27 +172,22 @@ function Body({
             <FieldError message={errors.role} />
           </label>
 
-          <label className="flex flex-col gap-[7px]">
-            <FieldLabel>Shift</FieldLabel>
-            <select
-              value={shift}
-              disabled={role === "owner"}
-              onChange={(event) => setShift(event.target.value as typeof shift)}
-              className={cn(
-                inputClass,
-                "cursor-pointer",
-                role === "owner" && "bg-n-100 text-n-600"
-              )}
-            >
-              {SHIFTS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-            <FieldError message={errors.shift} />
-          </label>
         </div>
+
+        <ShiftPicker
+          start={shiftStart}
+          end={shiftEnd}
+          disabled={role === "owner"}
+          onStart={(value) => {
+            setShiftStart(value)
+            setErrors((prev) => ({ ...prev, shiftEnd: undefined }))
+          }}
+          onEnd={(value) => {
+            setShiftEnd(value)
+            setErrors((prev) => ({ ...prev, shiftEnd: undefined }))
+          }}
+          error={errors.shiftEnd ?? errors.shiftStart}
+        />
       </div>
 
       <DialogFooter className="gap-2 sm:gap-2.5">
