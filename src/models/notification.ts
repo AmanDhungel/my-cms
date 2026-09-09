@@ -5,14 +5,14 @@ import {
   type HydratedDocument,
   type InferSchemaType,
   type Model,
-} from "mongoose"
+} from "mongoose";
 
 import {
   NOTIFICATION_KINDS,
   type NotificationKind,
-} from "@/lib/work-constants"
+} from "@/lib/work-constants";
 
-export { NOTIFICATION_KINDS, type NotificationKind }
+export { NOTIFICATION_KINDS, type NotificationKind };
 
 const notificationSchema = new Schema(
   {
@@ -32,30 +32,30 @@ const notificationSchema = new Schema(
 
     readAt: { type: Date },
   },
-  { timestamps: true }
-)
+  { timestamps: true },
+);
 
-notificationSchema.index({ user: 1, createdAt: -1 })
-notificationSchema.index({ user: 1, readAt: 1 })
+notificationSchema.index({ user: 1, createdAt: -1 });
+notificationSchema.index({ user: 1, readAt: 1 });
 
-export type NotificationDocument = InferSchemaType<typeof notificationSchema>
+export type NotificationDocument = InferSchemaType<typeof notificationSchema>;
 
 export const Notification: Model<NotificationDocument> =
   (models.Notification as Model<NotificationDocument>) ??
-  model<NotificationDocument>("Notification", notificationSchema)
+  model<NotificationDocument>("Notification", notificationSchema);
 
 export type NotificationDTO = {
-  id: string
-  kind: NotificationKind
-  title: string
-  body: string | null
-  href: string | null
-  readAt: string | null
-  createdAt: string
-}
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  body: string | null;
+  href: string | null;
+  readAt: string | null;
+  createdAt: string;
+};
 
 export function toNotificationDTO(
-  entry: HydratedDocument<NotificationDocument>
+  entry: HydratedDocument<NotificationDocument>,
 ): NotificationDTO {
   return {
     id: String(entry._id),
@@ -65,5 +65,5 @@ export function toNotificationDTO(
     href: entry.href ?? null,
     readAt: entry.readAt ? entry.readAt.toISOString() : null,
     createdAt: (entry.createdAt as Date).toISOString(),
-  }
+  };
 }

@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { cn } from "cn"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "cn";
 
-import { SignOutButton } from "@/components/dashboard/sign-out-button"
-import { initialsOf, type Viewer } from "@/components/dashboard/viewer"
+import { SignOutButton } from "@/components/dashboard/sign-out-button";
+import { initialsOf, type Viewer } from "@/components/dashboard/viewer";
 
 const NAV = [
   { href: "/dashboard", label: "Home", icon: HomeGlyph },
@@ -13,7 +13,7 @@ const NAV = [
   { href: "/dashboard/attendance", label: "Attendance", icon: ClockGlyph },
   { href: "/dashboard/requests", label: "Requests", icon: SheetGlyph },
   { href: "/dashboard/profile", label: "Profile", icon: PersonGlyph },
-]
+];
 
 /**
  * The crew view has two shapes. Below `lg` it is the design's phone app —
@@ -24,24 +24,25 @@ export function EmployeeShell({
   viewer,
   children,
 }: {
-  viewer: Viewer
-  children: React.ReactNode
+  viewer: Viewer;
+  children: React.ReactNode;
 }) {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   return (
     <div className="bg-n-50 min-h-screen">
       <header className="border-n-200 sticky top-0 z-40 flex items-center justify-between gap-4 border-b bg-[rgba(250,249,247,0.9)] px-5 py-3 backdrop-blur-[14px] lg:px-7">
         <div className="flex items-center gap-2.5">
-          <span
-            aria-hidden
-            className="bg-p-500 flex size-6 items-center justify-center rounded-[7px]"
-          >
-            <span className="bg-n-50 size-2 rounded-full" />
-          </span>
-          <span className="font-heading text-[15px] font-bold tracking-[-0.01em]">
-            EMS
-          </span>
+          <Link href="/" className="cursor-pointer flex items-center gap-2.5">
+            <span
+              aria-hidden
+              className="bg-p-500 flex size-6 items-center justify-center rounded-[7px]">
+              <span className="bg-n-50 size-2 rounded-full" />
+            </span>
+            <span className="font-heading text-[15px] font-bold tracking-[-0.01em]">
+              EMS
+            </span>
+          </Link>
           <span className="text-n-500 hidden font-mono text-[11px] tracking-[0.06em] sm:inline">
             {viewer.businessName.toUpperCase()}
           </span>
@@ -56,8 +57,7 @@ export function EmployeeShell({
           </div>
           <span
             aria-hidden
-            className="font-heading bg-p-100 text-p-700 flex size-8 items-center justify-center rounded-full text-[12px] font-semibold"
-          >
+            className="font-heading bg-p-100 text-p-700 flex size-8 items-center justify-center rounded-full text-[12px] font-semibold">
             {initialsOf(viewer.name)}
           </span>
           <SignOutButton className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-3 py-1.5 text-[13px] font-semibold transition-colors" />
@@ -69,8 +69,7 @@ export function EmployeeShell({
           <div className="flex items-center gap-2.5 px-2">
             <span
               aria-hidden
-              className="font-heading bg-p-100 text-p-700 flex size-8 shrink-0 items-center justify-center rounded-[9px] text-[13px] font-semibold"
-            >
+              className="font-heading bg-p-100 text-p-700 flex size-8 shrink-0 items-center justify-center rounded-[9px] text-[13px] font-semibold">
               {initialsOf(viewer.businessName)}
             </span>
             <span className="flex min-w-0 flex-col">
@@ -88,8 +87,8 @@ export function EmployeeShell({
               Your day
             </span>
             {NAV.map((item) => {
-              const Icon = item.icon
-              const active = isActive(pathname, item.href)
+              const Icon = item.icon;
+              const active = isActive(pathname, item.href);
 
               return (
                 <Link
@@ -100,13 +99,12 @@ export function EmployeeShell({
                     "flex items-center gap-2.5 rounded-lg px-2 py-2 text-[13.5px] transition-colors",
                     active
                       ? "text-p-700 bg-white font-semibold shadow-[0_1px_2px_rgba(27,24,21,0.05)]"
-                      : "text-n-700 hover:bg-n-200/60 font-medium"
-                  )}
-                >
+                      : "text-n-700 hover:bg-n-200/60 font-medium",
+                  )}>
                   <Icon />
                   {item.label}
                 </Link>
-              )
+              );
             })}
           </nav>
 
@@ -133,8 +131,8 @@ export function EmployeeShell({
 
             <nav className="border-n-200 bg-n-100 sticky bottom-0 grid grid-cols-5 gap-0.5 border-t px-3 pt-2.5 pb-4 sm:max-lg:rounded-b-[26px] lg:hidden">
               {NAV.map((item) => {
-                const Icon = item.icon
-                const active = isActive(pathname, item.href)
+                const Icon = item.icon;
+                const active = isActive(pathname, item.href);
 
                 return (
                   <Link
@@ -143,26 +141,25 @@ export function EmployeeShell({
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "flex flex-col items-center gap-1 py-1.5 text-[11px]",
-                      active ? "text-p-700 font-semibold" : "text-n-500"
-                    )}
-                  >
+                      active ? "text-p-700 font-semibold" : "text-n-500",
+                    )}>
                     <Icon />
                     {item.label}
                   </Link>
-                )
+                );
               })}
             </nav>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 /** /dashboard only matches exactly; the rest match their subtree. */
 function isActive(pathname: string, href: string) {
-  if (href === "/dashboard") return pathname === href
-  return pathname === href || pathname.startsWith(`${href}/`)
+  if (href === "/dashboard") return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 const glyph = {
@@ -173,14 +170,14 @@ const glyph = {
   stroke: "currentColor",
   strokeWidth: 2,
   className: "size-[19px] lg:size-[15px]",
-} as const
+} as const;
 
 function HomeGlyph() {
   return (
     <svg {...glyph} aria-hidden>
       <path d="M4 11l8-6 8 6v8H4z" />
     </svg>
-  )
+  );
 }
 
 function ClockGlyph() {
@@ -189,7 +186,7 @@ function ClockGlyph() {
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 2" />
     </svg>
-  )
+  );
 }
 
 function SheetGlyph() {
@@ -198,7 +195,7 @@ function SheetGlyph() {
       <path d="M6 4h12v16H6z" />
       <path d="M9 9h6M9 13h6" />
     </svg>
-  )
+  );
 }
 
 function PinGlyph() {
@@ -207,7 +204,7 @@ function PinGlyph() {
       <path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z" />
       <circle cx="12" cy="10" r="2.5" />
     </svg>
-  )
+  );
 }
 
 function PersonGlyph() {
@@ -216,5 +213,5 @@ function PersonGlyph() {
       <circle cx="12" cy="8" r="3.4" />
       <path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6" />
     </svg>
-  )
+  );
 }

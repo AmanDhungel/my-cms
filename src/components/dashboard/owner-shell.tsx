@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { cn } from "cn"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "cn";
 
 import {
   ApprovalsIcon,
@@ -12,43 +12,43 @@ import {
   ProjectsIcon,
   SettingsIcon,
   TasksIcon,
-} from "@/components/dashboard/nav-icons"
-import { SignOutButton } from "@/components/dashboard/sign-out-button"
-import { initialsOf, type Viewer } from "@/components/dashboard/viewer"
-import { useUnreadCount } from "@/lib/queries"
+} from "@/components/dashboard/nav-icons";
+import { SignOutButton } from "@/components/dashboard/sign-out-button";
+import { initialsOf, type Viewer } from "@/components/dashboard/viewer";
+import { useUnreadCount } from "@/lib/queries";
 
 type NavItem = {
-  href: string
-  label: string
-  icon: React.ComponentType<{ className?: string }>
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
   /** Rendered as a monospace count chip. `null` means no store backs it yet. */
-  count?: number | null
+  count?: number | null;
   /** Marigold pill: something is waiting, but nothing is wrong. */
-  accent?: boolean
+  accent?: boolean;
   /** Red circle: unread, and it should catch the eye across the room. */
-  alert?: boolean
-}
+  alert?: boolean;
+};
 
 export function OwnerShell({
   viewer,
   counts,
   children,
 }: {
-  viewer: Viewer
+  viewer: Viewer;
   counts: {
-    people: number
-    pendingInvites: number
-    projects: number
-    tasks: number
-    approvals: number
-    unread: number
-  }
-  children: React.ReactNode
+    people: number;
+    pendingInvites: number;
+    projects: number;
+    tasks: number;
+    approvals: number;
+    unread: number;
+  };
+  children: React.ReactNode;
 }) {
-  const pathname = usePathname()
+  const pathname = usePathname();
   // Seeded by the server render, then polled so the badge clears without a
   // full navigation once the feed is read.
-  const unread = useUnreadCount(counts.unread).data.unread
+  const unread = useUnreadCount(counts.unread).data.unread;
 
   const workspace: NavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
@@ -77,7 +77,7 @@ export function OwnerShell({
       count: counts.approvals,
       accent: true,
     },
-  ]
+  ];
 
   const account: NavItem[] = [
     {
@@ -92,21 +92,22 @@ export function OwnerShell({
       label: "Organization settings",
       icon: SettingsIcon,
     },
-  ]
+  ];
 
   return (
     <div className="bg-n-50 min-h-screen">
       <header className="border-n-200 sticky top-0 z-40 flex items-center justify-between gap-6 border-b bg-[rgba(250,249,247,0.9)] px-7 py-3 backdrop-blur-[14px]">
         <div className="flex items-center gap-2.5">
-          <span
-            aria-hidden
-            className="bg-p-500 flex size-6 items-center justify-center rounded-[7px]"
-          >
-            <span className="bg-n-50 size-2 rounded-full" />
-          </span>
-          <span className="font-heading text-[15px] font-bold tracking-[-0.01em]">
-            EMS
-          </span>
+          <Link href="/" className="flex items-center gap-2.5">
+            <span
+              aria-hidden
+              className="bg-p-500 flex size-6 items-center justify-center rounded-[7px]">
+              <span className="bg-n-50 size-2 rounded-full" />
+            </span>
+            <span className="font-heading text-[15px] font-bold tracking-[-0.01em]">
+              EMS
+            </span>
+          </Link>
           <span className="text-n-500 font-mono text-[11px] tracking-[0.06em]">
             {viewer.businessName.toUpperCase()}
           </span>
@@ -121,8 +122,7 @@ export function OwnerShell({
           </div>
           <span
             aria-hidden
-            className="font-heading bg-p-100 text-p-700 flex size-8 items-center justify-center rounded-[9px] text-[12px] font-semibold"
-          >
+            className="font-heading bg-p-100 text-p-700 flex size-8 items-center justify-center rounded-[9px] text-[12px] font-semibold">
             {initialsOf(viewer.name)}
           </span>
           <SignOutButton className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-3 py-1.5 text-[13px] font-semibold transition-colors" />
@@ -134,8 +134,7 @@ export function OwnerShell({
           <div className="flex items-center gap-2.5 px-2">
             <span
               aria-hidden
-              className="font-heading bg-p-100 text-p-700 flex size-8 shrink-0 items-center justify-center rounded-[9px] text-[13px] font-semibold"
-            >
+              className="font-heading bg-p-100 text-p-700 flex size-8 shrink-0 items-center justify-center rounded-[9px] text-[13px] font-semibold">
               {initialsOf(viewer.businessName)}
             </span>
             <span className="flex min-w-0 flex-col">
@@ -170,8 +169,7 @@ export function OwnerShell({
             </p>
             <Link
               href="/dashboard/people"
-              className="bg-p-500 rounded-md px-3 py-2 text-center text-[13px] font-semibold text-white hover:brightness-[1.06]"
-            >
+              className="bg-p-500 rounded-md px-3 py-2 text-center text-[13px] font-semibold text-white hover:brightness-[1.06]">
               Invite someone
             </Link>
           </div>
@@ -182,7 +180,7 @@ export function OwnerShell({
 
       <MobileNav items={[...workspace, ...account]} pathname={pathname} />
     </div>
-  )
+  );
 }
 
 function NavGroup({
@@ -191,10 +189,10 @@ function NavGroup({
   pathname,
   pendingInvites,
 }: {
-  label: string
-  items: NavItem[]
-  pathname: string
-  pendingInvites: number
+  label: string;
+  items: NavItem[];
+  pathname: string;
+  pendingInvites: number;
 }) {
   return (
     <nav className="flex flex-col gap-0.5">
@@ -202,8 +200,8 @@ function NavGroup({
         {label}
       </span>
       {items.map((item) => {
-        const Icon = item.icon
-        const active = isActive(pathname, item.href)
+        const Icon = item.icon;
+        const active = isActive(pathname, item.href);
 
         return (
           <Link
@@ -214,33 +212,32 @@ function NavGroup({
               "flex items-center justify-between gap-2 rounded-lg px-2 py-2 text-[13.5px] transition-colors",
               active
                 ? "text-p-700 bg-white font-semibold shadow-[0_1px_2px_rgba(27,24,21,0.05)]"
-                : "text-n-700 hover:bg-n-200/60 font-medium"
-            )}
-          >
+                : "text-n-700 hover:bg-n-200/60 font-medium",
+            )}>
             <span className="flex items-center gap-2.5">
               <Icon className="size-[15px]" />
               {item.label}
             </span>
             <NavCount item={item} pendingInvites={pendingInvites} />
           </Link>
-        )
+        );
       })}
     </nav>
-  )
+  );
 }
 
 function NavCount({
   item,
   pendingInvites,
 }: {
-  item: NavItem
-  pendingInvites: number
+  item: NavItem;
+  pendingInvites: number;
 }) {
   // Unread notifications get the one red badge in the nav, so it reads as
   // "look at this" rather than as another count.
   if (item.alert) {
-    if (!item.count) return null
-    return <AlertBadge count={item.count} />
+    if (!item.count) return null;
+    return <AlertBadge count={item.count} />;
   }
 
   // People carries a second, marigold chip for invites that haven't been
@@ -255,25 +252,27 @@ function NavCount({
         ) : null}
         <span className="text-n-500 font-mono text-[11px]">{item.count}</span>
       </span>
-    )
+    );
   }
 
   // Approvals and notifications wear the marigold chip, but only when there
   // is actually something waiting — a "0" badge is just noise.
   if (item.accent) {
-    if (!item.count) return null
+    if (!item.count) return null;
     return (
       <span className="bg-a-400 text-a-900 rounded-full px-1.5 py-px font-mono text-[11px] font-medium">
         {item.count}
       </span>
-    )
+    );
   }
 
   if (typeof item.count === "number") {
-    return <span className="text-n-500 font-mono text-[11px]">{item.count}</span>
+    return (
+      <span className="text-n-500 font-mono text-[11px]">{item.count}</span>
+    );
   }
 
-  return null
+  return null;
 }
 
 /**
@@ -285,34 +284,33 @@ function AlertBadge({
   count,
   className,
 }: {
-  count: number
-  className?: string
+  count: number;
+  className?: string;
 }) {
   return (
     <span
       aria-label={`${count} unread`}
       className={cn(
         "bg-s-overdue grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 font-mono text-[10.5px] leading-none font-semibold text-white tabular-nums",
-        className
-      )}
-    >
+        className,
+      )}>
       {count > 99 ? "99+" : count}
     </span>
-  )
+  );
 }
 
 function MobileNav({
   items,
   pathname,
 }: {
-  items: NavItem[]
-  pathname: string
+  items: NavItem[];
+  pathname: string;
 }) {
   return (
     <nav className="border-n-200 sticky bottom-0 z-40 flex items-stretch gap-1 overflow-x-auto border-t bg-[rgba(250,249,247,0.95)] px-3 py-2 backdrop-blur-[14px] lg:hidden">
       {items.map((item) => {
-        const Icon = item.icon
-        const active = isActive(pathname, item.href)
+        const Icon = item.icon;
+        const active = isActive(pathname, item.href);
 
         return (
           <Link
@@ -321,9 +319,8 @@ function MobileNav({
             aria-current={active ? "page" : undefined}
             className={cn(
               "flex min-w-[68px] flex-col items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] whitespace-nowrap transition-colors",
-              active ? "text-p-700 bg-white font-semibold" : "text-n-500"
-            )}
-          >
+              active ? "text-p-700 bg-white font-semibold" : "text-n-500",
+            )}>
             <span className="relative">
               <Icon className="size-[17px]" />
               {item.alert && item.count ? (
@@ -337,14 +334,14 @@ function MobileNav({
             </span>
             {item.label.replace("Organization ", "")}
           </Link>
-        )
+        );
       })}
     </nav>
-  )
+  );
 }
 
 /** /dashboard only matches exactly; the rest match their subtree. */
 function isActive(pathname: string, href: string) {
-  if (href === "/dashboard") return pathname === href
-  return pathname === href || pathname.startsWith(`${href}/`)
+  if (href === "/dashboard") return pathname === href;
+  return pathname === href || pathname.startsWith(`${href}/`);
 }
