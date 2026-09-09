@@ -4,6 +4,7 @@ import Link from "next/link"
 import { auth } from "@/auth"
 import { EmployeeHome } from "@/components/dashboard/employee/employee-home"
 import { TaskStatusBadge } from "@/components/dashboard/task-status-badge"
+import { NewTaskButton } from "@/components/dashboard/tasks/new-task-button"
 import {
   DashboardMain,
   Dot,
@@ -12,7 +13,6 @@ import {
   Panel,
   PanelHeader,
   StatCard,
-  primaryButtonClass,
 } from "@/components/dashboard/ui"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
@@ -71,9 +71,7 @@ export default async function DashboardPage() {
         title={`${greeting(business.timeZone)}, ${firstName(user.name)}`}
         subtitle={`${tasks.length} task${tasks.length === 1 ? "" : "s"} scheduled today · ${requests.length} waiting on you.`}
         actions={
-          <Link href="/dashboard/tasks" className={primaryButtonClass}>
-            New task
-          </Link>
+          <NewTaskButton />
         }
       />
 
@@ -133,11 +131,7 @@ export default async function DashboardPage() {
             <div className="p-[18px]">
               <EmptyState
                 message="Nothing scheduled today. Assign a task with a site and a check-in area and it shows up here."
-                action={
-                  <Link href="/dashboard/tasks" className={primaryButtonClass}>
-                    New task
-                  </Link>
-                }
+                action={<NewTaskButton />}
               />
             </div>
           ) : (

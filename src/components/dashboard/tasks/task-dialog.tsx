@@ -37,10 +37,16 @@ type Errors = Partial<Record<string, string>>
 export function TaskDialog({
   open,
   onClose,
+  onSaved,
   task,
 }: {
   open: boolean
   onClose: () => void
+  /**
+   * Fires only on a successful save, so a caller rendering server data can
+   * refresh it. Cancelling doesn't call this.
+   */
+  onSaved?: () => void
   task?: TaskDTO
 }) {
   const editing = Boolean(task)
@@ -61,13 +67,21 @@ export function TaskDialog({
         </DialogHeader>
         {/* Mounted only while open, so each visit starts from the task as it
             stands rather than from whatever was typed last time. */}
-        {open ? <Body onClose={onClose} task={task} /> : null}
+        {open ? <Body onClose={onClose} onSaved={onSaved} task={task} /> : null}
       </DialogContent>
     </Dialog>
   )
 }
 
-function Body({ onClose, task }: { onClose: () => void; task?: TaskDTO }) {
+function Body({
+  onClose,
+  onSaved,
+  task,
+}: {
+  onClose: () => void
+  onSaved?: () => void
+  task?: TaskDTO
+}) {
   const [form, setForm] = React.useState(() => blank(task))
   const [pin, setPin] = React.useState<Pin | null>(
     task ? { lat: task.lat, lng: task.lng } : null
@@ -137,6 +151,7 @@ function Body({ onClose, task }: { onClose: () => void; task?: TaskDTO }) {
     mutation.mutate(parsed.data, {
       onSuccess: () => {
         toast.success(task ? "Task updated" : "Task assigned")
+        onSaved?.()
         onClose()
       },
       onError: (error) =>

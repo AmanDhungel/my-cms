@@ -5,7 +5,10 @@ import "leaflet/dist/leaflet.css"
 import type * as LeafletTypes from "leaflet"
 import { cn } from "cn"
 
-import { formatDistance } from "@/lib/geo"
+import { useQuery } from "@tanstack/react-query"
+
+import { apiFetch } from "@/lib/api-client"
+import { formatDistance, type GeocodeHit } from "@/lib/geo"
 import { LocationError, getCurrentFix } from "@/lib/geolocation"
 
 /** Kathmandu, so a fresh workspace opens somewhere rather than mid-ocean. */
@@ -139,13 +142,21 @@ export function MapPicker({
     if (!map.current.hasLayer(fence.current)) fence.current.addTo(map.current)
   }, [value])
 
+  /** Centres the map and drops the marker in one move. */
+  const place = React.useCallback(
+    (lat: number, lng: number, zoom = 17) => {
+      map.current?.setView([lat, lng], zoom)
+      onChange({ lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) })
+    },
+    [onChange]
+  )
+
   async function jumpToMe() {
     setLocating(true)
     setError(null)
     try {
       const fix = await getCurrentFix()
-      map.current?.setView([fix.lat, fix.lng], 17)
-      onChange({ lat: Number(fix.lat.toFixed(6)), lng: Number(fix.lng.toFixed(6)) })
+      place(fix.lat, fix.lng)
     } catch (caught) {
       setError(
         caught instanceof LocationError
@@ -159,6 +170,8 @@ export function MapPicker({
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
+      <PlaceSearch onPick={(hit) => place(hit.lat, hit.lng)} />
+
       <div className="border-n-300 relative overflow-hidden rounded-lg border">
         <div
           ref={holder}
@@ -184,7 +197,7 @@ export function MapPicker({
               · fence {formatDistance(radiusM)}
             </>
           ) : (
-            "Tap the map to drop the check-in marker."
+            "Search for the place, or tap the map to drop the marker."
           )}
         </span>
         <button
@@ -201,5 +214,129 @@ export function MapPicker({
         <span className="text-s-overdue text-[12.5px]">{error}</span>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * Place search over the geocoding proxy. Typing is debounced because
+ * Nominatim asks for at most one lookup a second, and the map stays usable
+ * throughout — a result is a shortcut, not the only way to set the marker.
+ */
+function PlaceSearch({ onPick }: { onPick: (hit: GeocodeHit) => void }) {
+  const box = React.useRef<HTMLDivElement | null>(null)
+  const [term, setTerm] = React.useState("")
+  const [debounced, setDebounced] = React.useState("")
+  const [open, setOpen] = React.useState(false)
+
+  /**
+   * The dialog body scrolls and clips its overflow, so a dropdown opening at
+   * the bottom edge would be cut off. Centring the field on focus guarantees
+   * the results have somewhere to land.
+   */
+  function reveal() {
+    setOpen(true)
+    box.current?.scrollIntoView({ block: "center", behavior: "smooth" })
+  }
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebounced(term.trim()), 450)
+    return () => clearTimeout(timer)
+  }, [term])
+
+  const search = useQuery({
+    queryKey: ["geocode", debounced],
+    queryFn: () =>
+      apiFetch<{ results: GeocodeHit[]; unavailable?: boolean }>(
+        `/api/geocode?q=${encodeURIComponent(debounced)}`
+      ),
+    enabled: debounced.length >= 3,
+    staleTime: 5 * 60_000,
+  })
+
+  const results = search.data?.results ?? []
+
+  return (
+    <div ref={box} className="relative">
+      <div className="border-n-300 focus-within:border-p-500 flex items-center gap-2 rounded-md border bg-white px-3 py-2">
+        <SearchGlyph />
+        <input
+          value={term}
+          onChange={(event) => {
+            setTerm(event.target.value)
+            setOpen(true)
+          }}
+          onFocus={reveal}
+          onKeyDown={(event) => {
+            // Enter inside a dialog would otherwise submit the form behind it.
+            if (event.key === "Enter") event.preventDefault()
+            if (event.key === "Escape") setOpen(false)
+          }}
+          placeholder="Search a place — Balaju, Kathmandu"
+          className="text-n-900 placeholder:text-n-400 w-full bg-transparent text-[13.5px] outline-none"
+        />
+        {term ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => {
+              setTerm("")
+              setOpen(false)
+            }}
+            className="text-n-400 hover:text-n-700 text-[15px] leading-none"
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
+
+      {open && debounced.length >= 3 ? (
+        <div className="border-n-200 absolute top-full right-0 left-0 z-[1000] mt-1 max-h-[200px] overflow-auto rounded-md border bg-white shadow-[0_12px_28px_rgba(27,24,21,0.16)]">
+          {search.isFetching ? (
+            <p className="text-n-500 m-0 px-3 py-2.5 text-[12.5px]">
+              Searching…
+            </p>
+          ) : search.data?.unavailable ? (
+            <p className="text-n-500 m-0 px-3 py-2.5 text-[12.5px]">
+              Search is unavailable right now — tap the map instead.
+            </p>
+          ) : results.length === 0 ? (
+            <p className="text-n-500 m-0 px-3 py-2.5 text-[12.5px]">
+              Nothing found. Try a nearby landmark, or tap the map.
+            </p>
+          ) : (
+            results.map((hit) => (
+              <button
+                key={`${hit.lat},${hit.lng}`}
+                type="button"
+                onClick={() => {
+                  onPick(hit)
+                  setTerm(hit.label.split(",")[0])
+                  setOpen(false)
+                }}
+                className="hover:bg-n-100 border-n-200/70 block w-full border-b px-3 py-2.5 text-left text-[13px] leading-snug last:border-b-0"
+              >
+                {hit.label}
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function SearchGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="text-n-400 size-3.5 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden
+    >
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M16 16l4 4" />
+    </svg>
   )
 }

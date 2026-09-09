@@ -23,3 +23,6 @@ export function formatDistance(metres: number) {
   if (metres < 1000) return `${metres} m`
   return `${(metres / 1000).toFixed(1)} km`
 }
+
+/** One place-search result, as the map picker consumes it. */
+export type GeocodeHit = { label: string; lat: number; lng: number }
