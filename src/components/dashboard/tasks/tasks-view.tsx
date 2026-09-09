@@ -207,7 +207,7 @@ export function TasksView({
               </div>
 
               <span className="text-n-700 truncate text-[13px]">
-                {task.assignee?.name || "Unassigned"}
+                {crewLabel(task)}
               </span>
 
               <span className="text-n-600 font-mono text-[12px]">
@@ -217,9 +217,9 @@ export function TasksView({
 
               <div className="flex flex-col items-start gap-1">
                 <TaskStatusBadge status={task.status} />
-                {task.checkedInAt ? (
+                {task.onSite.length > 0 ? (
                   <span className="text-p-600 font-mono text-[10.5px]">
-                    ON SITE SINCE {clock(task.checkedInAt, timeZone)}
+                    {task.onSite.length} ON SITE
                   </span>
                 ) : null}
               </div>
@@ -260,6 +260,13 @@ export function TasksView({
       ) : null}
     </DashboardMain>
   )
+}
+
+/** "Kiran Basnet" / "Kiran Basnet +2" — the row has one line to spare. */
+function crewLabel(task: TaskDTO) {
+  const [first, ...rest] = task.assignees
+  if (!first) return "Unassigned"
+  return rest.length > 0 ? `${first.name} +${rest.length}` : first.name
 }
 
 function clock(iso: string, timeZone: string) {

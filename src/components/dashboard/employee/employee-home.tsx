@@ -41,7 +41,7 @@ export function EmployeeHome({ name, shift }: { name: string; shift: string | nu
   )
 
   const list = tasks.data?.tasks ?? []
-  const checkedIn = list.filter((task) => task.checkedInAt).length
+  const checkedIn = list.filter((task) => task.myCheckedInAt).length
 
   function press(action: "start" | "end") {
     if (shiftAction.isPending) return

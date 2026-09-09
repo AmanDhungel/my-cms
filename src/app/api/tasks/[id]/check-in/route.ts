@@ -1,3 +1,5 @@
+import { Types } from "mongoose"
+
 import { HttpError, fail, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { markArrival } from "@/lib/attendance"
@@ -35,8 +37,13 @@ export async function POST(
       throw new HttpError(409, "That task is already closed")
     }
 
-    // Guards a double submit: a second request finds the task already open.
-    if (task.checkedInAt) {
+    // Per person, not per task: with a crew on one job, someone else being
+    // on site says nothing about whether you are.
+    if (
+      (task.openCheckIns ?? []).some(
+        (entry) => String(entry.user) === viewer.id
+      )
+    ) {
       throw new HttpError(409, "You're already checked in to this task")
     }
 
@@ -74,7 +81,7 @@ export async function POST(
       reason: insideFence ? undefined : values.reason,
     })
 
-    task.checkedInAt = at
+    task.openCheckIns.push({ user: new Types.ObjectId(viewer.id), at })
     if (task.status === "pending" || task.status === "blocked") {
       task.status = "in_progress"
       task.blockedReason = undefined
@@ -96,7 +103,7 @@ export async function POST(
     })
 
     await task.populate([
-      { path: "assignee", select: "name" },
+      { path: "assignees", select: "name" },
       { path: "project", select: "name" },
     ])
 
@@ -114,7 +121,7 @@ export async function POST(
 
     return ok(
       {
-        task: toTaskDTO(task),
+        task: toTaskDTO(task, viewer.id),
         checkIn: toCheckInDTO(entry),
         attendance: toAttendanceDTO(attendance),
       },

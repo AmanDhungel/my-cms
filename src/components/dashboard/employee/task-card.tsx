@@ -22,7 +22,7 @@ export function EmployeeTaskCard({
     null
   )
 
-  const checkedIn = Boolean(task.checkedInAt)
+  const checkedIn = Boolean(task.myCheckedInAt)
   const closed = task.status === "done" || task.status === "cancelled"
 
   return (
@@ -66,7 +66,16 @@ export function EmployeeTaskCard({
       {checkedIn ? (
         <span className="text-p-600 flex items-center gap-1.5 text-[12px]">
           <span aria-hidden className="bg-s-done size-[7px] rounded-full" />
-          Checked in at {clock(task.checkedInAt!, timeZone)}
+          Checked in at {clock(task.myCheckedInAt!, timeZone)}
+        </span>
+      ) : null}
+
+      {/* Who else is on this job, so nobody turns up thinking they're alone. */}
+      {task.assignees.length > 1 ? (
+        <span className="text-n-500 text-[12px]">
+          With {task.assignees.length - 1} other
+          {task.assignees.length > 2 ? "s" : ""}
+          {task.onSite.length > 0 ? ` · ${task.onSite.length} on site now` : ""}
         </span>
       ) : null}
 

@@ -32,7 +32,10 @@ export const taskSchema = z
       .regex(/^[0-9a-fA-F]{24}$/, "Pick a project for this task"),
     startAt: z.iso.datetime({ message: "Pick a start time" }),
     endAt: z.iso.datetime({ message: "Pick an end time" }),
-    assigneeId: objectId,
+    assigneeIds: z
+      .array(objectId)
+      .min(1, "Put at least one person on this task")
+      .max(20, "That is a lot of people for one task"),
     priority: z.enum(TASK_PRIORITIES),
   })
   .refine((values) => new Date(values.endAt) > new Date(values.startAt), {

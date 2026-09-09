@@ -45,7 +45,19 @@ const taskSchema = new Schema(
     startAt: { type: Date, required: true },
     endAt: { type: Date, required: true },
 
-    assignee: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    /**
+     * A task can be crewed by several people. `assignee` (singular) is the
+     * shape this used to have and is left on migrated documents so the change
+     * can be rolled back; nothing reads it.
+     */
+    assignees: {
+      type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+      required: true,
+      validate: {
+        validator: (list: unknown[]) => list.length > 0,
+        message: "A task needs at least one person on it",
+      },
+    },
     assignedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
 
     status: {
@@ -64,15 +76,29 @@ const taskSchema = new Schema(
     /** Why the assignee marked it blocked. Cleared when work resumes. */
     blockedReason: { type: String, trim: true, maxlength: 500 },
 
-    /** Mirrors of the latest check-in/out, so lists don't need a second query. */
-    checkedInAt: { type: Date },
+    /**
+     * Who is standing on site right now, one entry each. Mirrored here so a
+     * list doesn't need a second query per task; the CheckIn collection stays
+     * the record of what happened.
+     */
+    openCheckIns: {
+      type: [
+        {
+          _id: false,
+          user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+          at: { type: Date, required: true },
+        },
+      ],
+      default: [],
+    },
+    /** The last departure by anyone, for "finished at" style readouts. */
     checkedOutAt: { type: Date },
   },
   { timestamps: true }
 )
 
 // The two queries that actually run: an employee's day, and an owner's board.
-taskSchema.index({ assignee: 1, startAt: 1 })
+taskSchema.index({ assignees: 1, startAt: 1 })
 taskSchema.index({ business: 1, startAt: -1 })
 taskSchema.index({ project: 1, startAt: -1 })
 
@@ -95,9 +121,16 @@ export type TaskDTO = {
   status: TaskStatus
   priority: TaskPriority
   blockedReason: string | null
-  checkedInAt: string | null
+  /** Everyone standing on site right now. */
+  onSite: { id: string; name: string; at: string }[]
+  /**
+   * The viewer's own open check-in, when `toTaskDTO` was given one. This is
+   * what the crew app keys its Check in / Check out button off — with several
+   * people on a task, "is anyone here" is a different question from "am I".
+   */
+  myCheckedInAt: string | null
   checkedOutAt: string | null
-  assignee: { id: string; name: string } | null
+  assignees: { id: string; name: string }[]
   project: { id: string; name: string } | null
 }
 
@@ -116,7 +149,22 @@ function named(ref: MaybePopulated) {
   return { id: String(ref), name: "" }
 }
 
-export function toTaskDTO(task: HydratedDocument<TaskDocument>): TaskDTO {
+export function toTaskDTO(
+  task: HydratedDocument<TaskDocument>,
+  viewerId?: string
+): TaskDTO {
+  const assignees = (task.assignees ?? [])
+    .map((ref) => named(ref as MaybePopulated))
+    .filter((entry): entry is { id: string; name: string } => entry !== null)
+
+  const byId = new Map(assignees.map((entry) => [entry.id, entry.name]))
+
+  const onSite = (task.openCheckIns ?? []).map((entry) => ({
+    id: String(entry.user),
+    name: byId.get(String(entry.user)) ?? "",
+    at: entry.at.toISOString(),
+  }))
+
   return {
     id: String(task._id),
     title: task.title,
@@ -130,9 +178,11 @@ export function toTaskDTO(task: HydratedDocument<TaskDocument>): TaskDTO {
     status: task.status,
     priority: task.priority,
     blockedReason: task.blockedReason ?? null,
-    checkedInAt: task.checkedInAt ? task.checkedInAt.toISOString() : null,
+    onSite,
+    myCheckedInAt:
+      onSite.find((entry) => entry.id === viewerId)?.at ?? null,
     checkedOutAt: task.checkedOutAt ? task.checkedOutAt.toISOString() : null,
-    assignee: named(task.assignee as MaybePopulated),
+    assignees,
     project: named(task.project as MaybePopulated),
   }
 }

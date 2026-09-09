@@ -50,18 +50,22 @@ export default async function DashboardPage() {
     })
       .sort({ startAt: 1 })
       .limit(6)
-      .populate("assignee", "name"),
-    Task.countDocuments({
-      business: business._id,
-      checkedInAt: { $ne: null },
-    }),
+      .populate("assignees", "name"),
+    // One task can have several people standing on it, so this counts
+    // people on site rather than tasks with somebody on them.
+    Task.aggregate<{ total: number }>([
+      { $match: { business: business._id } },
+      { $project: { n: { $size: { $ifNull: ["$openCheckIns", []] } } } },
+      { $group: { _id: null, total: { $sum: "$n" } } },
+    ]),
     WorkRequest.find({ business: business._id, status: "pending" })
       .sort({ createdAt: -1 })
       .limit(4)
       .populate("user", "name"),
   ])
 
-  const tasks = todayTasks.map(toTaskDTO)
+  const tasks = todayTasks.map((task) => toTaskDTO(task))
+  const onSite = checkedIn[0]?.total ?? 0
   const requests = pendingRequests.map(toRequestDTO)
 
   return (
@@ -78,11 +82,11 @@ export default async function DashboardPage() {
       <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="CHECKED IN NOW"
-          value={checkedIn}
+          value={onSite}
           hint={
             <>
-              <Dot className={checkedIn > 0 ? "bg-s-done" : "bg-n-400"} />
-              {checkedIn > 0 ? "on site right now" : "nobody on site"}
+              <Dot className={onSite > 0 ? "bg-s-done" : "bg-n-400"} />
+              {onSite > 0 ? "on site right now" : "nobody on site"}
             </>
           }
         />
@@ -145,7 +149,10 @@ export default async function DashboardPage() {
                     {task.title}
                   </span>
                   <span className="text-n-500 text-[12.5px]">
-                    {task.site} · {task.assignee?.name ?? "Unassigned"} ·{" "}
+                    {task.site} ·{" "}
+                    {task.assignees.map((member) => member.name).join(", ") ||
+                      "Unassigned"}{" "}
+                    ·{" "}
                     <span className="font-mono text-[11px]">
                       {clock(task.startAt, business.timeZone)}–
                       {clock(task.endAt, business.timeZone)}

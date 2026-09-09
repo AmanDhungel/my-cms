@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { cn } from "cn"
 
 import { PinIcon } from "@/components/dashboard/nav-icons"
+import { initialsOf } from "@/components/dashboard/viewer"
 import { reportMutationError, useMoveTask } from "@/lib/queries"
 import type { TaskStatus } from "@/lib/work-constants"
 import type { TaskDTO } from "@/models/task"
@@ -236,17 +237,47 @@ function Card({
       ) : null}
 
       <div className="border-n-200 flex items-center justify-between gap-2 border-t pt-2">
-        <span className="text-n-600 truncate text-[12px]">
-          {task.assignee?.name || "Unassigned"}
+        <span className="flex min-w-0 items-center gap-1">
+          {task.assignees.length === 0 ? (
+            <span className="text-n-400 text-[12px]">Unassigned</span>
+          ) : (
+            <>
+              {task.assignees.slice(0, 3).map((member) => (
+                <span
+                  key={member.id}
+                  title={member.name}
+                  className={cn(
+                    "font-heading flex size-[22px] shrink-0 items-center justify-center rounded-full text-[9.5px] font-semibold",
+                    task.onSite.some((entry) => entry.id === member.id)
+                      ? "bg-p-500 text-white"
+                      : "bg-n-100 text-n-600"
+                  )}
+                >
+                  {initialsOf(member.name)}
+                </span>
+              ))}
+              {task.assignees.length > 3 ? (
+                <span className="text-n-500 ml-0.5 font-mono text-[10.5px]">
+                  +{task.assignees.length - 3}
+                </span>
+              ) : null}
+            </>
+          )}
         </span>
         <span className="text-n-400 shrink-0 font-mono text-[10.5px]">
           {clock(task.startAt, timeZone)}
         </span>
       </div>
 
-      {task.checkedInAt ? (
+      {task.onSite.length > 0 ? (
         <span className="text-p-600 font-mono text-[10.5px]">
-          ON SITE SINCE {clock(task.checkedInAt, timeZone)}
+          {task.onSite.length} ON SITE ·{" "}
+          {clock(
+            task.onSite.reduce((first, entry) =>
+              entry.at < first.at ? entry : first
+            ).at,
+            timeZone
+          )}
         </span>
       ) : null}
 

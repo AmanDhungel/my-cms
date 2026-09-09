@@ -66,10 +66,18 @@ export async function PATCH(
       values.status === "blocked" ? values.blockedReason : undefined
 
     // Handing work over while still checked in closes the visit, so attendance
-    // isn't left open for the rest of the day.
-    if (CLOSES_THE_VISIT.includes(values.status) && task.checkedInAt) {
+    // isn't left open for the rest of the day. Only the acting person's visit
+    // closes — a crewmate still on site keeps theirs.
+    const myVisit = (task.openCheckIns ?? []).find(
+      (entry) => String(entry.user) === viewer.id
+    )
+
+    if (CLOSES_THE_VISIT.includes(values.status) && myVisit) {
       const at = new Date()
-      task.checkedInAt = undefined
+      task.set(
+        "openCheckIns",
+        task.openCheckIns.filter((entry) => String(entry.user) !== viewer.id)
+      )
       task.checkedOutAt = at
 
       const [business, me] = await Promise.all([
@@ -89,13 +97,13 @@ export async function PATCH(
 
     await task.save()
     await task.populate([
-      { path: "assignee", select: "name" },
+      { path: "assignees", select: "name" },
       { path: "project", select: "name" },
     ])
 
     await announce(task, values, viewer, isReviewer)
 
-    return ok({ task: toTaskDTO(task) })
+    return ok({ task: toTaskDTO(task, viewer.id) })
   } catch (error) {
     return handleApiError(error)
   }
@@ -139,16 +147,24 @@ async function announce(
   }
 
   if (values.status === "done") {
-    // A reviewer signing off is news for the assignee; an owner-assigned task
-    // they completed themselves needs no notification at all.
-    if (isReviewer && String(task.assignee?._id ?? task.assignee) !== viewer.id) {
-      await notifyUser({
-        ...shared,
-        userId: task.assignee as never,
-        kind: "task_done",
-        title: `${task.title} was signed off`,
-        body: task.site,
-      })
+    // A reviewer signing off is news for the crew who did the work; anyone
+    // who signed off their own task needs no notification about it.
+    if (isReviewer) {
+      const crew = (task.assignees ?? [])
+        .map((ref) => String((ref as { _id?: unknown })?._id ?? ref))
+        .filter((id) => id !== viewer.id)
+
+      await Promise.all(
+        crew.map((userId) =>
+          notifyUser({
+            ...shared,
+            userId,
+            kind: "task_done",
+            title: `${task.title} was signed off`,
+            body: task.site,
+          })
+        )
+      )
       return
     }
 

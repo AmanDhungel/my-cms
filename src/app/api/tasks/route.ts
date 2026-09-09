@@ -6,11 +6,11 @@ import { requireRole, requireUser } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
 import { taskSchema } from "@/lib/validations/work"
+import { loadCrew } from "@/lib/tasks"
 import { getWorkspace } from "@/lib/workspace"
 import { notifyUser } from "@/lib/notify"
 import { Project } from "@/models/project"
 import { Task, toTaskDTO } from "@/models/task"
-import { User } from "@/models/user"
 
 export const runtime = "nodejs"
 
@@ -40,11 +40,11 @@ export async function GET(request: NextRequest) {
     const filter: Record<string, unknown> = { business: business._id }
 
     if (viewer.role === "employee") {
-      filter.assignee = viewer.id
+      filter.assignees = viewer.id
     } else {
       const assigneeId = params.get("assigneeId")
       if (assigneeId && Types.ObjectId.isValid(assigneeId)) {
-        filter.assignee = assigneeId
+        filter.assignees = assigneeId
       }
     }
 
@@ -77,11 +77,11 @@ export async function GET(request: NextRequest) {
       .sort(scope === "done" ? { startAt: -1 } : { startAt: 1 })
       .limit(200)
       .populate([
-        { path: "assignee", select: "name" },
+        { path: "assignees", select: "name" },
         { path: "project", select: "name" },
       ])
 
-    return ok({ tasks: tasks.map(toTaskDTO) })
+    return ok({ tasks: tasks.map((task) => toTaskDTO(task, viewer.id)) })
   } catch (error) {
     return handleApiError(error)
   }
@@ -95,16 +95,9 @@ export async function POST(request: Request) {
 
     await connectToDatabase()
 
-    // The assignee has to belong to this workspace — otherwise an owner could
-    // assign work into someone else's org by guessing an id.
-    const assignee = await User.findOne({
-      _id: values.assigneeId,
-      business: viewer.businessId,
-    })
-
-    if (!assignee) {
-      throw new HttpError(422, "That person isn't in this workspace")
-    }
+    // Everyone on the crew has to belong to this workspace — otherwise an
+    // owner could assign work into someone else's org by guessing an id.
+    const crew = await loadCrew(values.assigneeIds, viewer.businessId)
 
     // Same scoping rule for the project: a guessed id can't reach another org.
     const project = await Project.findOne({
@@ -131,29 +124,36 @@ export async function POST(request: Request) {
       radiusM: values.radiusM,
       startAt: new Date(values.startAt),
       endAt: new Date(values.endAt),
-      assignee: assignee._id,
+      assignees: crew.map((member) => member._id),
       assignedBy: viewer.id,
       priority: values.priority,
       status: "pending",
     })
 
     await task.populate([
-      { path: "assignee", select: "name" },
+      { path: "assignees", select: "name" },
       { path: "project", select: "name" },
     ])
 
-    await notifyUser({
-      businessId: viewer.businessId,
-      userId: assignee._id,
-      kind: "task_assigned",
-      title: `New task: ${values.title}`,
-      body: `${project.name} · ${values.site}`,
-      href: "/dashboard",
-      actor: viewer.id,
-      task: task._id,
-    })
+    // Everyone put on it hears about it, except whoever did the assigning.
+    await Promise.all(
+      crew
+        .filter((member) => String(member._id) !== viewer.id)
+        .map((member) =>
+          notifyUser({
+            businessId: viewer.businessId,
+            userId: member._id,
+            kind: "task_assigned",
+            title: `New task: ${values.title}`,
+            body: `${project.name} · ${values.site}`,
+            href: "/dashboard",
+            actor: viewer.id,
+            task: task._id,
+          })
+        )
+    )
 
-    return ok({ task: toTaskDTO(task) }, 201)
+    return ok({ task: toTaskDTO(task, viewer.id) }, 201)
   } catch (error) {
     return handleApiError(error)
   }

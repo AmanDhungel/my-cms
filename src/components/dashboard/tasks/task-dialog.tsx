@@ -109,6 +109,16 @@ function Body({
     setErrors((prev) => ({ ...prev, [key]: undefined }))
   }
 
+  function toggleAssignee(id: string) {
+    setForm((prev) => ({
+      ...prev,
+      assigneeIds: prev.assigneeIds.includes(id)
+        ? prev.assigneeIds.filter((entry) => entry !== id)
+        : [...prev.assigneeIds, id],
+    }))
+    setErrors((prev) => ({ ...prev, assigneeIds: undefined }))
+  }
+
   /** Picking a project fills the site in, unless one has been typed already. */
   function chooseProject(id: string) {
     set("projectId", id)
@@ -234,30 +244,49 @@ function Body({
         </label>
 
         <div className="grid gap-3.5 sm:grid-cols-2">
-          <label className="flex flex-col gap-[7px]">
-            <FieldLabel>Assign to</FieldLabel>
-            <select
-              value={form.assigneeId}
-              onChange={(event) => set("assigneeId", event.target.value)}
-              aria-invalid={Boolean(errors.assigneeId)}
-              className={cn(inputClass, "cursor-pointer")}
-            >
-              <option value="">
-                {people.isPending ? "Loading people…" : "Pick someone"}
-              </option>
-              {assignable.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name} · {member.role}
-                </option>
-              ))}
-            </select>
-            {!people.isPending && assignable.length === 0 ? (
+          <div className="flex flex-col gap-[7px]">
+            <div className="flex items-center justify-between gap-3">
+              <FieldLabel>Assign to</FieldLabel>
+              <span className="text-n-400 font-mono text-[11px]">
+                {form.assigneeIds.length} selected
+              </span>
+            </div>
+
+            {people.isPending ? (
+              <Skeleton className="h-24 w-full rounded-md" />
+            ) : assignable.length === 0 ? (
               <span className="text-a-700 text-[12px]">
                 Nobody to assign yet — invite someone from People first.
               </span>
-            ) : null}
-            <FieldError message={errors.assigneeId} />
-          </label>
+            ) : (
+              <div className="border-n-300 max-h-[132px] overflow-auto rounded-md border bg-white">
+                {assignable.map((member) => {
+                  const picked = form.assigneeIds.includes(member.id)
+                  return (
+                    <label
+                      key={member.id}
+                      className={cn(
+                        "border-n-200/70 flex cursor-pointer items-center gap-2.5 border-b px-3 py-2 text-[13.5px] last:border-b-0",
+                        picked ? "bg-p-50" : "hover:bg-n-100"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={picked}
+                        onChange={() => toggleAssignee(member.id)}
+                        className="accent-p-500 size-[15px]"
+                      />
+                      <span className="truncate">{member.name}</span>
+                      <span className="text-n-400 ml-auto text-[11.5px]">
+                        {member.role}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+            <FieldError message={errors.assigneeIds} />
+          </div>
 
           <label className="flex flex-col gap-[7px]">
             <FieldLabel>Priority</FieldLabel>
@@ -390,7 +419,7 @@ function blank(task?: TaskDTO) {
     radiusM: String(task?.radiusM ?? DEFAULT_RADIUS_M),
     startAt: toLocal(task?.startAt),
     endAt: toLocal(task?.endAt),
-    assigneeId: task?.assignee?.id ?? "",
+    assigneeIds: (task?.assignees ?? []).map((member) => member.id),
     priority: (task?.priority ?? "normal") as (typeof TASK_PRIORITIES)[number],
   }
 }

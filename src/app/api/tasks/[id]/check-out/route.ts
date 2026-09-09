@@ -31,8 +31,12 @@ export async function POST(
 
     const task = await loadTaskForViewer(id, viewer)
 
-    // Guards a double submit from the other direction.
-    if (!task.checkedInAt) {
+    // Guards a double submit from the other direction, again per person.
+    const mine = (task.openCheckIns ?? []).find(
+      (entry) => String(entry.user) === viewer.id
+    )
+
+    if (!mine) {
       throw new HttpError(409, "You aren't checked in to this task")
     }
 
@@ -57,7 +61,12 @@ export async function POST(
       reason: insideFence ? undefined : values.reason,
     })
 
-    task.checkedInAt = undefined
+    // `set` rather than assignment: the field is a mongoose DocumentArray,
+    // which a plain array does not satisfy.
+    task.set(
+      "openCheckIns",
+      task.openCheckIns.filter((entry) => String(entry.user) !== viewer.id)
+    )
     task.checkedOutAt = at
     await task.save()
 
@@ -76,7 +85,7 @@ export async function POST(
     })
 
     await task.populate([
-      { path: "assignee", select: "name" },
+      { path: "assignees", select: "name" },
       { path: "project", select: "name" },
     ])
 
@@ -94,7 +103,7 @@ export async function POST(
 
     return ok(
       {
-        task: toTaskDTO(task),
+        task: toTaskDTO(task, viewer.id),
         checkIn: toCheckInDTO(entry),
         attendance: toAttendanceDTO(attendance),
       },

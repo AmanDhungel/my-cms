@@ -150,7 +150,7 @@ function Body({ task, onClose }: { task: TaskDTO; onClose: () => void }) {
           </label>
         ) : null}
 
-        {choice === "in_review" && task.checkedInAt ? (
+        {choice === "in_review" && task.myCheckedInAt ? (
           <p className="text-n-500 m-0 text-[12.5px] leading-relaxed">
             You&rsquo;re still checked in — handing it over will check you out
             too.

@@ -35,7 +35,7 @@ export function CheckInView() {
       )
     : open
 
-  const active = ordered.find((task) => task.checkedInAt)
+  const active = ordered.find((task) => task.myCheckedInAt)
 
   return (
     <EmployeeScreen eyebrow="Where you are" title="Check in">
