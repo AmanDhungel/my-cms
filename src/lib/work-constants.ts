@@ -91,3 +91,23 @@ export const ITEM_UNITS = [
   "roll",
 ] as const
 export type ItemUnit = (typeof ITEM_UNITS)[number]
+
+/**
+ * Where a bill's lines came from. A custom bill is typed by hand; an
+ * inventory bill draws its lines — and its prices — from stock, and selling
+ * one moves that stock.
+ */
+export const BILL_SOURCES = ["custom", "inventory"] as const
+export type BillSource = (typeof BILL_SOURCES)[number]
+
+/** A bill is never deleted. Voiding one puts any stock it took back. */
+export const BILL_STATUSES = ["issued", "void"] as const
+export type BillStatus = (typeof BILL_STATUSES)[number]
+
+/**
+ * How a bill was settled. "cheque" is its own state rather than a kind of
+ * paid: the bill is handed over, but the money isn't in the bank until the
+ * cheque clears.
+ */
+export const BILL_PAYMENTS = ["paid", "unpaid", "cheque"] as const
+export type BillPayment = (typeof BILL_PAYMENTS)[number]

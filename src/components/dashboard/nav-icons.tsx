@@ -132,3 +132,12 @@ export function BoxIcon({ className }: IconProps) {
     </svg>
   )
 }
+
+export function ReceiptIcon({ className }: IconProps) {
+  return (
+    <svg {...stroke} className={className} aria-hidden>
+      <path d="M5 3h14v18l-2.5-1.6L14 21l-2-1.6L10 21l-2.5-1.6L5 21z" />
+      <path d="M9 8h6M9 12h6" />
+    </svg>
+  )
+}

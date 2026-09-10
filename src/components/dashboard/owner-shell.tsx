@@ -11,6 +11,7 @@ import {
   DashboardIcon,
   PeopleIcon,
   ProjectsIcon,
+  ReceiptIcon,
   SettingsIcon,
   TasksIcon,
 } from "@/components/dashboard/nav-icons";
@@ -42,6 +43,7 @@ export function OwnerShell({
     projects: number;
     tasks: number;
     inventory: number;
+    sales: number;
     approvals: number;
     unread: number;
   };
@@ -66,7 +68,6 @@ export function OwnerShell({
       icon: TasksIcon,
       count: counts.tasks,
     },
-
     {
       href: "/dashboard/people",
       label: "People",
@@ -79,6 +80,23 @@ export function OwnerShell({
       icon: ApprovalsIcon,
       count: counts.approvals,
       accent: true,
+    },
+  ];
+
+  // Stock and the bills raised against it sit together, away from the
+  // day-to-day task work above them.
+  const salesStock: NavItem[] = [
+    {
+      href: "/dashboard/inventory",
+      label: "Inventory",
+      icon: BoxIcon,
+      count: counts.inventory,
+    },
+    {
+      href: "/dashboard/sales",
+      label: "Sales",
+      icon: ReceiptIcon,
+      count: counts.sales,
     },
   ];
 
@@ -96,13 +114,6 @@ export function OwnerShell({
       icon: SettingsIcon,
     },
   ];
-
-  const inventory: NavItem = {
-    href: "/dashboard/inventory",
-    label: "Inventory",
-    icon: BoxIcon,
-    count: counts.inventory,
-  };
 
   return (
     <div className="bg-n-50 min-h-screen">
@@ -164,14 +175,14 @@ export function OwnerShell({
             pendingInvites={counts.pendingInvites}
           />
           <NavGroup
-            label="Account"
-            items={account}
+            label="Sales & stock"
+            items={salesStock}
             pathname={pathname}
             pendingInvites={counts.pendingInvites}
           />
           <NavGroup
-            label="Items/stocks"
-            items={inventory ? [inventory] : []}
+            label="Account"
+            items={account}
             pathname={pathname}
             pendingInvites={counts.pendingInvites}
           />
@@ -194,7 +205,10 @@ export function OwnerShell({
         <div className="min-w-0">{children}</div>
       </div>
 
-      <MobileNav items={[...workspace, ...account]} pathname={pathname} />
+      <MobileNav
+        items={[...workspace, ...salesStock, ...account]}
+        pathname={pathname}
+      />
     </div>
   );
 }

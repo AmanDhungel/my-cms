@@ -13,11 +13,16 @@ import type { Fix } from "@/lib/geolocation"
 import type { AttendanceDTO } from "@/models/attendance"
 import type { CheckInDTO } from "@/models/check-in"
 import type { CategoryDTO } from "@/models/inventory-category"
+import type { BillDTO } from "@/models/bill"
 import type { ItemDTO } from "@/models/inventory-item"
 import type { NotificationDTO } from "@/models/notification"
 import type { ProjectDTO } from "@/models/project"
 import type { RequestDTO } from "@/models/request"
-import type { ProjectStatus, RequestStatus } from "@/lib/work-constants"
+import type {
+  BillPayment,
+  ProjectStatus,
+  RequestStatus,
+} from "@/lib/work-constants"
 import type { TaskDTO } from "@/models/task"
 import type { UserDTO } from "@/models/user"
 
@@ -44,6 +49,7 @@ export const keys = {
   unreadCount: () => ["notifications", "count"] as const,
   inventoryItems: () => ["inventory", "items"] as const,
   inventoryCategories: () => ["inventory", "categories"] as const,
+  bills: () => ["bills"] as const,
 }
 
 type TasksResponse = { tasks: TaskDTO[] }
@@ -413,10 +419,12 @@ export function useMoveTask() {
 
 export type CategoryWithCount = CategoryDTO & { items: number }
 
-export function useInventoryItems() {
+/** `enabled: false` keeps a custom bill from fetching stock it never uses. */
+export function useInventoryItems(enabled = true) {
   return useQuery({
     queryKey: keys.inventoryItems(),
     queryFn: () => apiFetch<{ items: ItemDTO[] }>("/api/inventory/items"),
+    enabled,
   })
 }
 
@@ -513,4 +521,61 @@ export function useDeleteCategory(id: string) {
  */
 function invalidateInventory(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["inventory"] })
+}
+
+/* -------------------------------------------------------------------- bills */
+
+export function useBills() {
+  return useQuery({
+    queryKey: keys.bills(),
+    queryFn: () => apiFetch<{ bills: BillDTO[] }>("/api/bills"),
+  })
+}
+
+export function useCreateBill() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ bill: BillDTO }>("/api/bills", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateSales(client),
+  })
+}
+
+export function useVoidBill(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ bill: BillDTO }>(`/api/bills/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "void" }),
+      }),
+    onSuccess: () => invalidateSales(client),
+  })
+}
+
+/** A sale moves stock, so the inventory lists are no longer current either. */
+function invalidateSales(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: ["bills"] })
+  void client.invalidateQueries({ queryKey: ["inventory"] })
+}
+
+/** Marking a bill paid, unpaid or on cheque after it was raised. */
+export function useSetBillPayment(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: { payment: BillPayment; chequeNo?: string }) =>
+      apiFetch<{ bill: BillDTO }>(`/api/bills/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["bills"] })
+    },
+  })
 }

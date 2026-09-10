@@ -50,6 +50,8 @@ export function SettingsView({
       name: business.name,
       crewSize: business.crewSize as BusinessSettingsValues["crewSize"],
       timeZone: business.timeZone,
+      pan: business.pan ?? "",
+      vatRate: business.vatRate,
     },
   })
 
@@ -64,6 +66,8 @@ export function SettingsView({
         name: saved.name,
         crewSize: saved.crewSize as BusinessSettingsValues["crewSize"],
         timeZone: saved.timeZone,
+        pan: saved.pan ?? "",
+        vatRate: saved.vatRate,
       })
       toast.success("Workspace updated")
       router.refresh()
@@ -189,6 +193,55 @@ export function SettingsView({
                 Attendance days and lateness are judged here, not on the server.
               </span>
               <FieldError message={errors.timeZone?.message} />
+            </label>
+          </div>
+        </Panel>
+
+        <Panel className="mt-[22px] grid gap-6 p-[22px] lg:grid-cols-[210px_1fr]">
+          <div className="flex flex-col gap-1.5">
+            <h2 className="font-heading m-0 text-base font-semibold">
+              Billing
+            </h2>
+            <p className="text-n-500 m-0 text-[13px] leading-[1.55]">
+              Used on the bills you raise from Sales. A tax invoice has to
+              carry your PAN.
+            </p>
+          </div>
+
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <label className="flex flex-col gap-[7px]">
+              <FieldLabel>PAN / VAT number</FieldLabel>
+              <input
+                disabled={!canEdit}
+                placeholder="e.g. 601234567"
+                aria-invalid={Boolean(errors.pan)}
+                className={cn(inputClass, !canEdit && "bg-n-100 text-n-600")}
+                {...register("pan")}
+              />
+              <span className="text-n-400 text-[12px]">
+                Leave it empty and bills print without a tax-invoice header.
+              </span>
+              <FieldError message={errors.pan?.message} />
+            </label>
+
+            <label className="flex flex-col gap-[7px]">
+              <FieldLabel>VAT rate</FieldLabel>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                inputMode="decimal"
+                disabled={!canEdit}
+                aria-invalid={Boolean(errors.vatRate)}
+                className={cn(inputClass, !canEdit && "bg-n-100 text-n-600")}
+                {...register("vatRate")}
+              />
+              <span className="text-n-400 text-[12px]">
+                Percent. Each bill stores the rate it was raised at, so this
+                never rewrites an old one.
+              </span>
+              <FieldError message={errors.vatRate?.message} />
             </label>
           </div>
         </Panel>

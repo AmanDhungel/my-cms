@@ -21,6 +21,8 @@ export async function PATCH(request: Request) {
           name: values.name,
           crewSize: values.crewSize,
           timeZone: values.timeZone,
+          pan: values.pan,
+          vatRate: values.vatRate,
         },
       },
       { new: true, runValidators: true }

@@ -18,6 +18,15 @@ const businessSchema = new Schema(
      * zone: a UTC host would otherwise roll the day over mid-afternoon.
      */
     timeZone: { type: String, required: true, default: "Asia/Kathmandu" },
+    /** PAN / VAT registration number, printed on tax invoices. */
+    pan: { type: String, trim: true, maxlength: 30 },
+    /** Percent added to a bill that has VAT switched on. Nepal is 13%. */
+    vatRate: { type: Number, required: true, min: 0, max: 100, default: 13 },
+    /**
+     * The last bill number handed out. Incremented with $inc inside the
+     * transaction that writes the bill, so two tills can never share a number.
+     */
+    billSeq: { type: Number, required: true, default: 0 },
     /** The user who created the workspace. */
     owner: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
@@ -39,6 +48,8 @@ export type BusinessDTO = {
   name: string
   crewSize: string
   timeZone: string
+  pan: string | null
+  vatRate: number
   ownerId: string
 }
 
@@ -50,6 +61,8 @@ export function toBusinessDTO(
     name: business.name,
     crewSize: business.crewSize,
     timeZone: business.timeZone,
+    pan: business.pan ?? null,
+    vatRate: business.vatRate,
     ownerId: String(business.owner),
   }
 }

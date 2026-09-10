@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { EmployeeShell } from "@/components/dashboard/employee-shell";
 import { OwnerShell } from "@/components/dashboard/owner-shell";
 import { loadViewer } from "@/lib/auth/page-guards";
+import { Bill } from "@/models/bill";
 import { Business } from "@/models/business";
 import { InventoryItem } from "@/models/inventory-item";
 import { Invite } from "@/models/invite";
@@ -51,6 +52,7 @@ export default async function DashboardLayout({
     projects,
     tasks,
     inventory,
+    sales,
     approvals,
     unread,
   ] = await Promise.all([
@@ -65,6 +67,7 @@ export default async function DashboardLayout({
       status: { $nin: ["done", "cancelled"] },
     }),
     InventoryItem.countDocuments({ business: business._id }),
+    Bill.countDocuments({ business: business._id, status: "issued" }),
     WorkRequest.countDocuments({
       business: business._id,
       status: "pending",
@@ -84,6 +87,7 @@ export default async function DashboardLayout({
         projects,
         tasks,
         inventory,
+        sales,
         approvals,
         unread,
       }}>

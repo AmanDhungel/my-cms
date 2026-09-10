@@ -113,6 +113,12 @@ export const businessSettingsSchema = z.object({
   timeZone: z
     .string()
     .refine(isValidTimeZone, "That isn't a time zone this system knows"),
+  /** Printed on tax invoices. Optional until the workspace bills with VAT. */
+  pan: z.string().trim().max(30, "That is longer than any PAN").optional(),
+  vatRate: z.coerce
+    .number<number>()
+    .min(0, "A rate cannot be negative")
+    .max(100, "A rate over 100% is not a rate"),
 })
 
 export type BusinessSettingsValues = z.infer<typeof businessSettingsSchema>
