@@ -8,13 +8,18 @@ export const PAYMENT_LABELS: Record<BillPayment, string> = {
   paid: "Paid",
   unpaid: "Unpaid",
   cheque: "Cheque",
+  quotation: "Quotation",
 }
 
-/** Green for settled, red for owing, marigold for a cheque still to clear. */
+/**
+ * Green for settled, red for owing, marigold for a cheque still to clear,
+ * and a quiet blue for a quotation — it is not money either way yet.
+ */
 const PAYMENT_TONE: Record<BillPayment, string> = {
   paid: "border-s-done/40 text-s-done bg-[#eefaf4]",
   unpaid: "border-s-overdue/40 text-s-overdue bg-[#fdecec]",
   cheque: "border-a-400 text-a-700 bg-a-50",
+  quotation: "border-s-progress/40 text-s-progress bg-[#eef4fd]",
 }
 
 export function PaymentChip({

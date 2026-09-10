@@ -2,7 +2,7 @@ import mongoose from "mongoose"
 
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
-import { quantity, totalsOf } from "@/lib/billing"
+import { holdsStock, quantity, totalsOf } from "@/lib/billing"
 import { connectToDatabase } from "@/lib/mongodb"
 import { billSchema } from "@/lib/validations/sales"
 import { getWorkspace } from "@/lib/workspace"
@@ -81,9 +81,13 @@ export async function POST(request: Request) {
         }
       })
 
-      for (const line of lines) {
-        const key = String(line.item)
-        wanted.set(key, (wanted.get(key) ?? 0) + line.qty)
+      // A quotation is a price, not a sale: it neither needs the stock to be
+      // there nor takes it. Leaving `wanted` empty skips both below.
+      if (holdsStock(values.payment)) {
+        for (const line of lines) {
+          const key = String(line.item)
+          wanted.set(key, (wanted.get(key) ?? 0) + line.qty)
+        }
       }
 
       for (const [id, qty] of wanted) {

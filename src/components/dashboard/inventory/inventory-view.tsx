@@ -10,6 +10,7 @@ import {
 import { CategoryDialog } from "@/components/dashboard/inventory/category-dialog"
 import { ItemDialog } from "@/components/dashboard/inventory/item-dialog"
 import { PlusIcon } from "@/components/dashboard/nav-icons"
+import { Pagination, paginate } from "@/components/dashboard/pagination"
 import { RowsSkeleton, StatGridSkeleton } from "@/components/dashboard/skeletons"
 import {
   DashboardMain,
@@ -29,6 +30,8 @@ import type { ItemDTO } from "@/models/inventory-item"
 
 type Tab = "items" | "categories"
 
+const PER_PAGE = 10
+
 /**
  * Stock the workspace holds: the categories it is filed under, and the items
  * themselves with what they cost and how many are left. Owners and
@@ -38,6 +41,7 @@ export function InventoryView() {
   const [tab, setTab] = React.useState<Tab>("items")
   const [search, setSearch] = React.useState("")
   const [categoryId, setCategoryId] = React.useState("all")
+  const [page, setPage] = React.useState(1)
 
   const [itemOpen, setItemOpen] = React.useState(false)
   const [editingItem, setEditingItem] = React.useState<ItemDTO | null>(null)
@@ -48,6 +52,15 @@ export function InventoryView() {
     React.useState<CategoryWithCount | null>(null)
   const [deletingCategory, setDeletingCategory] =
     React.useState<CategoryWithCount | null>(null)
+
+  // Every filter puts you back on the first page: page 4 of a list that just
+  // became one page long is nothing at all.
+  function change<T>(set: (value: T) => void) {
+    return (value: T) => {
+      set(value)
+      setPage(1)
+    }
+  }
 
   const itemsQuery = useInventoryItems()
   const categoriesQuery = useInventoryCategories()
@@ -155,9 +168,11 @@ export function InventoryView() {
           total={items.length}
           categories={categories}
           categoryId={categoryId}
-          onCategory={setCategoryId}
+          onCategory={change(setCategoryId)}
+          page={page}
+          onPage={setPage}
           search={search}
-          onSearch={setSearch}
+          onSearch={change(setSearch)}
           onNew={() => setItemOpen(true)}
           onEdit={setEditingItem}
           onDelete={setDeletingItem}
@@ -224,6 +239,8 @@ function ItemsPanel({
   categories,
   categoryId,
   onCategory,
+  page,
+  onPage,
   search,
   onSearch,
   onNew,
@@ -235,12 +252,16 @@ function ItemsPanel({
   categories: CategoryWithCount[]
   categoryId: string
   onCategory: (id: string) => void
+  page: number
+  onPage: (next: number) => void
   search: string
   onSearch: (value: string) => void
   onNew: () => void
   onEdit: (item: ItemDTO) => void
   onDelete: (item: ItemDTO) => void
 }) {
+  const shown = paginate(items, page, PER_PAGE)
+
   if (total === 0) {
     return (
       <EmptyState
@@ -299,7 +320,7 @@ function ItemsPanel({
         ))}
       </div>
 
-      {items.map((item) => (
+      {shown.rows.map((item) => (
         <div
           key={item.id}
           className="border-n-200/70 hover:bg-n-50 grid gap-3.5 border-b px-[18px] py-3.5 lg:grid-cols-[1.7fr_140px_110px_130px_130px] lg:items-center"
@@ -356,9 +377,15 @@ function ItemsPanel({
         </div>
       ) : null}
 
-      <div className="text-n-500 px-[18px] py-3 text-[13px]">
-        Showing {items.length} of {total}
-      </div>
+      <Pagination
+        page={shown.page}
+        pageCount={shown.pageCount}
+        from={shown.from}
+        to={shown.to}
+        total={items.length}
+        noun="items"
+        onPage={onPage}
+      />
     </Panel>
   )
 }

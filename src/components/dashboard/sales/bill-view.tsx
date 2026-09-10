@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  PAYMENT_LABELS,
   PaymentChip,
   PaymentPicker,
 } from "@/components/dashboard/sales/payment"
@@ -75,11 +76,7 @@ export function BillView({
       {
         onSuccess: () => {
           toast.success(
-            next === "paid"
-              ? `${bill.number} marked paid`
-              : next === "cheque"
-                ? `${bill.number} is on cheque`
-                : `${bill.number} marked unpaid`
+            `${bill.number} is now ${PAYMENT_LABELS[next].toLowerCase()}`
           )
           router.refresh()
         },
@@ -296,7 +293,12 @@ export function BillView({
 
             <div className="flex flex-col items-end gap-1">
               <span className="text-p-700 font-heading text-[16px] font-bold tracking-[0.04em]">
-                {taxLayout ? "TAX INVOICE" : "BILL"}
+                {/* A quotation says so at the top; it is not an invoice. */}
+                {bill.payment === "quotation"
+                  ? "QUOTATION"
+                  : taxLayout
+                    ? "TAX INVOICE"
+                    : "BILL"}
               </span>
               <span className="font-mono text-[13px] font-semibold">
                 {bill.number}
@@ -445,7 +447,7 @@ export function BillView({
             ? ` on ${new Date(bill.voidedAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}`
             : ""}
           .{" "}
-          {bill.source === "inventory"
+          {tookStock(bill)
             ? "The stock it took was put back."
             : "Nothing was taken from stock."}
         </p>
@@ -462,6 +464,11 @@ export function BillView({
       />
     </DashboardMain>
   )
+}
+
+/** An inventory bill holds stock unless it is still only a quotation. */
+function tookStock(bill: BillDTO) {
+  return bill.source === "inventory" && bill.payment !== "quotation"
 }
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -504,7 +511,7 @@ function VoidDialog({
         <p className="text-n-600 m-0 text-[13.5px] leading-relaxed">
           The bill stays in the list marked void — a cancelled sale is part of
           the record.{" "}
-          {bill.source === "inventory"
+          {tookStock(bill)
             ? "Everything it took off stock goes back."
             : "It never touched stock, so nothing else moves."}
         </p>

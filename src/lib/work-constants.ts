@@ -107,7 +107,8 @@ export type BillStatus = (typeof BILL_STATUSES)[number]
 /**
  * How a bill was settled. "cheque" is its own state rather than a kind of
  * paid: the bill is handed over, but the money isn't in the bank until the
- * cheque clears.
+ * cheque clears. "quotation" is a price offered but not yet sold — it earns
+ * nothing and, unlike the other three, takes nothing off the shelf.
  */
-export const BILL_PAYMENTS = ["paid", "unpaid", "cheque"] as const
+export const BILL_PAYMENTS = ["paid", "unpaid", "cheque", "quotation"] as const
 export type BillPayment = (typeof BILL_PAYMENTS)[number]

@@ -8,6 +8,7 @@ const PAYMENT_INK: Record<BillDTO["payment"], string> = {
   paid: "#1da76b",
   unpaid: "#e5484d",
   cheque: "#a86a0a",
+  quotation: "#2f7de1",
 }
 
 function paymentLine(bill: BillDTO) {
@@ -115,9 +116,12 @@ export async function renderBillPng(input: BillImageInput): Promise<Blob> {
   ctx.fillStyle = petrol
   ctx.fillRect(0, 0, W, 6)
 
+  const quote = bill.payment === "quotation"
+
   let y = 62
   text(business.name, PAD, y, { size: 25, weight: "700" })
-  text(taxLayout ? "TAX INVOICE" : "BILL", W - PAD, y, {
+  // A quotation says so at the top; it is not an invoice of any kind.
+  text(quote ? "QUOTATION" : taxLayout ? "TAX INVOICE" : "BILL", W - PAD, y, {
     size: 17,
     weight: "700",
     align: "right",
@@ -142,12 +146,14 @@ export async function renderBillPng(input: BillImageInput): Promise<Blob> {
   )
 
   y += 18
-  text(paymentLine(bill), W - PAD, y, {
-    size: 11.5,
-    weight: "700",
-    align: "right",
-    colour: PAYMENT_INK[bill.payment],
-  })
+  if (!quote) {
+    text(paymentLine(bill), W - PAD, y, {
+      size: 11.5,
+      weight: "700",
+      align: "right",
+      colour: PAYMENT_INK[bill.payment],
+    })
+  }
 
   y += 26
   rule(y)

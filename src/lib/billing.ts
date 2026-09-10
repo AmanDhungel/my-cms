@@ -4,6 +4,17 @@
  * them to the database. Pure — no mongoose here, so the dialog can import it.
  */
 
+import type { BillPayment } from "@/lib/work-constants"
+
+/**
+ * Whether a bill in this state has taken its lines off the shelf. A quotation
+ * is a price offered, not a sale, so it holds no stock — accepting one is
+ * what moves it, and turning a sale back into a quotation gives it back.
+ */
+export function holdsStock(payment: BillPayment) {
+  return payment !== "quotation"
+}
+
 /** Money is kept to two places; floating point is not allowed to drift. */
 export function round2(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100

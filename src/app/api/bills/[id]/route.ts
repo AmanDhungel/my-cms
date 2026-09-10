@@ -2,8 +2,10 @@ import mongoose from "mongoose"
 
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
+import { holdsStock } from "@/lib/billing"
 import { connectToDatabase } from "@/lib/mongodb"
 import { billUpdateSchema } from "@/lib/validations/sales"
+import type { BillPayment } from "@/lib/work-constants"
 import { Bill, toBillDTO } from "@/models/bill"
 import { InventoryItem } from "@/models/inventory-item"
 
@@ -27,26 +29,74 @@ export async function PATCH(
 
     await connectToDatabase()
 
-    // ---- settling it: no stock moves, so no transaction is needed ----
+    // ---- settling it ----
     if ("payment" in values) {
-      const settled = await Bill.findOneAndUpdate(
-        { _id: id, business: viewer.businessId, status: "issued" },
-        values.payment === "cheque"
-          ? { $set: { payment: "cheque", chequeNo: values.chequeNo } }
-          : // A cheque number left behind would outlive the cheque.
-            { $set: { payment: values.payment }, $unset: { chequeNo: "" } },
-        { new: true }
-      )
+      const next = values.payment
+      const session = await mongoose.startSession()
 
-      if (!settled) {
-        const existing = await Bill.findOne({
-          _id: id,
-          business: viewer.businessId,
+      try {
+        await session.withTransaction(async () => {
+          // `new: false` hands back the state it was in, which is what says
+          // whether stock has to move with it.
+          const before = await Bill.findOneAndUpdate(
+            { _id: id, business: viewer.businessId, status: "issued" },
+            next === "cheque"
+              ? { $set: { payment: "cheque", chequeNo: values.chequeNo } }
+              : // A cheque number left behind would outlive the cheque.
+                { $set: { payment: next }, $unset: { chequeNo: "" } },
+            { new: false, session }
+          )
+
+          if (!before) {
+            const existing = await Bill.findOne({
+              _id: id,
+              business: viewer.businessId,
+            }).session(session)
+
+            if (!existing) throw new HttpError(404, "That bill doesn't exist")
+            throw new HttpError(409, `${existing.number} is void`)
+          }
+
+          const held = holdsStock(before.payment as BillPayment)
+          const holds = holdsStock(next)
+          if (held === holds) return
+
+          // Accepting a quotation takes the stock; turning a sale back into
+          // one gives it back. Both happen with the change, not after it.
+          for (const line of before.lines) {
+            if (!line.item) continue
+
+            if (holds) {
+              const moved = await InventoryItem.updateOne(
+                {
+                  _id: line.item,
+                  business: viewer.businessId,
+                  stock: { $gte: line.qty },
+                },
+                { $inc: { stock: -line.qty } },
+                { session }
+              )
+
+              if (moved.modifiedCount === 0) {
+                throw new HttpError(
+                  409,
+                  `There isn't enough ${line.name} in stock to accept this quotation`
+                )
+              }
+            } else {
+              await InventoryItem.updateOne(
+                { _id: line.item, business: viewer.businessId },
+                { $inc: { stock: line.qty } },
+                { session }
+              )
+            }
+          }
         })
-
-        if (!existing) throw new HttpError(404, "That bill doesn't exist")
-        throw new HttpError(409, `${existing.number} is void`)
+      } finally {
+        await session.endSession()
       }
+
+      const settled = await Bill.findById(id).orFail()
 
       return ok({ bill: toBillDTO(settled) })
     }
@@ -80,13 +130,16 @@ export async function PATCH(
           throw new HttpError(409, `${existing.number} is already void`)
         }
 
-        for (const line of bill.lines) {
-          if (!line.item) continue
-          await InventoryItem.updateOne(
-            { _id: line.item, business: viewer.businessId },
-            { $inc: { stock: line.qty } },
-            { session }
-          )
+        // A quotation never took the stock, so there is none to give back.
+        if (holdsStock(bill.payment as BillPayment)) {
+          for (const line of bill.lines) {
+            if (!line.item) continue
+            await InventoryItem.updateOne(
+              { _id: line.item, business: viewer.businessId },
+              { $inc: { stock: line.qty } },
+              { session }
+            )
+          }
         }
 
         voidedId = bill._id
