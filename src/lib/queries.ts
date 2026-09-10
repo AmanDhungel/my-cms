@@ -12,6 +12,8 @@ import { ApiRequestError, apiFetch, buildQueryString } from "@/lib/api-client"
 import type { Fix } from "@/lib/geolocation"
 import type { AttendanceDTO } from "@/models/attendance"
 import type { CheckInDTO } from "@/models/check-in"
+import type { CategoryDTO } from "@/models/inventory-category"
+import type { ItemDTO } from "@/models/inventory-item"
 import type { NotificationDTO } from "@/models/notification"
 import type { ProjectDTO } from "@/models/project"
 import type { RequestDTO } from "@/models/request"
@@ -40,6 +42,8 @@ export const keys = {
   notifications: (unread?: boolean) =>
     ["notifications", unread ? "unread" : "all"] as const,
   unreadCount: () => ["notifications", "count"] as const,
+  inventoryItems: () => ["inventory", "items"] as const,
+  inventoryCategories: () => ["inventory", "categories"] as const,
 }
 
 type TasksResponse = { tasks: TaskDTO[] }
@@ -403,4 +407,110 @@ export function useMoveTask() {
       }),
     onSuccess: () => invalidateWork(client),
   })
+}
+
+/* ---------------------------------------------------------------- inventory */
+
+export type CategoryWithCount = CategoryDTO & { items: number }
+
+export function useInventoryItems() {
+  return useQuery({
+    queryKey: keys.inventoryItems(),
+    queryFn: () => apiFetch<{ items: ItemDTO[] }>("/api/inventory/items"),
+  })
+}
+
+export function useInventoryCategories() {
+  return useQuery({
+    queryKey: keys.inventoryCategories(),
+    queryFn: () =>
+      apiFetch<{ categories: CategoryWithCount[] }>(
+        "/api/inventory/categories"
+      ),
+  })
+}
+
+export function useCreateItem() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ item: ItemDTO }>("/api/inventory/items", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateInventory(client),
+  })
+}
+
+export function useUpdateItem(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ item: ItemDTO }>(`/api/inventory/items/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateInventory(client),
+  })
+}
+
+export function useDeleteItem(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ id: string }>(`/api/inventory/items/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => invalidateInventory(client),
+  })
+}
+
+export function useCreateCategory() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ category: CategoryDTO }>("/api/inventory/categories", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateInventory(client),
+  })
+}
+
+export function useUpdateCategory(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ category: CategoryDTO }>(`/api/inventory/categories/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateInventory(client),
+  })
+}
+
+export function useDeleteCategory(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ id: string }>(`/api/inventory/categories/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => invalidateInventory(client),
+  })
+}
+
+/**
+ * Items and categories share the "inventory" prefix: renaming a category
+ * changes what the item rows read, and adding an item changes the counts the
+ * categories tab shows, so both lists move together.
+ */
+function invalidateInventory(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: ["inventory"] })
 }

@@ -74,3 +74,20 @@ export type MemberStatus = (typeof MEMBER_STATUSES)[number]
 
 /** How long before a task starts that its check-in becomes available. */
 export const CHECK_IN_OPENS_MIN = 10
+
+/**
+ * How an item is counted. Stock is meaningless without it — "12" of a cable
+ * could be twelve reels or twelve metres.
+ */
+export const ITEM_UNITS = [
+  "pcs",
+  "box",
+  "set",
+  "pair",
+  "kg",
+  "g",
+  "l",
+  "m",
+  "roll",
+] as const
+export type ItemUnit = (typeof ITEM_UNITS)[number]

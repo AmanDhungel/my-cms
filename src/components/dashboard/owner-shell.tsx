@@ -7,6 +7,7 @@ import { cn } from "cn";
 import {
   ApprovalsIcon,
   BellIcon,
+  BoxIcon,
   DashboardIcon,
   PeopleIcon,
   ProjectsIcon,
@@ -40,6 +41,7 @@ export function OwnerShell({
     pendingInvites: number;
     projects: number;
     tasks: number;
+    inventory: number;
     approvals: number;
     unread: number;
   };
@@ -64,6 +66,7 @@ export function OwnerShell({
       icon: TasksIcon,
       count: counts.tasks,
     },
+
     {
       href: "/dashboard/people",
       label: "People",
@@ -93,6 +96,13 @@ export function OwnerShell({
       icon: SettingsIcon,
     },
   ];
+
+  const inventory: NavItem = {
+    href: "/dashboard/inventory",
+    label: "Inventory",
+    icon: BoxIcon,
+    count: counts.inventory,
+  };
 
   return (
     <div className="bg-n-50 min-h-screen">
@@ -156,6 +166,12 @@ export function OwnerShell({
           <NavGroup
             label="Account"
             items={account}
+            pathname={pathname}
+            pendingInvites={counts.pendingInvites}
+          />
+          <NavGroup
+            label="Items/stocks"
+            items={inventory ? [inventory] : []}
             pathname={pathname}
             pendingInvites={counts.pendingInvites}
           />

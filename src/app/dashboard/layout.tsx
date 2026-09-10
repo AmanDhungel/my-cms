@@ -4,6 +4,7 @@ import { EmployeeShell } from "@/components/dashboard/employee-shell";
 import { OwnerShell } from "@/components/dashboard/owner-shell";
 import { loadViewer } from "@/lib/auth/page-guards";
 import { Business } from "@/models/business";
+import { InventoryItem } from "@/models/inventory-item";
 import { Invite } from "@/models/invite";
 import { Notification } from "@/models/notification";
 import { Project } from "@/models/project";
@@ -44,32 +45,48 @@ export default async function DashboardLayout({
     );
   }
 
-  const [people, pendingInvites, projects, tasks, approvals, unread] =
-    await Promise.all([
-      User.countDocuments({ business: business._id, status: "active" }),
-      Invite.countDocuments({
-        business: business._id,
-        acceptedAt: { $exists: false },
-      }),
-      Project.countDocuments({ business: business._id, status: "active" }),
-      Task.countDocuments({
-        business: business._id,
-        status: { $nin: ["done", "cancelled"] },
-      }),
-      WorkRequest.countDocuments({
-        business: business._id,
-        status: "pending",
-      }),
-      Notification.countDocuments({
-        user: me.id,
-        readAt: { $exists: false },
-      }),
-    ]);
+  const [
+    people,
+    pendingInvites,
+    projects,
+    tasks,
+    inventory,
+    approvals,
+    unread,
+  ] = await Promise.all([
+    User.countDocuments({ business: business._id, status: "active" }),
+    Invite.countDocuments({
+      business: business._id,
+      acceptedAt: { $exists: false },
+    }),
+    Project.countDocuments({ business: business._id, status: "active" }),
+    Task.countDocuments({
+      business: business._id,
+      status: { $nin: ["done", "cancelled"] },
+    }),
+    InventoryItem.countDocuments({ business: business._id }),
+    WorkRequest.countDocuments({
+      business: business._id,
+      status: "pending",
+    }),
+    Notification.countDocuments({
+      user: me.id,
+      readAt: { $exists: false },
+    }),
+  ]);
 
   return (
     <OwnerShell
       viewer={viewer}
-      counts={{ people, pendingInvites, projects, tasks, approvals, unread }}>
+      counts={{
+        people,
+        pendingInvites,
+        projects,
+        tasks,
+        inventory,
+        approvals,
+        unread,
+      }}>
       {children}
     </OwnerShell>
   );
