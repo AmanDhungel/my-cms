@@ -3,11 +3,13 @@ import { redirect } from "next/navigation";
 import { EmployeeShell } from "@/components/dashboard/employee-shell";
 import { OwnerShell } from "@/components/dashboard/owner-shell";
 import { loadViewer } from "@/lib/auth/page-guards";
+import { isSuperAdmin } from "@/lib/auth/super-admin";
 import { Bill } from "@/models/bill";
 import { Business } from "@/models/business";
 import { InventoryItem } from "@/models/inventory-item";
 import { Invite } from "@/models/invite";
 import { Notification } from "@/models/notification";
+import { Payment } from "@/models/payment";
 import { Project } from "@/models/project";
 import { WorkRequest } from "@/models/request";
 import { Task } from "@/models/task";
@@ -35,6 +37,7 @@ export default async function DashboardLayout({
     email: me.email,
     role: me.role,
     businessName: business.name,
+    superAdmin: isSuperAdmin(me.email),
   };
 
   if (me.role === "employee") {
@@ -53,6 +56,7 @@ export default async function DashboardLayout({
     tasks,
     inventory,
     sales,
+    payments,
     approvals,
     unread,
   ] = await Promise.all([
@@ -68,6 +72,7 @@ export default async function DashboardLayout({
     }),
     InventoryItem.countDocuments({ business: business._id }),
     Bill.countDocuments({ business: business._id, status: "issued" }),
+    Payment.countDocuments({ business: business._id }),
     WorkRequest.countDocuments({
       business: business._id,
       status: "pending",
@@ -88,6 +93,7 @@ export default async function DashboardLayout({
         tasks,
         inventory,
         sales,
+        payments,
         approvals,
         unread,
       }}>

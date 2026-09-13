@@ -112,3 +112,14 @@ export type BillStatus = (typeof BILL_STATUSES)[number]
  */
 export const BILL_PAYMENTS = ["paid", "unpaid", "cheque", "quotation"] as const
 export type BillPayment = (typeof BILL_PAYMENTS)[number]
+
+/**
+ * Which way the money went. "in" is money other people paid us, "out" is
+ * money we paid a company or a person.
+ */
+export const PAYMENT_DIRECTIONS = ["in", "out"] as const
+export type PaymentDirection = (typeof PAYMENT_DIRECTIONS)[number]
+
+/** How it moved. A cheque or a transfer usually carries a reference. */
+export const PAYMENT_METHODS = ["cash", "cheque", "bank", "online"] as const
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number]

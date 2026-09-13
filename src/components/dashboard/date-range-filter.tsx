@@ -115,6 +115,22 @@ export function withinRange(iso: string, range: DateRange | undefined) {
   return at >= start.getTime() && at <= end.getTime()
 }
 
+/**
+ * The same question for a value already kept as a "YYYY-MM-DD" day rather
+ * than an instant. Comparing the keys as text avoids turning a date back into
+ * a timestamp, which lands on the wrong day in a zone behind UTC.
+ */
+export function withinRangeOfDay(dayKey: string, range: DateRange | undefined) {
+  if (!range?.from) return true
+
+  const key = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+      date.getDate()
+    ).padStart(2, "0")}`
+
+  return dayKey >= key(range.from) && dayKey <= key(range.to ?? range.from)
+}
+
 function CalendarIcon() {
   return (
     <svg

@@ -16,7 +16,8 @@ export const authConfig = {
   callbacks: {
     /** Gate for `proxy.ts`. Everything under /dashboard needs a session. */
     authorized({ auth, request }) {
-      if (request.nextUrl.pathname.startsWith("/dashboard")) {
+      const path = request.nextUrl.pathname
+      if (path.startsWith("/dashboard") || path.startsWith("/admin")) {
         return Boolean(auth?.user)
       }
       return true
@@ -26,6 +27,7 @@ export const authConfig = {
       if (user) {
         token.role = user.role
         token.businessId = user.businessId
+        token.superAdmin = user.superAdmin ?? false
       }
       return token
     },
@@ -33,6 +35,7 @@ export const authConfig = {
       session.user.id = token.sub ?? ""
       session.user.role = token.role
       session.user.businessId = token.businessId
+      session.user.superAdmin = token.superAdmin ?? false
       return session
     },
   },

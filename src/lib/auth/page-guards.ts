@@ -40,9 +40,13 @@ export async function loadViewer(): Promise<PageViewer> {
 
   await connectToDatabase()
 
-  const member = await User.findById(session.user.id).select(
-    "name email role business status"
-  )
+  // The workspace rides along so a blocked one shuts out everyone in it.
+  const member = await User.findById(session.user.id)
+    .select("name email role business status blockedAt")
+    .populate<{ business: { _id: unknown; blockedAt?: Date } }>(
+      "business",
+      "blockedAt"
+    )
 
   if (!member) {
     redirect("/login")
@@ -52,11 +56,15 @@ export async function loadViewer(): Promise<PageViewer> {
     redirect("/removed")
   }
 
+  if (member.blockedAt || member.business?.blockedAt) {
+    redirect("/blocked")
+  }
+
   return {
     id: String(member._id),
     name: member.name,
     email: member.email,
     role: member.role,
-    businessId: String(member.business),
+    businessId: String(member.business._id),
   }
 }

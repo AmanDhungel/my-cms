@@ -141,3 +141,13 @@ export function ReceiptIcon({ className }: IconProps) {
     </svg>
   )
 }
+
+export function WalletIcon({ className }: IconProps) {
+  return (
+    <svg {...stroke} className={className} aria-hidden>
+      <path d="M3 7a2 2 0 0 1 2-2h12v4" />
+      <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8H7a2 2 0 0 1-4 0" />
+      <circle cx="16.5" cy="13.5" r="1" />
+    </svg>
+  )
+}

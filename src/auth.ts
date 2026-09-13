@@ -2,9 +2,11 @@ import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 
 import { authConfig } from "@/auth.config"
+import { isSuperAdmin } from "@/lib/auth/super-admin"
 import { DUMMY_HASH, verifyPassword } from "@/lib/auth/password"
 import { connectToDatabase } from "@/lib/mongodb"
 import { credentialsSchema } from "@/lib/validations/auth"
+import { Business } from "@/models/business"
 import { User } from "@/models/user"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -36,12 +38,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // way back in until another workspace's invite re-activates them.
         if (user.status === "removed") return null
 
+        // A block shuts the door here rather than at the first guard, so a
+        // blocked account never gets a session cookie at all.
+        if (user.blockedAt) return null
+
+        const business = await Business.findById(user.business).select(
+          "blockedAt"
+        )
+        if (business?.blockedAt) return null
+
         return {
           id: String(user._id),
           name: user.name,
           email: user.email,
           role: user.role,
           businessId: String(user.business),
+          // A hint for the UI only; every admin route re-checks the email.
+          superAdmin: isSuperAdmin(user.email),
         }
       },
     }),

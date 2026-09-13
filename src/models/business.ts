@@ -27,6 +27,11 @@ const businessSchema = new Schema(
      * transaction that writes the bill, so two tills can never share a number.
      */
     billSeq: { type: Number, required: true, default: 0 },
+    /**
+     * Set by a super admin. A blocked workspace shuts out everyone in it,
+     * whatever their role.
+     */
+    blockedAt: { type: Date },
     /** The user who created the workspace. */
     owner: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
@@ -50,6 +55,7 @@ export type BusinessDTO = {
   timeZone: string
   pan: string | null
   vatRate: number
+  blockedAt: string | null
   ownerId: string
 }
 
@@ -63,6 +69,7 @@ export function toBusinessDTO(
     timeZone: business.timeZone,
     pan: business.pan ?? null,
     vatRate: business.vatRate,
+    blockedAt: business.blockedAt ? business.blockedAt.toISOString() : null,
     ownerId: String(business.owner),
   }
 }

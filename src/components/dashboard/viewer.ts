@@ -8,6 +8,8 @@ export type Viewer = {
   businessName: string
   /** Only loaded for the crew shell, which shows it in the sidebar. */
   shift?: string | null
+  /** Shows the way back to /admin for the account that administers this deployment. */
+  superAdmin?: boolean
 }
 
 /** "Balaju Logistics" -> "BL". Used for the workspace and avatar chips. */

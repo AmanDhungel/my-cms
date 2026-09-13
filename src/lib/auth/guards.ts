@@ -1,5 +1,6 @@
 import { auth } from "@/auth"
 import { HttpError } from "@/lib/api-response"
+import { isSuperAdmin } from "@/lib/auth/super-admin"
 import { connectToDatabase } from "@/lib/mongodb"
 import { User, type UserRole } from "@/models/user"
 
@@ -29,12 +30,22 @@ export async function requireUser(): Promise<SessionUser> {
 
   await connectToDatabase()
 
-  const member = await User.findById(claims.id).select(
-    "name email role business status"
-  )
+  // The workspace comes along so a blocked one shuts out everyone in it —
+  // the second query is the price of a block that takes effect at once
+  // rather than whenever a cascade last ran.
+  const member = await User.findById(claims.id)
+    .select("name email role business status blockedAt")
+    .populate<{ business: { _id: unknown; blockedAt?: Date } }>(
+      "business",
+      "blockedAt"
+    )
 
   if (!member || member.status === "removed") {
     throw new HttpError(403, "You are no longer part of this workspace")
+  }
+
+  if (member.blockedAt || member.business?.blockedAt) {
+    throw new HttpError(403, "This account has been blocked")
   }
 
   return {
@@ -43,8 +54,9 @@ export async function requireUser(): Promise<SessionUser> {
     email: member.email,
     role: member.role,
     // Read from the row, not the token: an account that moved workspaces must
-    // not keep reaching the old one's data.
-    businessId: String(member.business),
+    // not keep reaching the old one's data. `_id` because the workspace was
+    // populated for the block check above.
+    businessId: String(member.business._id),
   }
 }
 
@@ -59,4 +71,36 @@ export async function requireRole(
   }
 
   return user
+}
+
+export type SuperAdmin = { id: string; name: string; email: string }
+
+/**
+ * The guard for everything under /api/admin. The email is re-read from the
+ * database on every request, so a token minted before an account was renamed
+ * can't carry an old address in.
+ *
+ * Deliberately blind to blocked and removed status: the admin area is how a
+ * block gets undone, and it has to stay reachable after a mistake.
+ */
+export async function requireSuperAdmin(): Promise<SuperAdmin> {
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    throw new HttpError(401, "Sign in to continue")
+  }
+
+  await connectToDatabase()
+
+  const member = await User.findById(session.user.id).select("name email")
+
+  if (!member || !isSuperAdmin(member.email)) {
+    throw new HttpError(403, "You don't have access to that")
+  }
+
+  return {
+    id: String(member._id),
+    name: member.name,
+    email: member.email,
+  }
 }

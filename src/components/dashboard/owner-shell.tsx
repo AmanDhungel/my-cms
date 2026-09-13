@@ -14,6 +14,7 @@ import {
   ReceiptIcon,
   SettingsIcon,
   TasksIcon,
+  WalletIcon,
 } from "@/components/dashboard/nav-icons";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { initialsOf, type Viewer } from "@/components/dashboard/viewer";
@@ -44,6 +45,7 @@ export function OwnerShell({
     tasks: number;
     inventory: number;
     sales: number;
+    payments: number;
     approvals: number;
     unread: number;
   };
@@ -98,6 +100,17 @@ export function OwnerShell({
       icon: ReceiptIcon,
       count: counts.sales,
     },
+    // What the business pays out is the owner's business alone.
+    ...(viewer.role === "owner"
+      ? [
+          {
+            href: "/dashboard/payments",
+            label: "Payments",
+            icon: WalletIcon,
+            count: counts.payments,
+          },
+        ]
+      : []),
   ];
 
   const account: NavItem[] = [
@@ -186,6 +199,17 @@ export function OwnerShell({
             pathname={pathname}
             pendingInvites={counts.pendingInvites}
           />
+
+          {viewer.superAdmin ? (
+            <Link
+              href="/admin"
+              className="border-p-200 bg-p-100 text-p-700 hover:bg-p-100/70 flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-[13px] font-semibold transition-colors">
+              Super admin
+              <span aria-hidden className="font-mono text-[11px]">
+                →
+              </span>
+            </Link>
+          ) : null}
 
           <div className="border-n-200 mt-auto flex flex-col gap-2 rounded-[10px] border bg-white p-3.5">
             <span className="text-n-500 font-mono text-[10.5px] tracking-[0.06em]">

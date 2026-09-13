@@ -13,8 +13,10 @@ import type { Fix } from "@/lib/geolocation"
 import type { AttendanceDTO } from "@/models/attendance"
 import type { CheckInDTO } from "@/models/check-in"
 import type { CategoryDTO } from "@/models/inventory-category"
+import type { AdminBusiness, AdminProject, AdminUser } from "@/lib/admin"
 import type { BillDTO } from "@/models/bill"
 import type { ItemDTO } from "@/models/inventory-item"
+import type { PaymentDTO } from "@/models/payment"
 import type { NotificationDTO } from "@/models/notification"
 import type { ProjectDTO } from "@/models/project"
 import type { RequestDTO } from "@/models/request"
@@ -50,6 +52,8 @@ export const keys = {
   inventoryItems: () => ["inventory", "items"] as const,
   inventoryCategories: () => ["inventory", "categories"] as const,
   bills: () => ["bills"] as const,
+  payments: () => ["payments"] as const,
+  adminOverview: () => ["admin", "overview"] as const,
 }
 
 type TasksResponse = { tasks: TaskDTO[] }
@@ -576,6 +580,90 @@ export function useSetBillPayment(id: string) {
       }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["bills"] })
+    },
+  })
+}
+
+/* ----------------------------------------------------------------- payments */
+
+export function usePayments() {
+  return useQuery({
+    queryKey: keys.payments(),
+    queryFn: () => apiFetch<{ payments: PaymentDTO[] }>("/api/payments"),
+  })
+}
+
+export function useCreatePayment() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ payment: PaymentDTO }>("/api/payments", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateMoney(client),
+  })
+}
+
+export function useDeletePayment(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ id: string }>(`/api/payments/${id}`, { method: "DELETE" }),
+    onSuccess: () => invalidateMoney(client),
+  })
+}
+
+/** A payment can settle a bill, so the bills list moves with the ledger. */
+function invalidateMoney(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: ["payments"] })
+  void client.invalidateQueries({ queryKey: ["bills"] })
+}
+
+/* -------------------------------------------------------------- super admin */
+
+export type AdminOverview = {
+  businesses: AdminBusiness[]
+  users: AdminUser[]
+  projects: AdminProject[]
+}
+
+export function useAdminOverview() {
+  return useQuery({
+    queryKey: keys.adminOverview(),
+    queryFn: () => apiFetch<AdminOverview>("/api/admin/overview"),
+  })
+}
+
+/** Blocking either kind reshapes the whole list, so it all refetches. */
+export function useBlockUser(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (blocked: boolean) =>
+      apiFetch<{ user: UserDTO }>(`/api/admin/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ blocked }),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["admin"] })
+    },
+  })
+}
+
+export function useBlockBusiness(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (blocked: boolean) =>
+      apiFetch<{ business: unknown }>(`/api/admin/businesses/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ blocked }),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["admin"] })
     },
   })
 }

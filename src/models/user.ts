@@ -48,6 +48,11 @@ const userSchema = new Schema(
       default: "active",
     },
     removedAt: { type: Date },
+    /**
+     * Set by a super admin. Unlike "removed" this is not a workspace matter:
+     * the account keeps its place but every way in is shut.
+     */
+    blockedAt: { type: Date },
   },
   { timestamps: true }
 )
@@ -70,6 +75,7 @@ export type UserDTO = {
   role: UserRole
   shift: string | null
   status: MemberStatus
+  blockedAt: string | null
   businessId: string
 }
 
@@ -83,6 +89,7 @@ export function toUserDTO(user: HydratedDocument<UserDocument>): UserDTO {
     role: user.role,
     shift: user.shift ?? null,
     status: user.status,
+    blockedAt: user.blockedAt ? user.blockedAt.toISOString() : null,
     businessId: String(user.business),
   }
 }

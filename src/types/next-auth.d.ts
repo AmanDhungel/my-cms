@@ -8,6 +8,8 @@ declare module "next-auth" {
       id: string
       role: UserRole
       businessId: string
+      /** UI hint only — /admin re-checks the email against the env list. */
+      superAdmin: boolean
     } & DefaultSession["user"]
   }
 
@@ -15,6 +17,7 @@ declare module "next-auth" {
   interface User {
     role: UserRole
     businessId: string
+    superAdmin?: boolean
   }
 }
 
@@ -27,5 +30,6 @@ declare module "@auth/core/jwt" {
   interface JWT {
     role: UserRole
     businessId: string
+    superAdmin?: boolean
   }
 }
