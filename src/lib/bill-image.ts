@@ -49,7 +49,10 @@ export async function renderBillPng(input: BillImageInput): Promise<Blob> {
     taxLayout && bill.customer.pan ? bill.customer.pan : null,
   ].filter(Boolean).length
   const totalsRows =
-    2 + (bill.discountTotal > 0 ? 1 : 0) + (bill.vatRate > 0 ? 2 : 0)
+    2 +
+    (bill.discountTotal > 0 ? 1 : 0) +
+    (bill.vatRate > 0 ? 2 : 0) +
+    (bill.paid > 0 ? 2 : 0)
   const height =
     234 +
     detailRows * 17 +
@@ -244,6 +247,12 @@ export async function renderBillPng(input: BillImageInput): Promise<Blob> {
   y += 4
   totalRow("Total", money(bill.total), true)
 
+  // What has actually been received, and what is left on it.
+  if (bill.paid > 0) {
+    totalRow("Paid", money(bill.paid))
+    totalRow("Balance due", money(bill.due), true)
+  }
+
   // ---- footer ------------------------------------------------------------
   if (bill.note) {
     y += 6
@@ -291,6 +300,8 @@ export function billSummary(bill: BillDTO, businessName: string) {
     bill.discountTotal > 0 ? `Discount: ${money(bill.discountTotal)}` : null,
     bill.vatRate > 0 ? `VAT ${quantity(bill.vatRate)}%: ${money(bill.vatAmount)}` : null,
     `Total: ${money(bill.total)}`,
+    bill.paid > 0 ? `Paid: ${money(bill.paid)}` : null,
+    bill.paid > 0 ? `Balance due: ${money(bill.due)}` : null,
     // Whether it is settled matters as much as the amount.
     paymentLine(bill),
   ]

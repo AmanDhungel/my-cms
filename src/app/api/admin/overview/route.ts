@@ -15,6 +15,10 @@ import { InventoryItem } from "@/models/inventory-item"
 import { Project } from "@/models/project"
 import { Task } from "@/models/task"
 import { User } from "@/models/user"
+import {
+  WorkspaceInvite,
+  toWorkspaceInviteDTO,
+} from "@/models/workspace-invite"
 
 export const runtime = "nodejs"
 
@@ -28,10 +32,11 @@ export async function GET() {
     await requireSuperAdmin()
     await connectToDatabase()
 
-    const [businesses, users, projects] = await Promise.all([
+    const [businesses, users, projects, invites] = await Promise.all([
       Business.find().sort({ createdAt: -1 }).limit(500),
       User.find().sort({ createdAt: -1 }).limit(2000),
       Project.find().sort({ createdAt: -1 }).limit(2000),
+      WorkspaceInvite.find().sort({ createdAt: -1 }).limit(500),
     ])
 
     // One grouped query per collection rather than a count per row.
@@ -111,6 +116,17 @@ export async function GET() {
           tasks: byProjectTask.get(String(project._id)) ?? 0,
         }
       }),
+
+      // The raw token is never stored, so a link can only be copied at the
+      // moment it is made — these rows carry the state, not the link.
+      invites: invites.map((invite) =>
+        toWorkspaceInviteDTO(
+          invite,
+          invite.business
+            ? (workspaces.get(String(invite.business))?.name ?? null)
+            : null
+        )
+      ),
     })
   } catch (error) {
     return handleApiError(error)

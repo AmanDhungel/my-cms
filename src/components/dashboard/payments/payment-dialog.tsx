@@ -91,20 +91,25 @@ function Body({
   const [note, setNote] = React.useState("")
   const [paidOn, setPaidOn] = React.useState(today)
   const [billId, setBillId] = React.useState("")
-  const [settleBill, setSettleBill] = React.useState(true)
   const [errors, setErrors] = React.useState<Errors>({})
 
   const bills = useBills()
   const create = useCreatePayment()
 
-  // Only a live bill with money still owed on it can be settled by a payment.
+  // Anything still owed on, whether nothing has been paid yet or half has.
   const settleable = (bills.data?.bills ?? []).filter(
-    (bill) =>
-      bill.status === "issued" &&
-      (bill.payment === "unpaid" || bill.payment === "cheque")
+    (bill) => bill.status === "issued" && bill.due > 0
   )
 
   const chosen = settleable.find((bill) => bill.id === billId)
+
+  /** Picking a bill offers its balance, which is the usual amount to enter. */
+  function chooseBill(id: string) {
+    setBillId(id)
+    setErrors((prev) => ({ ...prev, billId: undefined }))
+    const bill = settleable.find((entry) => entry.id === id)
+    if (bill && !amount) setAmount(String(bill.due))
+  }
 
   function submit() {
     if (create.isPending) return
@@ -118,7 +123,6 @@ function Body({
       note: note || undefined,
       paidOn,
       billId: direction === "in" && billId ? billId : undefined,
-      settleBill: direction === "in" && billId ? settleBill : undefined,
     })
 
     if (!parsed.success) {
@@ -264,17 +268,14 @@ function Body({
               <FieldLabel>Against a bill</FieldLabel>
               <select
                 value={billId}
-                onChange={(event) => {
-                  setBillId(event.target.value)
-                  setErrors((prev) => ({ ...prev, billId: undefined }))
-                }}
+                onChange={(event) => chooseBill(event.target.value)}
                 aria-label="Against a bill"
                 className={cn(inputClass, "cursor-pointer py-2 text-[13.5px]")}
               >
                 <option value="">Not against a bill</option>
                 {settleable.map((bill) => (
                   <option key={bill.id} value={bill.id}>
-                    {bill.number} · {bill.customer.name} · {money(bill.total)}
+                    {bill.number} · {bill.customer.name} · {money(bill.due)} due
                   </option>
                 ))}
               </select>
@@ -282,26 +283,23 @@ function Body({
             </div>
 
             {chosen ? (
-              <label className="flex items-start gap-2.5">
-                <input
-                  type="checkbox"
-                  checked={settleBill}
-                  onChange={(event) => setSettleBill(event.target.checked)}
-                  className="accent-p-500 mt-0.5 size-4"
-                />
-                <span className="flex flex-col gap-0.5">
-                  <span className="text-[13.5px] font-semibold">
-                    Mark {chosen.number} paid
-                  </span>
-                  <span className="text-n-500 text-[12.5px]">
-                    {money(chosen.total)} owed. Leave this off if the payment
-                    only covers part of it.
-                  </span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[13.5px] font-semibold">
+                  {money(chosen.due)} still due on {chosen.number}
+                  {chosen.paid > 0
+                    ? ` · ${money(chosen.paid)} of ${money(chosen.total)} paid so far`
+                    : ""}
                 </span>
-              </label>
+                <span className="text-n-500 text-[12.5px]">
+                  {/* Part payments are the point: the balance is what carries. */}
+                  {(Number(amount) || 0) >= chosen.due
+                    ? "This settles it."
+                    : `Leaves ${money(Math.max(0, chosen.due - (Number(amount) || 0)))} outstanding.`}
+                </span>
+              </div>
             ) : (
               <span className="text-n-500 text-[12.5px]">
-                Only unpaid bills and bills on cheque are listed.
+                Only bills with money still owed on them are listed.
               </span>
             )}
           </div>

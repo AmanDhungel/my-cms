@@ -68,6 +68,12 @@ const billSchema = new Schema(
     number: { type: String, required: true, trim: true },
     source: { type: String, required: true, enum: BILL_SOURCES },
     customer: { type: customerSchema, required: true },
+    /**
+     * The customer record this was raised for, when one was picked. The
+     * embedded copy above is what prints; this is what lets a customer's
+     * whole history be added up.
+     */
+    customerRef: { type: Schema.Types.ObjectId, ref: "Customer" },
     lines: {
       type: [lineSchema],
       required: true,
@@ -143,6 +149,7 @@ export type BillDTO = {
     address: string | null
     pan: string | null
   }
+  customerId: string | null
   lines: BillLineDTO[]
   vatRate: number
   subtotal: number
@@ -151,6 +158,10 @@ export type BillDTO = {
   vatAmount: number
   total: number
   note: string | null
+  /** Money actually received against it, from the payments ledger. */
+  paid: number
+  /** What is still owed. Zero on a quotation, which owes nothing yet. */
+  due: number
   payment: BillPayment
   chequeNo: string | null
   status: BillStatus
@@ -159,11 +170,16 @@ export type BillDTO = {
   voidedAt: string | null
 }
 
-export function toBillDTO(bill: HydratedDocument<BillDocument>): BillDTO {
+export function toBillDTO(
+  bill: HydratedDocument<BillDocument>,
+  /** Summed from the payments pointing at this bill. */
+  paid = 0
+): BillDTO {
   return {
     id: String(bill._id),
     number: bill.number,
     source: bill.source as BillSource,
+    customerId: bill.customerRef ? String(bill.customerRef) : null,
     customer: {
       name: bill.customer.name,
       phone: bill.customer.phone ?? null,
@@ -193,6 +209,19 @@ export function toBillDTO(bill: HydratedDocument<BillDocument>): BillDTO {
     vatAmount: bill.vatAmount,
     total: bill.total,
     note: bill.note ?? null,
+    paid: round2(paid),
+    /**
+     * Nothing is owed on a quotation, on a void bill, or on one the owner has
+     * marked paid — that flag is their word for it, whether or not the money
+     * went through the ledger. Everything else owes its total less what has
+     * actually come in, which is what makes instalments work.
+     */
+    due:
+      bill.payment === "quotation" ||
+      bill.payment === "paid" ||
+      bill.status === "void"
+        ? 0
+        : round2(Math.max(0, bill.total - paid)),
     payment: bill.payment as BillPayment,
     chequeNo: bill.chequeNo ?? null,
     status: bill.status as BillStatus,

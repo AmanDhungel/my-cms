@@ -14,7 +14,9 @@ import type { AttendanceDTO } from "@/models/attendance"
 import type { CheckInDTO } from "@/models/check-in"
 import type { CategoryDTO } from "@/models/inventory-category"
 import type { AdminBusiness, AdminProject, AdminUser } from "@/lib/admin"
+import type { WorkspaceInviteDTO } from "@/models/workspace-invite"
 import type { BillDTO } from "@/models/bill"
+import type { CustomerDTO } from "@/models/customer"
 import type { ItemDTO } from "@/models/inventory-item"
 import type { PaymentDTO } from "@/models/payment"
 import type { NotificationDTO } from "@/models/notification"
@@ -53,6 +55,7 @@ export const keys = {
   inventoryCategories: () => ["inventory", "categories"] as const,
   bills: () => ["bills"] as const,
   payments: () => ["payments"] as const,
+  customers: () => ["customers"] as const,
   adminOverview: () => ["admin", "overview"] as const,
 }
 
@@ -628,6 +631,7 @@ export type AdminOverview = {
   businesses: AdminBusiness[]
   users: AdminUser[]
   projects: AdminProject[]
+  invites: WorkspaceInviteDTO[]
 }
 
 export function useAdminOverview() {
@@ -666,4 +670,87 @@ export function useBlockBusiness(id: string) {
       void client.invalidateQueries({ queryKey: ["admin"] })
     },
   })
+}
+
+/**
+ * Issues a workspace invite. The link comes back once, in the response —
+ * only its hash is stored, so it can't be recovered from the list later.
+ */
+export function useCreateWorkspaceInvite() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ invite: WorkspaceInviteDTO; signupUrl: string }>(
+        "/api/admin/invites",
+        { method: "POST", body: JSON.stringify(body) }
+      ),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["admin"] })
+    },
+  })
+}
+
+export function useRevokeWorkspaceInvite(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ invite: WorkspaceInviteDTO }>(`/api/admin/invites/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["admin"] })
+    },
+  })
+}
+
+/* ---------------------------------------------------------------- customers */
+
+export function useCustomers(enabled = true) {
+  return useQuery({
+    queryKey: keys.customers(),
+    queryFn: () => apiFetch<{ customers: CustomerDTO[] }>("/api/customers"),
+    enabled,
+  })
+}
+
+export function useCreateCustomer() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ customer: CustomerDTO }>("/api/customers", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateCustomers(client),
+  })
+}
+
+export function useUpdateCustomer(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ customer: CustomerDTO }>(`/api/customers/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateCustomers(client),
+  })
+}
+
+export function useDeleteCustomer(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ id: string }>(`/api/customers/${id}`, { method: "DELETE" }),
+    onSuccess: () => invalidateCustomers(client),
+  })
+}
+
+function invalidateCustomers(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: ["customers"] })
 }

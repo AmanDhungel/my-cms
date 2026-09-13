@@ -72,13 +72,14 @@ export function SalesView({ vatRate }: { vatRate: number }) {
   const revenue = sold.reduce((sum, bill) => sum + bill.total, 0)
   const vat = sold.reduce((sum, bill) => sum + bill.vatAmount, 0)
 
-  // What is still owed. A cheque is money you hold but the bank doesn't, so
-  // it is counted apart rather than folded into either side.
+  // What is still owed, counting instalments already received: a 29,500 bill
+  // with 5,000 paid against it leaves 24,500, not the whole thing.
   const owed = issued
-    .filter((bill) => bill.payment === "unpaid")
-    .reduce((sum, bill) => sum + bill.total, 0)
+    .filter((bill) => bill.payment !== "cheque")
+    .reduce((sum, bill) => sum + bill.due, 0)
   const onCheque = issued.filter((bill) => bill.payment === "cheque")
-  const chequeTotal = onCheque.reduce((sum, bill) => sum + bill.total, 0)
+  const chequeTotal = onCheque.reduce((sum, bill) => sum + bill.due, 0)
+  const partPaid = issued.filter((bill) => bill.paid > 0 && bill.due > 0).length
   const quotes = issued.filter((bill) => bill.payment === "quotation")
 
   return (
@@ -114,13 +115,15 @@ export function SalesView({ vatRate }: { vatRate: number }) {
           />
           <StatCard label="BILLED" value={money(revenue)} />
           <StatCard
-            label="UNPAID"
+            label="STILL OWED"
             value={money(owed)}
             accent={owed > 0}
             hint={
               onCheque.length > 0
                 ? `plus ${money(chequeTotal)} on ${onCheque.length} cheque${onCheque.length === 1 ? "" : "s"}`
-                : undefined
+                : partPaid > 0
+                  ? `${partPaid} bill${partPaid === 1 ? "" : "s"} part paid`
+                  : undefined
             }
           />
           <StatCard label="VAT CHARGED" value={money(vat)} />
@@ -227,7 +230,9 @@ export function SalesView({ vatRate }: { vatRate: number }) {
                     chequeNo={bill.chequeNo}
                   />
                   {[
-                    bill.customer.phone,
+                    bill.paid > 0 && bill.due > 0
+                      ? `${money(bill.paid)} of ${money(bill.total)} paid`
+                      : bill.customer.phone,
                     bill.source === "inventory" ? "from stock" : "custom",
                     bill.vatRate > 0 ? `VAT ${bill.vatRate}%` : null,
                   ]
@@ -248,8 +253,15 @@ export function SalesView({ vatRate }: { vatRate: number }) {
                 {bill.lines.length}
               </span>
 
-              <span className="font-mono text-[13px] font-semibold tabular-nums">
-                {money(bill.total)}
+              <span className="flex flex-col gap-0.5">
+                <span className="font-mono text-[13px] font-semibold tabular-nums">
+                  {money(bill.total)}
+                </span>
+                {bill.paid > 0 && bill.due > 0 ? (
+                  <span className="text-s-overdue font-mono text-[11.5px] tabular-nums">
+                    {money(bill.due)} due
+                  </span>
+                ) : null}
               </span>
 
               <div className="lg:justify-self-end">

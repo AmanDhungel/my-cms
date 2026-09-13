@@ -24,15 +24,9 @@ export const paymentSchema = z
       .string()
       .regex(/^[0-9a-fA-F]{24}$/, "Pick a bill from the list")
       .optional(),
-    /** Marks the linked bill paid in the same write. */
-    settleBill: z.boolean().optional(),
   })
   .refine((values) => values.direction === "in" || !values.billId, {
     message: "Only money you receive can be put against a bill",
-    path: ["billId"],
-  })
-  .refine((values) => !values.settleBill || Boolean(values.billId), {
-    message: "Pick the bill this settles",
     path: ["billId"],
   })
 

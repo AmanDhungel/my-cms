@@ -17,17 +17,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
+import { CustomerDialog } from "@/components/dashboard/customers/customer-dialog"
 import { PaymentPicker } from "@/components/dashboard/sales/payment"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   reportMutationError,
   useCreateBill,
+  useCustomers,
   useInventoryItems,
 } from "@/lib/queries"
 import { money, quantity, totalsOf } from "@/lib/billing"
 import { billSchema } from "@/lib/validations/sales"
 import type { BillPayment, BillSource } from "@/lib/work-constants"
 import type { BillDTO } from "@/models/bill"
+import type { CustomerDTO } from "@/models/customer"
 
 type Errors = Partial<Record<string, string>>
 
@@ -190,9 +193,40 @@ function Editor({
   const [chequeNo, setChequeNo] = React.useState("")
   const [note, setNote] = React.useState("")
   const [errors, setErrors] = React.useState<Errors>({})
+  const [customerId, setCustomerId] = React.useState("")
+  const [customerDialogOpen, setCustomerDialogOpen] = React.useState(false)
 
   const stock = useInventoryItems(fromInventory)
+  const customers = useCustomers()
   const create = useCreateBill()
+  const saved = customers.data?.customers ?? []
+
+  /** Picking one fills the bill's own copy of their details. */
+  function chooseCustomer(id: string) {
+    setCustomerId(id)
+    const picked = saved.find((entry) => entry.id === id)
+    if (!picked) return
+    setCustomer({
+      name: picked.name,
+      phone: picked.phone ?? "",
+      email: picked.email ?? "",
+      address: picked.location ?? "",
+      pan: picked.pan ?? "",
+    })
+    setErrors((prev) => ({ ...prev, "customer.name": undefined }))
+  }
+
+  function adopt(created: CustomerDTO) {
+    // The list has not refetched yet, so fill from what came back.
+    setCustomerId(created.id)
+    setCustomer({
+      name: created.name,
+      phone: created.phone ?? "",
+      email: created.email ?? "",
+      address: created.location ?? "",
+      pan: created.pan ?? "",
+    })
+  }
 
   const available = stock.data?.items ?? []
 
@@ -289,6 +323,7 @@ function Editor({
 
     const payload = {
       source,
+      customerId: customerId || undefined,
       customer: {
         name: customer.name,
         phone: customer.phone || undefined,
@@ -365,6 +400,37 @@ function Editor({
       <div className="flex flex-col gap-5">
         {/* ---- customer ---- */}
         <section className="flex flex-col gap-3.5">
+          <div className="flex flex-col gap-[7px]">
+            <div className="flex items-center justify-between gap-3">
+              <FieldLabel>Saved customer</FieldLabel>
+              <button
+                type="button"
+                onClick={() => setCustomerDialogOpen(true)}
+                className="text-p-600 text-[12.5px] font-semibold"
+              >
+                + New customer
+              </button>
+            </div>
+            {customers.isPending ? (
+              <Skeleton className="h-11 w-full rounded-md" />
+            ) : (
+              <select
+                value={customerId}
+                onChange={(event) => chooseCustomer(event.target.value)}
+                aria-label="Saved customer"
+                className={cn(inputClass, "cursor-pointer")}
+              >
+                <option value="">Not a saved customer — type below</option>
+                {saved.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                    {entry.company ? ` · ${entry.company}` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
           <div className="grid gap-3.5 sm:grid-cols-2">
             <label className="flex flex-col gap-[7px]">
               <FieldLabel>Customer</FieldLabel>
@@ -372,6 +438,8 @@ function Editor({
                 value={customer.name}
                 onChange={(event) => {
                   setCustomer((prev) => ({ ...prev, name: event.target.value }))
+                  // Renaming by hand means this is somebody else now.
+                  setCustomerId("")
                   setErrors((prev) => ({ ...prev, "customer.name": undefined }))
                 }}
                 placeholder="Who is this bill for"
@@ -456,6 +524,7 @@ function Editor({
                     addStockLine(event.target.value)
                     event.target.value = ""
                   }}
+                  aria-label="Add an item from stock"
                   className={cn(
                     inputClass,
                     "w-full cursor-pointer py-2 text-[13.5px] sm:w-[280px]"
@@ -820,6 +889,13 @@ function Editor({
           {create.isPending ? "Saving…" : "Raise bill"}
         </button>
       </DialogFooter>
+
+      {/* Nested, so a walk-in can be saved without losing the bill. */}
+      <CustomerDialog
+        open={customerDialogOpen}
+        onClose={() => setCustomerDialogOpen(false)}
+        onCreated={adopt}
+      />
     </>
   )
 }

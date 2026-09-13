@@ -20,10 +20,18 @@ import {
   signupSchema,
   type SignupValues,
 } from "@/lib/validations/auth"
+import type { PendingWorkspaceInvite } from "@/lib/auth/workspace-invites"
 import type { BusinessDTO } from "@/models/business"
 import type { UserDTO } from "@/models/user"
 
-export function SignupForm() {
+export function SignupForm({
+  token,
+  invite,
+}: {
+  /** The raw invite token, posted with the form and spent by the server. */
+  token: string
+  invite: PendingWorkspaceInvite
+}) {
   const router = useRouter()
   const {
     register,
@@ -35,10 +43,13 @@ export function SignupForm() {
   } = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
     defaultValues: {
-      business: "",
+      invite: token,
+      business: invite.businessName ?? "",
       name: "",
       phone: "",
-      email: "",
+      // An invite addressed to someone fills their address in, and the
+      // server refuses anything else, so the field is not theirs to change.
+      email: invite.email ?? "",
       password: "",
       crewSize: "1–10",
       terms: false,
@@ -102,6 +113,11 @@ export function SignupForm() {
         <p className="text-n-600 text-[14.5px] leading-relaxed">
           You&rsquo;ll be the owner. Invite the crew right after.
         </p>
+        {invite.note ? (
+          <p className="border-p-200 bg-p-100 text-p-700 m-0 rounded-md border px-3 py-2 text-[13px]">
+            {invite.note}
+          </p>
+        ) : null}
       </div>
 
       <div aria-hidden className="flex gap-2.5">
@@ -153,10 +169,16 @@ export function SignupForm() {
             type="email"
             autoComplete="email"
             placeholder="you@company.com"
+            readOnly={Boolean(invite.email)}
             aria-invalid={Boolean(errors.email)}
-            className={inputClass}
+            className={cn(inputClass, invite.email && "bg-n-100 text-n-600")}
             {...register("email")}
           />
+          {invite.email ? (
+            <span className="text-n-400 text-[12px]">
+              This invite is for {invite.email}.
+            </span>
+          ) : null}
           <FieldError message={errors.email?.message} />
         </label>
 

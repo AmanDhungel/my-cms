@@ -6,6 +6,7 @@ import { loadViewer } from "@/lib/auth/page-guards";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
 import { Bill } from "@/models/bill";
 import { Business } from "@/models/business";
+import { Customer } from "@/models/customer";
 import { InventoryItem } from "@/models/inventory-item";
 import { Invite } from "@/models/invite";
 import { Notification } from "@/models/notification";
@@ -56,6 +57,7 @@ export default async function DashboardLayout({
     tasks,
     inventory,
     sales,
+    customers,
     payments,
     approvals,
     unread,
@@ -72,6 +74,7 @@ export default async function DashboardLayout({
     }),
     InventoryItem.countDocuments({ business: business._id }),
     Bill.countDocuments({ business: business._id, status: "issued" }),
+    Customer.countDocuments({ business: business._id }),
     Payment.countDocuments({ business: business._id }),
     WorkRequest.countDocuments({
       business: business._id,
@@ -93,6 +96,7 @@ export default async function DashboardLayout({
         tasks,
         inventory,
         sales,
+        customers,
         payments,
         approvals,
         unread,

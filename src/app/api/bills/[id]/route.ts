@@ -4,6 +4,7 @@ import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { holdsStock } from "@/lib/billing"
 import { connectToDatabase } from "@/lib/mongodb"
+import { paidByBill } from "@/lib/payments"
 import { billUpdateSchema } from "@/lib/validations/sales"
 import type { BillPayment } from "@/lib/work-constants"
 import { Bill, toBillDTO } from "@/models/bill"
@@ -97,8 +98,9 @@ export async function PATCH(
       }
 
       const settled = await Bill.findById(id).orFail()
+      const paid = await paidByBill(viewer.businessId)
 
-      return ok({ bill: toBillDTO(settled) })
+      return ok({ bill: toBillDTO(settled, paid.get(id) ?? 0) })
     }
 
     const session = await mongoose.startSession()

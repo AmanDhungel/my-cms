@@ -39,6 +39,15 @@ import type { BillDTO } from "@/models/bill"
 
 type Seller = { name: string; pan: string | null }
 
+/** One instalment against this bill, as the page loaded it. */
+export type BillPaymentRow = {
+  id: string
+  amount: number
+  method: string
+  reference: string | null
+  paidOn: string
+}
+
 /**
  * One bill, in the two shapes it gets handed over in: a tax invoice carrying
  * both PANs and the VAT breakdown, or a plainer customer copy. Everything
@@ -46,10 +55,12 @@ type Seller = { name: string; pan: string | null }
  */
 export function BillView({
   bill,
+  payments,
   business,
   issuedBy,
 }: {
   bill: BillDTO
+  payments: BillPaymentRow[]
   business: Seller
   issuedBy: string | null
 }) {
@@ -413,6 +424,27 @@ export function BillView({
                   {money(bill.total)}
                 </span>
               </div>
+
+              {/* Only once something has been paid: an untouched bill just
+                  owes its total, and saying so twice helps nobody. */}
+              {bill.paid > 0 ? (
+                <div className="border-n-200 mt-1.5 flex flex-col gap-1.5 border-t pt-2.5">
+                  <Row label="Paid" value={money(bill.paid)} />
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="font-heading text-[14px] font-semibold">
+                      Balance due
+                    </span>
+                    <span
+                      className={cn(
+                        "font-mono text-[16px] font-bold tabular-nums",
+                        bill.due > 0 ? "text-s-overdue" : "text-s-done"
+                      )}
+                    >
+                      {money(bill.due)}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
               {taxLayout && bill.vatRate === 0 ? (
                 <span className="text-n-400 text-[11.5px]">
                   No VAT was charged on this bill.
@@ -420,6 +452,30 @@ export function BillView({
               ) : null}
             </div>
           </div>
+
+          {payments.length > 0 ? (
+            <div className="border-n-200 border-t pt-4">
+              <span className="text-n-500 font-mono text-[10.5px] tracking-[0.07em]">
+                PAYMENTS RECEIVED
+              </span>
+              <div className="mt-2 flex flex-col gap-1">
+                {payments.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="text-n-600 flex items-baseline justify-between gap-3 text-[12.5px]"
+                  >
+                    <span className="capitalize">
+                      {formatDay(entry.paidOn)} · {entry.method}
+                      {entry.reference ? ` · ${entry.reference}` : ""}
+                    </span>
+                    <span className="font-mono tabular-nums">
+                      {money(entry.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <footer className="border-n-200 flex flex-wrap justify-between gap-3 border-t pt-4">
             <span className="text-n-500 max-w-[52ch] text-[12px]">
@@ -464,6 +520,20 @@ export function BillView({
       />
     </DashboardMain>
   )
+}
+
+/**
+ * "2026-09-13" as "13 Sept 2026". Built from the parts rather than parsed,
+ * since `new Date("2026-09-13")` is UTC midnight and lands on the day before
+ * in any zone behind it.
+ */
+function formatDay(dayKey: string) {
+  const [year, month, day] = dayKey.split("-").map(Number)
+  return new Date(year, month - 1, day).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  })
 }
 
 /** An inventory bill holds stock unless it is still only a quotation. */

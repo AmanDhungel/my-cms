@@ -1,16 +1,16 @@
-import type { Metadata } from "next"
-import Link from "next/link"
-import { redirect } from "next/navigation"
+import type { Metadata } from "next";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { auth } from "@/auth"
-import { SignOutButton } from "@/components/dashboard/sign-out-button"
-import { isSuperAdmin } from "@/lib/auth/super-admin"
-import { connectToDatabase } from "@/lib/mongodb"
-import { User } from "@/models/user"
+import { auth } from "@/auth";
+import { SignOutButton } from "@/components/dashboard/sign-out-button";
+import { isSuperAdmin } from "@/lib/auth/super-admin";
+import { connectToDatabase } from "@/lib/mongodb";
+import { User } from "@/models/user";
 
-export const dynamic = "force-dynamic"
+export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Where to · EMS" }
+export const metadata: Metadata = { title: "Where to · EMS" };
 
 /**
  * The fork for an account that is both an owner and a super admin. Everyone
@@ -18,17 +18,17 @@ export const metadata: Metadata = { title: "Where to · EMS" }
  * an actual choice to make.
  */
 export default async function ChoosePage() {
-  const session = await auth()
+  const session = await auth();
 
   if (!session?.user?.id) {
-    redirect("/login")
+    redirect("/login");
   }
 
-  await connectToDatabase()
-  const me = await User.findById(session.user.id).select("name email")
+  await connectToDatabase();
+  const me = await User.findById(session.user.id).select("name email");
 
   if (!me || !isSuperAdmin(me.email)) {
-    redirect("/dashboard")
+    redirect("/dashboard");
   }
 
   return (
@@ -50,8 +50,7 @@ export default async function ChoosePage() {
         <div className="grid gap-3.5 sm:grid-cols-2">
           <Link
             href="/dashboard"
-            className="border-n-300 hover:border-p-400 hover:bg-p-100/40 flex flex-col gap-2 rounded-xl border bg-white p-5 transition-colors"
-          >
+            className="border-n-300 hover:border-p-400 hover:bg-p-100/40 flex flex-col gap-2 rounded-xl border bg-white p-5 transition-colors">
             <span className="font-heading text-[16px] font-semibold">
               My workspace
             </span>
@@ -63,8 +62,7 @@ export default async function ChoosePage() {
 
           <Link
             href="/admin"
-            className="border-n-300 hover:border-p-400 hover:bg-p-100/40 flex flex-col gap-2 rounded-xl border bg-white p-5 transition-colors"
-          >
+            className="border-n-300 hover:border-p-400 hover:bg-p-100/40 flex flex-col gap-2 rounded-xl border bg-white p-5 transition-colors">
             <span className="font-heading text-[16px] font-semibold">
               Super admin
             </span>
@@ -78,5 +76,5 @@ export default async function ChoosePage() {
         <SignOutButton className="border-n-300 text-n-700 hover:bg-n-100 self-start rounded-md border bg-white px-3 py-1.5 text-[13px] font-semibold transition-colors" />
       </div>
     </main>
-  )
+  );
 }

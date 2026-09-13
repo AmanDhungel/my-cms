@@ -17,6 +17,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  InvitesPanel,
+  NewInviteDialog,
+} from "@/components/admin/invites-panel"
 import { Pagination, paginate } from "@/components/dashboard/pagination"
 import { SignOutButton } from "@/components/dashboard/sign-out-button"
 import { RowsSkeleton, StatGridSkeleton } from "@/components/dashboard/skeletons"
@@ -37,7 +41,7 @@ import {
 
 const PER_PAGE = 10
 
-type Tab = "businesses" | "users" | "projects"
+type Tab = "businesses" | "users" | "projects" | "invites"
 
 /** What the block dialog is about to do, whichever kind of row it came from. */
 type Target =
@@ -53,11 +57,13 @@ export function AdminView({ admin }: { admin: { name: string; email: string } })
   const [search, setSearch] = React.useState("")
   const [page, setPage] = React.useState(1)
   const [target, setTarget] = React.useState<Target | null>(null)
+  const [newInvite, setNewInvite] = React.useState(false)
 
   const query = useAdminOverview()
   const businesses = query.data?.businesses ?? []
   const users = query.data?.users ?? []
   const projects = query.data?.projects ?? []
+  const invites = query.data?.invites ?? []
 
   const needle = search.trim().toLowerCase()
   const match = (...fields: (string | null | undefined)[]) =>
@@ -72,11 +78,15 @@ export function AdminView({ admin }: { admin: { name: string; email: string } })
   const visibleProjects = projects.filter((project) =>
     match(project.name, project.site, project.business?.name)
   )
+  const visibleInvites = invites.filter((invite) =>
+    match(invite.email, invite.businessName, invite.note, invite.workspace)
+  )
 
   const blockedUsers = users.filter(
     (user) => user.blockedAt || user.business?.blockedAt
   ).length
   const blockedBusinesses = businesses.filter((b) => b.blockedAt).length
+  const openInvites = invites.filter((i) => i.state === "pending").length
 
   function switchTab(next: Tab) {
     setTab(next)
@@ -124,7 +134,20 @@ export function AdminView({ admin }: { admin: { name: string; email: string } })
         <PageHeading
           eyebrow="Every workspace"
           title="Super admin"
-          subtitle="Everything on this deployment, and the switch that shuts an account or a workspace out."
+          subtitle={
+            query.isPending
+              ? "Everything on this deployment."
+              : `Registering needs a link from here — ${openInvites} open. Blocking shuts an account or a whole workspace out.`
+          }
+          actions={
+            <button
+              type="button"
+              onClick={() => setNewInvite(true)}
+              className={primaryButtonClass}
+            >
+              New invite
+            </button>
+          }
         />
 
         {query.isPending ? (
@@ -154,6 +177,7 @@ export function AdminView({ admin }: { admin: { name: string; email: string } })
                 ["businesses", "Businesses"],
                 ["users", "Users"],
                 ["projects", "Projects"],
+                ["invites", "Invites"],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -216,10 +240,19 @@ export function AdminView({ admin }: { admin: { name: string; email: string } })
             onPage={setPage}
             onBlock={setTarget}
           />
-        ) : (
+        ) : tab === "projects" ? (
           <ProjectTable rows={visibleProjects} page={page} onPage={setPage} />
+        ) : (
+          <InvitesPanel
+            invites={visibleInvites}
+            page={page}
+            onPage={setPage}
+            onNew={() => setNewInvite(true)}
+          />
         )}
       </main>
+
+      <NewInviteDialog open={newInvite} onClose={() => setNewInvite(false)} />
 
       {target ? (
         <BlockDialog

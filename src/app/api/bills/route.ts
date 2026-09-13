@@ -4,6 +4,7 @@ import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { holdsStock, quantity, totalsOf } from "@/lib/billing"
 import { connectToDatabase } from "@/lib/mongodb"
+import { paidByBill } from "@/lib/payments"
 import { billSchema } from "@/lib/validations/sales"
 import { getWorkspace } from "@/lib/workspace"
 import { Bill, toBillDTO } from "@/models/bill"
@@ -18,11 +19,16 @@ export async function GET() {
     const viewer = await requireRole("owner", "supervisor")
     await connectToDatabase()
 
-    const bills = await Bill.find({ business: viewer.businessId })
-      .sort({ createdAt: -1 })
-      .limit(200)
+    const [bills, paid] = await Promise.all([
+      Bill.find({ business: viewer.businessId }).sort({ createdAt: -1 }).limit(200),
+      // What has actually been received against each one, so a bill paid in
+      // instalments shows what is left rather than just "unpaid".
+      paidByBill(viewer.businessId),
+    ])
 
-    return ok({ bills: bills.map(toBillDTO) })
+    return ok({
+      bills: bills.map((bill) => toBillDTO(bill, paid.get(String(bill._id)) ?? 0)),
+    })
   } catch (error) {
     return handleApiError(error)
   }
@@ -148,6 +154,7 @@ export async function POST(request: Request) {
               business: viewer.businessId,
               number,
               source: values.source,
+              customerRef: values.customerId,
               customer: {
                 name: values.customer.name,
                 phone: values.customer.phone,

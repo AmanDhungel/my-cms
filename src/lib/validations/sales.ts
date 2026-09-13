@@ -30,6 +30,8 @@ const lineSchema = z.object({
 export const billSchema = z
   .object({
     source: z.enum(BILL_SOURCES),
+    /** Set when the bill was raised for a saved customer. */
+    customerId: objectId.optional(),
     customer: z.object({
       name: z.string().trim().min(2, "Who is this bill for?").max(140),
       phone: z.string().trim().max(30).optional(),

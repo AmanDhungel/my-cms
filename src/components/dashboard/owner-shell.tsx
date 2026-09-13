@@ -8,6 +8,7 @@ import {
   ApprovalsIcon,
   BellIcon,
   BoxIcon,
+  ContactIcon,
   DashboardIcon,
   PeopleIcon,
   ProjectsIcon,
@@ -45,6 +46,7 @@ export function OwnerShell({
     tasks: number;
     inventory: number;
     sales: number;
+    customers: number;
     payments: number;
     approvals: number;
     unread: number;
@@ -99,6 +101,12 @@ export function OwnerShell({
       label: "Sales",
       icon: ReceiptIcon,
       count: counts.sales,
+    },
+    {
+      href: "/dashboard/customers",
+      label: "Customers",
+      icon: ContactIcon,
+      count: counts.customers,
     },
     // What the business pays out is the owner's business alone.
     ...(viewer.role === "owner"

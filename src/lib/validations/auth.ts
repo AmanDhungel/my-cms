@@ -63,8 +63,16 @@ export function shiftLength(start: string, end: string) {
   return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`
 }
 
-/** Workspace creation. Only an owner account is made this way. */
+/**
+ * Workspace creation. Only an owner account is made this way, and only
+ * against a super admin's invite — the token rides along with the form.
+ */
 export const signupSchema = z.object({
+  /**
+   * The super admin's token. Optional only so the account that administers
+   * the deployment can open the first workspace; the route enforces the rest.
+   */
+  invite: z.string().trim().optional(),
   business: z.string().trim().min(2, "Business name is required"),
   name: z.string().trim().min(2, "Your name is required"),
   phone: z.string().trim().min(7, "Enter a contact number"),

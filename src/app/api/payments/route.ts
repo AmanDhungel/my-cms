@@ -3,6 +3,7 @@ import mongoose from "mongoose"
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
+import { syncBillPayment } from "@/lib/payments"
 import { dayRangeInZone } from "@/lib/time"
 import { paymentSchema } from "@/lib/validations/payments"
 import { getWorkspace } from "@/lib/workspace"
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
         throw new HttpError(409, `${bill.number} is void`)
       }
       // Accepting a quotation moves stock, which belongs on the bill itself.
-      if (values.settleBill && bill.payment === "quotation") {
+      if (bill.payment === "quotation") {
         throw new HttpError(
           409,
           `${bill.number} is still a quotation. Accept it on the bill first, so the stock moves with it.`
@@ -82,27 +83,18 @@ export async function POST(request: Request) {
       recordedBy: viewer.id,
     }
 
-    // Settling writes two records, so they go together or not at all.
-    if (values.settleBill && values.billId) {
+    // A payment against a bill and the bill's own flag have to agree, so
+    // they move together: the instalment lands, then the bill is settled if
+    // this one finished it off.
+    if (values.billId) {
       const session = await mongoose.startSession()
       let createdId: mongoose.Types.ObjectId | undefined
 
       try {
         await session.withTransaction(async () => {
-          const settled = await Bill.findOneAndUpdate(
-            {
-              _id: values.billId,
-              business: viewer.businessId,
-              status: "issued",
-            },
-            { $set: { payment: "paid" }, $unset: { chequeNo: "" } },
-            { new: true, session }
-          )
-
-          if (!settled) throw new HttpError(409, "That bill can't be settled")
-
           const [payment] = await Payment.create([doc], { session })
           createdId = payment._id
+          await syncBillPayment(values.billId as string, session)
         })
       } finally {
         await session.endSession()
