@@ -175,9 +175,6 @@ export default function Home() {
               sees it the second it happens.
             </p>
           </div>
-          <span className="absolute bottom-[22px] left-6 font-mono text-[11px] tracking-[0.06em] text-[rgba(234,246,245,0.5)] sm:left-10">
-            photo — crew arriving on site · 1920×1080
-          </span>
         </section>
 
         {/* 02 — The loop */}
@@ -319,9 +316,6 @@ export default function Home() {
               material. Everything else stays quiet in warm neutrals.
             </p>
           </div>
-          <span className="absolute bottom-[22px] left-6 font-mono text-[11px] tracking-[0.06em] text-[rgba(253,246,233,0.55)] sm:left-10">
-            photo — supervisor reviewing requests · 1920×1080
-          </span>
         </section>
 
         {/* Start the loop */}
