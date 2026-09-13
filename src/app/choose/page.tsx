@@ -12,11 +12,6 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Where to · EMS" };
 
-/**
- * The fork for an account that is both an owner and a super admin. Everyone
- * else is sent straight on, so the extra step only exists for those who have
- * an actual choice to make.
- */
 export default async function ChoosePage() {
   const session = await auth();
 

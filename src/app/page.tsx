@@ -7,6 +7,7 @@ import { TaskBeacon } from "@/components/landing/task-beacon";
 import { StatusBadge } from "@/components/status-badge";
 import { TaskCard } from "@/components/task-card";
 import type { TaskStatus } from "@/lib/task-status";
+import Image from "next/image";
 
 const STATS = [
   { value: "100 m", label: "GEOFENCE RADIUS" },
@@ -136,9 +137,19 @@ export default function Home() {
 
         {/* 01 — The problem */}
         <section className="relative flex h-[92vh] min-h-[560px] items-center overflow-hidden bg-[repeating-linear-gradient(118deg,#094F4E_0_26px,#073C3B_26px_52px)] bg-fixed">
+          <Image
+            src="/landing_1.png"
+            alt=""
+            fill
+            sizes="100vw"
+            className="object-cover"
+          />
+          {/* The scrim sits over the photo, not around it: a light blur so
+              the detail stops competing with the words, and a wash that is
+              heaviest where the text sits. */}
           <div
             aria-hidden
-            className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,42,41,0.86),rgba(5,42,41,0.42))]"
+            className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,42,41,0.88),rgba(5,42,41,0.55))] backdrop-blur-[3px]"
           />
           <div
             data-para="0.10"
@@ -274,9 +285,16 @@ export default function Home() {
 
         {/* 04 — Marigold is a request */}
         <section className="relative flex h-[86vh] min-h-[520px] items-center overflow-hidden bg-[repeating-linear-gradient(118deg,#563605_0_26px,#331F03_26px_52px)] bg-fixed">
+          <Image
+            src="/landing_2.png"
+            alt=""
+            fill
+            sizes="100vw"
+            className="object-cover"
+          />
           <div
             aria-hidden
-            className="absolute inset-0 bg-[linear-gradient(90deg,rgba(51,31,3,0.82),rgba(51,31,3,0.35))]"
+            className="absolute inset-0 bg-[linear-gradient(90deg,rgba(51,31,3,0.85),rgba(51,31,3,0.5))] backdrop-blur-[3px]"
           />
           <div
             data-para="0.10"
