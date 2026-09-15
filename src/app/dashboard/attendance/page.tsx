@@ -3,6 +3,8 @@ import type { Metadata } from "next"
 import { CrewAttendanceView } from "@/components/dashboard/attendance/crew-attendance-view"
 import { AttendanceView } from "@/components/dashboard/employee/attendance-view"
 import { loadViewer } from "@/lib/auth/page-guards"
+import { connectToDatabase } from "@/lib/mongodb"
+import { getWorkspace } from "@/lib/workspace"
 
 export const metadata: Metadata = { title: "Attendance · EMS" }
 
@@ -14,5 +16,11 @@ export const metadata: Metadata = { title: "Attendance · EMS" }
 export default async function AttendancePage() {
   const viewer = await loadViewer()
 
-  return viewer.role === "employee" ? <AttendanceView /> : <CrewAttendanceView />
+  if (viewer.role === "employee") return <AttendanceView />
+
+  // Only the crew view needs it — it goes on the sheets they download.
+  await connectToDatabase()
+  const business = await getWorkspace(viewer.businessId)
+
+  return <CrewAttendanceView businessName={business.name} />
 }

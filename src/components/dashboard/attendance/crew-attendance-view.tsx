@@ -3,6 +3,10 @@
 import * as React from "react"
 import { cn } from "cn"
 
+import {
+  AttendanceDownloadDialog,
+  type SheetPerson,
+} from "@/components/dashboard/attendance/attendance-download-dialog"
 import { DayStepper } from "@/components/dashboard/attendance/day-stepper"
 import { RowsSkeleton, StatGridSkeleton } from "@/components/dashboard/skeletons"
 import {
@@ -41,9 +45,10 @@ const STATUS_LOOK: Record<AttendanceStatus, string> = {
  * What the owner sees on /dashboard/attendance. Two questions, two tabs:
  * whether the crew turned up, and whether they were where the work was.
  */
-export function CrewAttendanceView() {
+export function CrewAttendanceView({ businessName }: { businessName: string }) {
   const [tab, setTab] = React.useState<Tab>("days")
   const [day, setDay] = React.useState<string | undefined>(undefined)
+  const [downloading, setDownloading] = React.useState<SheetPerson | null>(null)
 
   const crew = useCrewAttendance(day)
   const visits = useVisits(day)
@@ -90,10 +95,23 @@ export function CrewAttendanceView() {
       </div>
 
       {tab === "days" ? (
-        <DaysTab query={crew} timeZone={timeZone} />
+        <DaysTab
+          query={crew}
+          timeZone={timeZone}
+          onDownload={setDownloading}
+        />
       ) : (
         <TasksTab query={visits} timeZone={timeZone} />
       )}
+
+      <AttendanceDownloadDialog
+        open={Boolean(downloading)}
+        person={downloading}
+        businessName={businessName}
+        // The month of the day on screen, so the obvious one is preselected.
+        defaultMonth={(shownDay || today).slice(0, 7)}
+        onClose={() => setDownloading(null)}
+      />
     </DashboardMain>
   )
 }
@@ -101,9 +119,11 @@ export function CrewAttendanceView() {
 function DaysTab({
   query,
   timeZone,
+  onDownload,
 }: {
   query: ReturnType<typeof useCrewAttendance>
   timeZone: string
+  onDownload: (person: SheetPerson) => void
 }) {
   const rows = query.data?.rows ?? []
   const summary = query.data?.summary
@@ -133,8 +153,8 @@ function DaysTab({
         <EmptyState message="Nobody is on this workspace yet. Invite your crew from People." />
       ) : (
         <Panel className="overflow-hidden">
-          <div className="border-n-200 bg-n-100 hidden grid-cols-[1.3fr_120px_120px_1.4fr_110px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
-            {["PERSON", "STARTED", "ENDED", "WHERE THEY OPENED THE DAY", "STATUS"].map(
+          <div className="border-n-200 bg-n-100 hidden grid-cols-[1.2fr_110px_110px_1.3fr_100px_92px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
+            {["PERSON", "STARTED", "ENDED", "WHERE THEY OPENED THE DAY", "STATUS", ""].map(
               (head) => (
                 <span
                   key={head}
@@ -147,7 +167,12 @@ function DaysTab({
           </div>
 
           {rows.map((row) => (
-            <CrewRow key={row.user.id} row={row} timeZone={timeZone} />
+            <CrewRow
+              key={row.user.id}
+              row={row}
+              timeZone={timeZone}
+              onDownload={onDownload}
+            />
           ))}
         </Panel>
       )}
@@ -158,15 +183,17 @@ function DaysTab({
 function CrewRow({
   row,
   timeZone,
+  onDownload,
 }: {
   row: CrewAttendanceRow
   timeZone: string
+  onDownload: (person: SheetPerson) => void
 }) {
   const day = row.attendance
   const status: AttendanceStatus = day?.inAt ? day.status : "absent"
 
   return (
-    <div className="border-n-200/70 hover:bg-n-50 grid gap-2 border-b px-[18px] py-3.5 last:border-b-0 lg:grid-cols-[1.3fr_120px_120px_1.4fr_110px] lg:items-center lg:gap-3.5">
+    <div className="border-n-200/70 hover:bg-n-50 grid gap-2 border-b px-[18px] py-3.5 last:border-b-0 lg:grid-cols-[1.2fr_110px_110px_1.3fr_100px_92px] lg:items-center lg:gap-3.5">
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="text-[14px] font-semibold">
           {row.user.name}
@@ -227,7 +254,46 @@ function CrewRow({
       >
         {status}
       </span>
+
+      <div className="flex lg:justify-end">
+        <button
+          type="button"
+          onClick={() =>
+            onDownload({
+              id: row.user.id,
+              name: row.user.name,
+              role: row.user.role,
+              shift: row.user.shift,
+            })
+          }
+          title={`Download ${row.user.name}'s month`}
+          className="border-n-300 text-n-700 hover:bg-n-100 flex items-center gap-1.5 rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold"
+        >
+          <DownloadIcon className="size-3.5" />
+          Month
+        </button>
+      </div>
     </div>
+  )
+}
+
+/** A tray with an arrow into it — the same 16px grid as the nav icons. */
+function DownloadIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M8 2v7.5" />
+      <path d="M5 7l3 3 3-3" />
+      <path d="M2.5 11.5v1A1.5 1.5 0 0 0 4 14h8a1.5 1.5 0 0 0 1.5-1.5v-1" />
+    </svg>
   )
 }
 
