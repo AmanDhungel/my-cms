@@ -167,14 +167,25 @@ export function useTaskStatus(taskId: string) {
   })
 }
 
+/**
+ * Start / end shift. A start carries the position and, when the workspace has
+ * an office and the person is outside its outer ring, the reason why.
+ */
 export function useShiftAction() {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: (action: "start" | "end") =>
+    mutationFn: (body: {
+      action: "start" | "end"
+      lat?: number
+      lng?: number
+      accuracyM?: number
+      reason?: string
+      note?: string
+    }) =>
       apiFetch<{ attendance: AttendanceDTO }>("/api/attendance", {
         method: "POST",
-        body: JSON.stringify({ action }),
+        body: JSON.stringify(body),
       }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["attendance"] })

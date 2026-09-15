@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { TASK_PRIORITIES } from "@/lib/work-constants"
+import { AWAY_REASONS, TASK_PRIORITIES } from "@/lib/work-constants"
 
 const objectId = z
   .string()
@@ -80,10 +80,21 @@ export const taskStatusSchema = z
 
 export type TaskStatusValues = z.infer<typeof taskStatusSchema>
 
-/** Start / end shift, pressed by the employee. */
+/**
+ * Start / end shift, pressed by the employee. The position rides along so a
+ * workspace with an office can measure the start against it; a reason is
+ * required only when the server finds them outside the outer ring.
+ */
 export const attendanceActionSchema = z.object({
   action: z.enum(["start", "end"]),
+  lat: z.number().min(-90).max(90).optional(),
+  lng: z.number().min(-180).max(180).optional(),
+  accuracyM: z.number().min(0).max(100_000).optional(),
+  reason: z.enum(AWAY_REASONS).optional(),
+  note: z.string().trim().max(500).optional(),
 })
+
+export type AttendanceActionValues = z.infer<typeof attendanceActionSchema>
 
 const requestBase = {
   message: z.string().trim().min(3, "Add a short note").max(1000),

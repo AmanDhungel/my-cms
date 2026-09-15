@@ -23,7 +23,11 @@ export async function PATCH(request: Request) {
           timeZone: values.timeZone,
           pan: values.pan,
           vatRate: values.vatRate,
+          ...(values.office ? { office: values.office } : {}),
         },
+        // Clearing the pin puts shift starts back to unrestricted, so it has
+        // to actually remove the field rather than leave a stale one.
+        ...(values.office === null ? { $unset: { office: "" } } : {}),
       },
       { new: true, runValidators: true }
     ).orFail()

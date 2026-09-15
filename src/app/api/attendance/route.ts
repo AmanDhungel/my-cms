@@ -8,7 +8,9 @@ import {
   markArrival,
   markDeparture,
 } from "@/lib/attendance"
+import { formatDistance } from "@/lib/geo"
 import { connectToDatabase } from "@/lib/mongodb"
+import { placeAgainstOffice, type ShiftPlacement } from "@/lib/office"
 import { dayKeyInZone } from "@/lib/time"
 import { attendanceActionSchema } from "@/lib/validations/work"
 import { getWorkspace } from "@/lib/workspace"
@@ -79,7 +81,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const viewer = await requireUser()
-    const { action } = attendanceActionSchema.parse(await request.json())
+    const values = attendanceActionSchema.parse(await request.json())
+    const { action } = values
 
     await connectToDatabase()
 
@@ -87,6 +90,35 @@ export async function POST(request: Request) {
       getWorkspace(viewer.businessId),
       User.findById(viewer.id).select("shift"),
     ])
+
+    /**
+     * A workspace with an office measures the start against it. Without one
+     * nothing is asked, which is how every workspace behaved before offices
+     * existed — and how one behaves until its owner pins theirs.
+     */
+    let place: ShiftPlacement | null = null
+
+    if (action === "start" && business.office) {
+      if (values.lat === undefined || values.lng === undefined) {
+        throw new HttpError(
+          400,
+          "Share your location to start your shift — your workspace records where the day opened."
+        )
+      }
+
+      place = placeAgainstOffice(business.office, {
+        lat: values.lat,
+        lng: values.lng,
+      })
+
+      // The phone asks first; this is the half that can't be skipped.
+      if (place.needsReason && !values.reason) {
+        throw new HttpError(
+          409,
+          `You are ${formatDistance(place.distanceM)} from the office. Say why you are starting from here.`
+        )
+      }
+    }
 
     const at = new Date()
     const day = dayKeyInZone(at, business.timeZone)
@@ -115,6 +147,19 @@ export async function POST(request: Request) {
             source: "manual",
             shift: me?.shift,
             timeZone: business.timeZone,
+            place:
+              place && values.lat !== undefined && values.lng !== undefined
+                ? {
+                    place: place.place,
+                    distanceM: place.distanceM,
+                    lat: values.lat,
+                    lng: values.lng,
+                    accuracyM: values.accuracyM,
+                    // Only kept where it was actually required.
+                    reason: place.needsReason ? values.reason : undefined,
+                    note: place.needsReason ? values.note : undefined,
+                  }
+                : undefined,
           })
         : await markDeparture({
             businessId: business._id,

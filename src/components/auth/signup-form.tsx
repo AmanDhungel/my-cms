@@ -1,38 +1,40 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { signIn } from "next-auth/react"
-import { useForm, useWatch } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { toast } from "sonner"
-import { cn } from "cn"
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
+import { useForm, useWatch } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
+import { cn } from "cn";
 
 import {
   FieldError,
   FieldLabel,
   fieldLabelClass,
   inputClass,
-} from "@/components/auth/field"
-import { ApiRequestError, apiFetch } from "@/lib/api-client"
+} from "@/components/auth/field";
+import { OfficePicker } from "@/components/dashboard/office-picker";
+import { ApiRequestError, apiFetch } from "@/lib/api-client";
 import {
   CREW_SIZES,
   signupSchema,
   type SignupValues,
-} from "@/lib/validations/auth"
-import type { PendingWorkspaceInvite } from "@/lib/auth/workspace-invites"
-import type { BusinessDTO } from "@/models/business"
-import type { UserDTO } from "@/models/user"
+} from "@/lib/validations/auth";
+import type { PendingWorkspaceInvite } from "@/lib/auth/workspace-invites";
+import { AWAY_RADIUS_M, OFFICE_RADIUS_M } from "@/lib/work-constants";
+import type { BusinessDTO } from "@/models/business";
+import type { UserDTO } from "@/models/user";
 
 export function SignupForm({
   token,
   invite,
 }: {
   /** The raw invite token, posted with the form and spent by the server. */
-  token: string
-  invite: PendingWorkspaceInvite
+  token: string;
+  invite: PendingWorkspaceInvite;
 }) {
-  const router = useRouter()
+  const router = useRouter();
   const {
     register,
     handleSubmit,
@@ -54,33 +56,34 @@ export function SignupForm({
       crewSize: "1–10",
       terms: false,
     },
-  })
+  });
 
-  const crewSize = useWatch({ control, name: "crewSize" })
+  const crewSize = useWatch({ control, name: "crewSize" });
+  const office = useWatch({ control, name: "office" });
 
   async function onSubmit(values: SignupValues) {
-    let business: BusinessDTO
+    let business: BusinessDTO;
 
     try {
-      ;({ business } = await apiFetch<{
-        user: UserDTO
-        business: BusinessDTO
+      ({ business } = await apiFetch<{
+        user: UserDTO;
+        business: BusinessDTO;
       }>("/api/register", {
         method: "POST",
         body: JSON.stringify(values),
-      }))
+      }));
     } catch (error) {
       if (error instanceof ApiRequestError) {
         for (const [path, messages] of Object.entries(
-          error.fieldErrors ?? {}
+          error.fieldErrors ?? {},
         )) {
-          setError(path as keyof SignupValues, { message: messages[0] })
+          setError(path as keyof SignupValues, { message: messages[0] });
         }
-        toast.error(error.message)
-        return
+        toast.error(error.message);
+        return;
       }
-      toast.error("Could not reach the server")
-      return
+      toast.error("Could not reach the server");
+      return;
     }
 
     // The workspace exists; sign the owner in with what they just typed.
@@ -88,17 +91,17 @@ export function SignupForm({
       email: values.email,
       password: values.password,
       redirect: false,
-    })
+    });
 
     if (!result || result.error) {
-      toast.success(`${business.name} is ready — log in to continue.`)
-      router.push("/login")
-      return
+      toast.success(`${business.name} is ready — log in to continue.`);
+      router.push("/login");
+      return;
     }
 
     // Step 2 (inviting the crew) lives on the dashboard's People page.
-    router.push("/dashboard/people")
-    router.refresh()
+    router.push("/dashboard/people");
+    router.refresh();
   }
 
   return (
@@ -182,6 +185,31 @@ export function SignupForm({
           <FieldError message={errors.email?.message} />
         </label>
 
+        <div className="flex flex-col gap-[7px]">
+          <FieldLabel>Where is your office?</FieldLabel>
+          <OfficePicker
+            showRings={false}
+            value={
+              office
+                ? {
+                    ...office,
+                    radiusM: OFFICE_RADIUS_M,
+                    awayRadiusM: AWAY_RADIUS_M,
+                  }
+                : null
+            }
+            onChange={(next) =>
+              setValue(
+                "office",
+                next
+                  ? { lat: next.lat, lng: next.lng, label: next.label }
+                  : undefined,
+                { shouldDirty: true },
+              )
+            }
+          />
+        </div>
+
         <label className="flex flex-col gap-[7px]">
           <FieldLabel>Password</FieldLabel>
           <input
@@ -210,9 +238,8 @@ export function SignupForm({
                   "flex-1 rounded-md border px-3 py-2.5 text-[13.5px] transition-colors",
                   crewSize === size
                     ? "bg-p-100 border-p-400 text-p-700 font-semibold"
-                    : "border-n-300 text-n-700 hover:bg-n-100 bg-white font-medium"
-                )}
-              >
+                    : "border-n-300 text-n-700 hover:bg-n-100 bg-white font-medium",
+                )}>
                 {size}
               </button>
             ))}
@@ -233,8 +260,7 @@ export function SignupForm({
         <button
           type="submit"
           disabled={isSubmitting}
-          className="bg-a-400 text-a-900 mt-0.5 rounded-md px-5 py-3.5 text-[15px] font-semibold shadow-[0_4px_14px_rgba(200,127,15,0.24)] transition-[transform,filter] hover:-translate-y-px hover:brightness-[1.06] disabled:opacity-60"
-        >
+          className="bg-a-400 text-a-900 mt-0.5 rounded-md px-5 py-3.5 text-[15px] font-semibold shadow-[0_4px_14px_rgba(200,127,15,0.24)] transition-[transform,filter] hover:-translate-y-px hover:brightness-[1.06] disabled:opacity-60">
           Continue to invites
         </button>
       </form>
@@ -251,5 +277,5 @@ export function SignupForm({
         </Link>
       </div>
     </div>
-  )
+  );
 }

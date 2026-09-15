@@ -10,17 +10,25 @@ import {
 import {
   ATTENDANCE_SOURCES,
   ATTENDANCE_STATUSES,
+  AWAY_REASONS,
   LATE_GRACE_MIN,
+  SHIFT_PLACES,
   type AttendanceSource,
   type AttendanceStatus,
+  type AwayReason,
+  type ShiftPlace,
 } from "@/lib/work-constants"
 
 export {
   ATTENDANCE_SOURCES,
   ATTENDANCE_STATUSES,
+  AWAY_REASONS,
   LATE_GRACE_MIN,
+  SHIFT_PLACES,
   type AttendanceSource,
   type AttendanceStatus,
+  type AwayReason,
+  type ShiftPlace,
 }
 
 const attendanceSchema = new Schema(
@@ -49,6 +57,19 @@ const attendanceSchema = new Schema(
     },
     lateByMin: { type: Number, default: 0, min: 0 },
 
+    /**
+     * Where the day was opened from, measured against the office at the time.
+     * Absent on a workspace that has never pinned one.
+     */
+    inPlace: { type: String, enum: SHIFT_PLACES },
+    inDistanceM: { type: Number, min: 0 },
+    inLat: { type: Number, min: -90, max: 90 },
+    inLng: { type: Number, min: -180, max: 180 },
+    inAccuracyM: { type: Number, min: 0 },
+    /** Required by the API when the distance puts them outside the outer ring. */
+    inReason: { type: String, enum: AWAY_REASONS },
+    inNote: { type: String, trim: true, maxlength: 500 },
+
     /** Snapshot, so editing someone's shift doesn't rewrite their history. */
     shift: { type: String, trim: true, maxlength: 32 },
   },
@@ -74,6 +95,10 @@ export type AttendanceDTO = {
   status: AttendanceStatus
   lateByMin: number
   shift: string | null
+  inPlace: ShiftPlace | null
+  inDistanceM: number | null
+  inReason: AwayReason | null
+  inNote: string | null
 }
 
 export function toAttendanceDTO(
@@ -89,5 +114,9 @@ export function toAttendanceDTO(
     status: record.status,
     lateByMin: record.lateByMin ?? 0,
     shift: record.shift ?? null,
+    inPlace: (record.inPlace as ShiftPlace) ?? null,
+    inDistanceM: record.inDistanceM ?? null,
+    inReason: (record.inReason as AwayReason) ?? null,
+    inNote: record.inNote ?? null,
   }
 }

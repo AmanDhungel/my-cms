@@ -17,6 +17,7 @@ import {
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
 import { getWorkspace } from "@/lib/workspace"
+import { toBusinessDTO } from "@/models/business"
 import { WorkRequest, toRequestDTO } from "@/models/request"
 import { Task, toTaskDTO } from "@/models/task"
 import { User } from "@/models/user"
@@ -27,15 +28,22 @@ export default async function DashboardPage() {
   const session = await auth()
   const user = session!.user
 
-  if (user.role === "employee") {
-    await connectToDatabase()
-    const me = await User.findById(user.id).select("shift")
-    return <EmployeeHome name={user.name ?? ""} shift={me?.shift ?? null} />
-  }
-
   await connectToDatabase()
 
   const business = await getWorkspace(user.businessId)
+
+  if (user.role === "employee") {
+    const me = await User.findById(user.id).select("shift")
+    return (
+      <EmployeeHome
+        name={user.name ?? ""}
+        shift={me?.shift ?? null}
+        // Plain object, not the subdocument — this crosses to the client.
+        office={toBusinessDTO(business).office}
+      />
+    )
+  }
+
   const { start, end } = dayRangeInZone(
     dayKeyInZone(new Date(), business.timeZone),
     business.timeZone

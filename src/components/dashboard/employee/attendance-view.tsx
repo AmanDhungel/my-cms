@@ -11,6 +11,7 @@ import {
 } from "@/components/dashboard/employee/screen"
 import { CalendarSkeleton } from "@/components/dashboard/skeletons"
 import { Skeleton } from "@/components/ui/skeleton"
+import { describeStartPlace } from "@/lib/office"
 import { useAttendance } from "@/lib/queries"
 import { formatMinutes } from "@/lib/time"
 import type { AttendanceDTO } from "@/models/attendance"
@@ -95,7 +96,16 @@ export function AttendanceView() {
                 return (
                   <span
                     key={dayKey}
-                    title={record ? describe(record, data.timeZone) : undefined}
+                    title={
+                      record
+                        ? [
+                            describe(record, data.timeZone),
+                            describeStartPlace(record),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
+                        : undefined
+                    }
                     className={cn(
                       "flex aspect-square items-center justify-center rounded-md border text-[12.5px] font-medium",
                       record
@@ -147,6 +157,12 @@ export function AttendanceView() {
                       <span className="text-n-500 text-[12px]">
                         {describe(day, data.timeZone)}
                       </span>
+                      {day.inPlace && day.inPlace !== "office" ? (
+                        <span className="text-n-400 text-[11.5px]">
+                          {describeStartPlace(day)}
+                          {day.inNote ? ` — ${day.inNote}` : ""}
+                        </span>
+                      ) : null}
                     </span>
                     <span
                       className={cn(

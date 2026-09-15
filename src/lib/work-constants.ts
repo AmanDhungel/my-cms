@@ -123,3 +123,29 @@ export type PaymentDirection = (typeof PAYMENT_DIRECTIONS)[number]
 /** How it moved. A cheque or a transfer usually carries a reference. */
 export const PAYMENT_METHODS = ["cash", "cheque", "bank", "online"] as const
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
+
+/**
+ * How far from the office a shift may be opened without explanation.
+ * A city GPS fix is easily tens of metres out, so there are two rings: inside
+ * the first you are at the office, inside the second you are near enough that
+ * nobody should be made to justify it, and beyond it a reason is required.
+ */
+export const OFFICE_RADIUS_M = 100
+export const AWAY_RADIUS_M = 300
+
+/** Where a shift was opened from, once measured against the office. */
+export const SHIFT_PLACES = ["office", "near", "away"] as const
+export type ShiftPlace = (typeof SHIFT_PLACES)[number]
+
+/** Why someone is starting their day somewhere other than the office. */
+export const AWAY_REASONS = [
+  "wfh",
+  "site_visit",
+  "client_meeting",
+  "field_work",
+  "delivery",
+  "travel",
+  "training",
+  "other",
+] as const
+export type AwayReason = (typeof AWAY_REASONS)[number]

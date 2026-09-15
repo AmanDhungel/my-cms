@@ -10,10 +10,14 @@ import {
   EmployeeScreen,
   PhoneEmpty,
 } from "@/components/dashboard/employee/screen"
+import { ShiftStartDialog } from "@/components/dashboard/employee/shift-start-dialog"
 import { EmployeeTaskCard } from "@/components/dashboard/employee/task-card"
 import { CardsSkeleton } from "@/components/dashboard/skeletons"
 import { Skeleton } from "@/components/ui/skeleton"
+import { getCurrentFix, LocationError } from "@/lib/geolocation"
+import { placeAgainstOffice, type Office } from "@/lib/office"
 import { formatMinutes } from "@/lib/time"
+import type { AwayReason } from "@/lib/work-constants"
 import {
   reportMutationError,
   useAttendance,
@@ -28,8 +32,24 @@ const SCOPES: { value: TaskScope; label: string }[] = [
   { value: "done", label: "Done" },
 ]
 
-export function EmployeeHome({ name, shift }: { name: string; shift: string | null }) {
+export function EmployeeHome({
+  name,
+  shift,
+  office,
+}: {
+  name: string
+  shift: string | null
+  /** Absent when the workspace has never pinned one; then nothing is asked. */
+  office: Office | null
+}) {
   const [scope, setScope] = React.useState<TaskScope>("today")
+  const [asking, setAsking] = React.useState<{
+    distanceM: number
+    lat: number
+    lng: number
+    accuracyM: number
+  } | null>(null)
+  const [locating, setLocating] = React.useState(false)
 
   const attendance = useAttendance()
   const tasks = useTasks(scope)
@@ -43,12 +63,60 @@ export function EmployeeHome({ name, shift }: { name: string; shift: string | nu
   const list = tasks.data?.tasks ?? []
   const checkedIn = list.filter((task) => task.myCheckedInAt).length
 
-  function press(action: "start" | "end") {
-    if (shiftAction.isPending) return
-    shiftAction.mutate(action, {
-      onSuccess: () =>
-        toast.success(action === "start" ? "Shift started" : "Shift ended"),
+  function send(body: Parameters<typeof shiftAction.mutate>[0]) {
+    shiftAction.mutate(body, {
+      onSuccess: () => {
+        setAsking(null)
+        toast.success(body.action === "start" ? "Shift started" : "Shift ended")
+      },
       onError: (error) => reportMutationError(error),
+    })
+  }
+
+  /**
+   * Ending a shift asks nothing. Starting one does, but only where the
+   * workspace has an office to measure against — and only when the distance
+   * actually puts them outside its outer ring.
+   */
+  async function press(action: "start" | "end") {
+    if (shiftAction.isPending || locating) return
+
+    if (action === "end" || !office) {
+      send({ action })
+      return
+    }
+
+    setLocating(true)
+    try {
+      const fix = await getCurrentFix()
+      const where = placeAgainstOffice(office, fix)
+
+      if (where.needsReason) {
+        setAsking({ ...fix, distanceM: where.distanceM })
+        return
+      }
+
+      send({ action, lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM })
+    } catch (error) {
+      toast.error(
+        error instanceof LocationError
+          ? error.message
+          : "Could not read your location."
+      )
+    } finally {
+      setLocating(false)
+    }
+  }
+
+  function confirmAway(reason: AwayReason, note: string) {
+    if (!asking) return
+    send({
+      action: "start",
+      lat: asking.lat,
+      lng: asking.lng,
+      accuracyM: asking.accuracyM,
+      reason,
+      note: note || undefined,
     })
   }
 
@@ -105,10 +173,18 @@ export function EmployeeHome({ name, shift }: { name: string; shift: string | nu
         <button
           type="button"
           onClick={() => press("start")}
-          disabled={shiftAction.isPending || Boolean(today?.inSource === "manual")}
+          disabled={
+            shiftAction.isPending ||
+            locating ||
+            Boolean(today?.inSource === "manual")
+          }
           className="bg-p-500 rounded-md px-4 py-2.5 text-[13.5px] font-semibold text-white transition-[filter] hover:brightness-[1.06] disabled:opacity-50"
         >
-          {shiftAction.isPending ? "Saving…" : "Start shift"}
+          {locating
+            ? "Finding you…"
+            : shiftAction.isPending
+              ? "Saving…"
+              : "Start shift"}
         </button>
         <button
           type="button"
@@ -123,7 +199,9 @@ export function EmployeeHome({ name, shift }: { name: string; shift: string | nu
           End shift
         </button>
         <span className="text-n-400 self-center text-[12px]">
-          Checking in to a task also opens your day.
+          {office
+            ? "Started away from the office, your day asks why."
+            : "Checking in to a task also opens your day."}
         </span>
       </div>
 
@@ -167,6 +245,15 @@ export function EmployeeHome({ name, shift }: { name: string; shift: string | nu
           ))}
         </div>
       )}
+
+      <ShiftStartDialog
+        open={Boolean(asking)}
+        distanceM={asking?.distanceM ?? 0}
+        officeLabel={office?.label ?? null}
+        pending={shiftAction.isPending}
+        onClose={() => setAsking(null)}
+        onConfirm={confirmAway}
+      />
     </EmployeeScreen>
   )
 }

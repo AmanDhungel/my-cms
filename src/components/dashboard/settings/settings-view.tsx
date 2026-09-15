@@ -2,12 +2,16 @@
 
 import { useRouter } from "next/navigation"
 import { useMutation } from "@tanstack/react-query"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 import { cn } from "cn"
 
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
+import {
+  OfficePicker,
+  type OfficeValue,
+} from "@/components/dashboard/office-picker"
 import { initialsOf } from "@/components/dashboard/viewer"
 import {
   DashboardMain,
@@ -43,6 +47,8 @@ export function SettingsView({
     handleSubmit,
     reset,
     setError,
+    setValue,
+    control,
     formState: { errors, isDirty },
   } = useForm<BusinessSettingsValues>({
     resolver: zodResolver(businessSettingsSchema),
@@ -52,8 +58,19 @@ export function SettingsView({
       timeZone: business.timeZone,
       pan: business.pan ?? "",
       vatRate: business.vatRate,
+      office: business.office
+        ? {
+            lat: business.office.lat,
+            lng: business.office.lng,
+            label: business.office.label ?? undefined,
+            radiusM: business.office.radiusM,
+            awayRadiusM: business.office.awayRadiusM,
+          }
+        : null,
     },
   })
+
+  const office = useWatch({ control, name: "office" })
 
   const mutation = useMutation({
     mutationFn: (values: BusinessSettingsValues) =>
@@ -68,6 +85,15 @@ export function SettingsView({
         timeZone: saved.timeZone,
         pan: saved.pan ?? "",
         vatRate: saved.vatRate,
+        office: saved.office
+          ? {
+              lat: saved.office.lat,
+              lng: saved.office.lng,
+              label: saved.office.label ?? undefined,
+              radiusM: saved.office.radiusM,
+              awayRadiusM: saved.office.awayRadiusM,
+            }
+          : null,
       })
       toast.success("Workspace updated")
       router.refresh()
@@ -194,6 +220,28 @@ export function SettingsView({
               </span>
               <FieldError message={errors.timeZone?.message} />
             </label>
+          </div>
+        </Panel>
+
+        <Panel className="mt-[22px] grid gap-6 p-[22px] lg:grid-cols-[210px_1fr]">
+          <div className="flex flex-col gap-1.5">
+            <h2 className="font-heading m-0 text-base font-semibold">
+              The office
+            </h2>
+            <p className="text-n-500 m-0 text-[13px] leading-[1.55]">
+              Where the day is expected to start. Shifts opened away from it
+              have to say why.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            <OfficePicker
+              value={(office as OfficeValue | null) ?? null}
+              onChange={(next) =>
+                setValue("office", next, { shouldDirty: true })
+              }
+            />
+            <FieldError message={errors.office?.awayRadiusM?.message} />
           </div>
         </Panel>
 

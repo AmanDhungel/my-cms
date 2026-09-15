@@ -8,6 +8,38 @@ import {
 } from "mongoose"
 
 import { CREW_SIZES } from "@/lib/validations/auth"
+import { AWAY_RADIUS_M, OFFICE_RADIUS_M } from "@/lib/work-constants"
+
+/**
+ * Where the office is, and how far from it a shift may be opened. Absent on
+ * a workspace that has not pinned one — then a shift can be started from
+ * anywhere, which is how every workspace behaved before this existed.
+ */
+const officeSchema = new Schema(
+  {
+    lat: { type: Number, required: true, min: -90, max: 90 },
+    lng: { type: Number, required: true, min: -180, max: 180 },
+    /** What the place is called, for the settings page to show back. */
+    label: { type: String, trim: true, maxlength: 200 },
+    /** Inside this, someone is at the office. */
+    radiusM: {
+      type: Number,
+      required: true,
+      min: 20,
+      max: 5000,
+      default: OFFICE_RADIUS_M,
+    },
+    /** Beyond this, starting a shift has to come with a reason. */
+    awayRadiusM: {
+      type: Number,
+      required: true,
+      min: 20,
+      max: 20000,
+      default: AWAY_RADIUS_M,
+    },
+  },
+  { _id: false }
+)
 
 const businessSchema = new Schema(
   {
@@ -18,6 +50,7 @@ const businessSchema = new Schema(
      * zone: a UTC host would otherwise roll the day over mid-afternoon.
      */
     timeZone: { type: String, required: true, default: "Asia/Kathmandu" },
+    office: { type: officeSchema },
     /** PAN / VAT registration number, printed on tax invoices. */
     pan: { type: String, trim: true, maxlength: 30 },
     /** Percent added to a bill that has VAT switched on. Nepal is 13%. */
@@ -53,6 +86,13 @@ export type BusinessDTO = {
   name: string
   crewSize: string
   timeZone: string
+  office: {
+    lat: number
+    lng: number
+    label: string | null
+    radiusM: number
+    awayRadiusM: number
+  } | null
   pan: string | null
   vatRate: number
   blockedAt: string | null
@@ -67,6 +107,15 @@ export function toBusinessDTO(
     name: business.name,
     crewSize: business.crewSize,
     timeZone: business.timeZone,
+    office: business.office
+      ? {
+          lat: business.office.lat,
+          lng: business.office.lng,
+          label: business.office.label ?? null,
+          radiusM: business.office.radiusM,
+          awayRadiusM: business.office.awayRadiusM,
+        }
+      : null,
     pan: business.pan ?? null,
     vatRate: business.vatRate,
     blockedAt: business.blockedAt ? business.blockedAt.toISOString() : null,

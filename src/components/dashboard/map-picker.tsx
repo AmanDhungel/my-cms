@@ -25,12 +25,15 @@ export type Pin = { lat: number; lng: number }
 export function MapPicker({
   value,
   radiusM,
+  outerRadiusM,
   onChange,
   className,
   readOnly = false,
 }: {
   value: Pin | null
   radiusM: number
+  /** A second, dashed ring. The office picker draws its away radius here. */
+  outerRadiusM?: number
   onChange: (pin: Pin) => void
   className?: string
   /** Shows the pin without the search, the button, or any way to move it. */
@@ -40,6 +43,7 @@ export function MapPicker({
   const map = React.useRef<LeafletTypes.Map | null>(null)
   const marker = React.useRef<LeafletTypes.Marker | null>(null)
   const fence = React.useRef<LeafletTypes.Circle | null>(null)
+  const outer = React.useRef<LeafletTypes.Circle | null>(null)
   const leaflet = React.useRef<typeof LeafletTypes | null>(null)
 
   const [ready, setReady] = React.useState(false)
@@ -90,7 +94,19 @@ export function MapPicker({
         fillOpacity: 0.12,
       })
 
+      // Dashed, so the two rings can never be read as one shape. Added
+      // under the fence so the fill of the inner one still shows.
+      const ring = L.circle([start.lat, start.lng], {
+        radius: outerRadiusM ?? radiusM,
+        color: "#0e7c7b",
+        weight: 1.25,
+        dashArray: "5 5",
+        fillColor: "#0e7c7b",
+        fillOpacity: 0.05,
+      })
+
       if (value) {
+        if (outerRadiusM) ring.addTo(instance)
         pin.addTo(instance)
         circle.addTo(instance)
       }
@@ -98,6 +114,8 @@ export function MapPicker({
       const place = (lat: number, lng: number) => {
         pin.setLatLng([lat, lng])
         circle.setLatLng([lat, lng])
+        ring.setLatLng([lat, lng])
+        if (outerRadiusM && !instance.hasLayer(ring)) ring.addTo(instance)
         if (!instance.hasLayer(pin)) pin.addTo(instance)
         if (!instance.hasLayer(circle)) circle.addTo(instance)
         emit.current({ lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) })
@@ -116,6 +134,7 @@ export function MapPicker({
       map.current = instance
       marker.current = pin
       fence.current = circle
+      outer.current = ring
 
       // The dialog animates in, so the container has no size on first paint.
       setTimeout(() => instance.invalidateSize(), 60)
@@ -128,21 +147,37 @@ export function MapPicker({
       map.current = null
       marker.current = null
       fence.current = null
+      outer.current = null
     }
     // Built once; later prop changes are applied by the effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Keep the drawn fence in step with the radius field.
+  // Keep the drawn rings in step with the radius fields.
   React.useEffect(() => {
     fence.current?.setRadius(radiusM)
   }, [radiusM])
+
+  React.useEffect(() => {
+    const map_ = map.current
+    const ring = outer.current
+    if (!map_ || !ring) return
+
+    if (!outerRadiusM) {
+      if (map_.hasLayer(ring)) ring.remove()
+      return
+    }
+
+    ring.setRadius(outerRadiusM)
+    if (value && !map_.hasLayer(ring)) ring.addTo(map_)
+  }, [outerRadiusM, value])
 
   // Follow a value set from outside (the "use my location" button).
   React.useEffect(() => {
     if (!value || !map.current || !marker.current || !fence.current) return
     marker.current.setLatLng([value.lat, value.lng])
     fence.current.setLatLng([value.lat, value.lng])
+    outer.current?.setLatLng([value.lat, value.lng])
     if (!map.current.hasLayer(marker.current)) marker.current.addTo(map.current)
     if (!map.current.hasLayer(fence.current)) fence.current.addTo(map.current)
   }, [value])
@@ -204,6 +239,7 @@ export function MapPicker({
                 {value.lat.toFixed(5)}, {value.lng.toFixed(5)}
               </span>{" "}
               · fence {formatDistance(radiusM)}
+              {outerRadiusM ? <> · asks past {formatDistance(outerRadiusM)}</> : null}
             </>
           ) : (
             "Search for the place, or tap the map to drop the marker."

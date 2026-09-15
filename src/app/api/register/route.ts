@@ -120,6 +120,8 @@ export async function POST(request: Request) {
               _id: businessId,
               name: values.business,
               crewSize: values.crewSize,
+              // The rings take their defaults; settings tunes them later.
+              office: values.office,
               owner: ownerId,
             },
           ],

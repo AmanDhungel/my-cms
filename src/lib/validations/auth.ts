@@ -2,6 +2,38 @@ import { z } from "zod"
 
 import { isValidTimeZone } from "@/lib/time"
 
+/**
+ * Where the office is. Optional everywhere: a workspace without one lets a
+ * shift start from anywhere, which is what every workspace did before.
+ *
+ * Sign-up asks for the pin alone; the two rings take the model's defaults and
+ * are tuned later in settings. Neither schema gives a field a zod default —
+ * that would split its input and output types, which react-hook-form rejects.
+ */
+const officePinSchema = z.object({
+  lat: z.coerce.number<number>().min(-90).max(90),
+  lng: z.coerce.number<number>().min(-180).max(180),
+  label: z.string().trim().max(200).optional(),
+})
+
+const officeSchema = officePinSchema
+  .extend({
+    radiusM: z.coerce
+      .number<number>()
+      .int()
+      .min(20, "Use at least 20 m")
+      .max(5000, "5 km is the largest office fence"),
+    awayRadiusM: z.coerce
+      .number<number>()
+      .int()
+      .min(20, "Use at least 20 m")
+      .max(20000, "20 km is the furthest this goes"),
+  })
+  .refine((values) => values.awayRadiusM >= values.radiusM, {
+    message: "The outer ring has to be at least as wide as the office one",
+    path: ["awayRadiusM"],
+  })
+
 /** What the Credentials provider accepts. Kept loose — the DB decides. */
 export const credentialsSchema = z.object({
   email: z.email(),
@@ -79,6 +111,8 @@ export const signupSchema = z.object({
   email: z.email("Enter a valid work email"),
   password: z.string().min(10, "Use at least 10 characters"),
   crewSize: z.enum(CREW_SIZES),
+  /** Pinned on the map during sign-up, or left for settings later. */
+  office: officePinSchema.optional(),
   terms: z
     .boolean()
     .refine((accepted) => accepted, "Accept the terms to continue"),
@@ -127,6 +161,8 @@ export const businessSettingsSchema = z.object({
     .number<number>()
     .min(0, "A rate cannot be negative")
     .max(100, "A rate over 100% is not a rate"),
+  /** Null clears it, which puts shift starts back to unrestricted. */
+  office: officeSchema.nullish(),
 })
 
 export type BusinessSettingsValues = z.infer<typeof businessSettingsSchema>

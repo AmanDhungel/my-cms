@@ -11,6 +11,8 @@ import {
   LATE_GRACE_MIN,
   type AttendanceDocument,
   type AttendanceSource,
+  type AwayReason,
+  type ShiftPlace,
 } from "@/models/attendance"
 
 type Mark = {
@@ -20,6 +22,20 @@ type Mark = {
   source: AttendanceSource
   shift?: string | null
   timeZone: string
+  /**
+   * Where the day was opened from, when the workspace has an office to
+   * measure against. Only ever sent by Start shift; a task check-in that
+   * opens the day carries none of it.
+   */
+  place?: {
+    place: ShiftPlace
+    distanceM: number
+    lat: number
+    lng: number
+    accuracyM?: number
+    reason?: AwayReason
+    note?: string
+  }
 }
 
 /**
@@ -37,6 +53,7 @@ export async function markArrival({
   source,
   shift,
   timeZone,
+  place,
 }: Mark) {
   const day = dayKeyInZone(at, timeZone)
   const record = await ensureDay({ businessId, userId, day, shift })
@@ -65,6 +82,19 @@ export async function markArrival({
         inAt: at,
         inSource: source,
         lateByMin: lateBy,
+        // Written with the arrival it belongs to, under the same guard, so a
+        // losing race can't leave a distance from one press on another's time.
+        ...(place
+          ? {
+              inPlace: place.place,
+              inDistanceM: place.distanceM,
+              inLat: place.lat,
+              inLng: place.lng,
+              inAccuracyM: place.accuracyM,
+              inReason: place.reason,
+              inNote: place.note,
+            }
+          : {}),
         // An approved leave day keeps its status; nothing else overrides it.
         ...(record.status === "leave" ? {} : { status: lateBy > 0 ? "late" : "present" }),
       },
