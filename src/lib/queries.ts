@@ -19,6 +19,7 @@ import type { BillDTO } from "@/models/bill"
 import type { CustomerDTO } from "@/models/customer"
 import type { ItemDTO } from "@/models/inventory-item"
 import type { PaymentDTO } from "@/models/payment"
+import type { ActivityDTO } from "@/models/activity"
 import type { NotificationDTO } from "@/models/notification"
 import type { ProjectDTO } from "@/models/project"
 import type { RequestDTO } from "@/models/request"
@@ -40,10 +41,14 @@ export type TaskScope =
 
 /** One place for every key, so invalidation can't drift from the fetches. */
 export const keys = {
-  tasks: (scope: TaskScope) => ["tasks", scope] as const,
+  tasks: (scope: TaskScope, projectId?: string) =>
+    ["tasks", scope, projectId ?? "all"] as const,
   task: (id: string) => ["task", id] as const,
   attendance: (month?: string, userId?: string) =>
     ["attendance", month ?? "current", userId ?? "me"] as const,
+  crewAttendance: (day?: string) => ["attendance", "crew", day ?? "today"] as const,
+  visits: (day?: string) => ["attendance", "visits", day ?? "today"] as const,
+  activity: (day?: string) => ["activity", day ?? "today"] as const,
   requests: (status?: RequestStatus) => ["requests", status ?? "all"] as const,
   people: (includeRemoved?: boolean) =>
     ["people", includeRemoved ? "all" : "active"] as const,
@@ -78,11 +83,13 @@ type CheckInResponse = {
   attendance: AttendanceDTO
 }
 
-export function useTasks(scope: TaskScope) {
+export function useTasks(scope: TaskScope, projectId?: string) {
   return useQuery({
-    queryKey: keys.tasks(scope),
+    queryKey: keys.tasks(scope, projectId),
     queryFn: () =>
-      apiFetch<TasksResponse>(`/api/tasks${buildQueryString({ scope })}`),
+      apiFetch<TasksResponse>(
+        `/api/tasks${buildQueryString({ scope, projectId })}`
+      ),
   })
 }
 
@@ -764,4 +771,98 @@ export function useDeleteCustomer(id: string) {
 
 function invalidateCustomers(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["customers"] })
+}
+
+export type CrewAttendanceRow = {
+  user: {
+    id: string
+    name: string
+    role: string
+    shift: string | null
+    removed: boolean
+  }
+  attendance: AttendanceDTO | null
+}
+
+type CrewAttendanceResponse = {
+  day: string
+  today: string
+  timeZone: string
+  rows: CrewAttendanceRow[]
+  summary: {
+    crew: number
+    present: number
+    absent: number
+    late: number
+    leave: number
+    away: number
+    stillIn: number
+  }
+}
+
+export type Visit = {
+  id: string
+  type: "in" | "out"
+  at: string
+  user: { id: string; name: string }
+  task: { id: string; title: string; site: string }
+  lat: number
+  lng: number
+  accuracyM: number | null
+  distanceM: number
+  insideFence: boolean
+  reason: string | null
+}
+
+type VisitsResponse = {
+  day: string
+  today: string
+  timeZone: string
+  visits: Visit[]
+  summary: {
+    total: number
+    arrivals: number
+    departures: number
+    outside: number
+    people: number
+  }
+}
+
+type ActivityResponse = {
+  day: string
+  today: string
+  timeZone: string
+  entries: ActivityDTO[]
+  summary: { total: number; people: number }
+}
+
+/** The whole crew's day. Owners and supervisors only — the API enforces it. */
+export function useCrewAttendance(day?: string) {
+  return useQuery({
+    queryKey: keys.crewAttendance(day),
+    queryFn: () =>
+      apiFetch<CrewAttendanceResponse>(
+        `/api/attendance/crew${buildQueryString({ day })}`
+      ),
+  })
+}
+
+/** Arrivals at and departures from tasks, for the same day. */
+export function useVisits(day?: string) {
+  return useQuery({
+    queryKey: keys.visits(day),
+    queryFn: () =>
+      apiFetch<VisitsResponse>(
+        `/api/attendance/visits${buildQueryString({ day })}`
+      ),
+  })
+}
+
+/** The audit trail for one day. Owner only. */
+export function useActivity(day?: string) {
+  return useQuery({
+    queryKey: keys.activity(day),
+    queryFn: () =>
+      apiFetch<ActivityResponse>(`/api/activity${buildQueryString({ day })}`),
+  })
 }

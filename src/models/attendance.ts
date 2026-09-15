@@ -70,6 +70,17 @@ const attendanceSchema = new Schema(
     inReason: { type: String, enum: AWAY_REASONS },
     inNote: { type: String, trim: true, maxlength: 500 },
 
+    /**
+     * Where the day was closed from. Recorded best-effort: ending a shift is
+     * never refused and never asks for a reason, so a phone that will not give
+     * a fix simply leaves these empty.
+     */
+    outPlace: { type: String, enum: SHIFT_PLACES },
+    outDistanceM: { type: Number, min: 0 },
+    outLat: { type: Number, min: -90, max: 90 },
+    outLng: { type: Number, min: -180, max: 180 },
+    outAccuracyM: { type: Number, min: 0 },
+
     /** Snapshot, so editing someone's shift doesn't rewrite their history. */
     shift: { type: String, trim: true, maxlength: 32 },
   },
@@ -97,8 +108,16 @@ export type AttendanceDTO = {
   shift: string | null
   inPlace: ShiftPlace | null
   inDistanceM: number | null
+  inLat: number | null
+  inLng: number | null
+  inAccuracyM: number | null
   inReason: AwayReason | null
   inNote: string | null
+  outPlace: ShiftPlace | null
+  outDistanceM: number | null
+  outLat: number | null
+  outLng: number | null
+  outAccuracyM: number | null
 }
 
 export function toAttendanceDTO(
@@ -116,7 +135,15 @@ export function toAttendanceDTO(
     shift: record.shift ?? null,
     inPlace: (record.inPlace as ShiftPlace) ?? null,
     inDistanceM: record.inDistanceM ?? null,
+    inLat: record.inLat ?? null,
+    inLng: record.inLng ?? null,
+    inAccuracyM: record.inAccuracyM ?? null,
     inReason: (record.inReason as AwayReason) ?? null,
     inNote: record.inNote ?? null,
+    outPlace: (record.outPlace as ShiftPlace) ?? null,
+    outDistanceM: record.outDistanceM ?? null,
+    outLat: record.outLat ?? null,
+    outLng: record.outLng ?? null,
+    outAccuracyM: record.outAccuracyM ?? null,
   }
 }

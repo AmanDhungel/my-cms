@@ -1,5 +1,6 @@
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
+import { logActivity } from "@/lib/activity"
 import { connectToDatabase } from "@/lib/mongodb"
 import { composeShift, memberUpdateSchema } from "@/lib/validations/auth"
 import { getWorkspace } from "@/lib/workspace"
@@ -48,6 +49,18 @@ export async function PATCH(
         : composeShift(values.shiftStart, values.shiftEnd)
 
     await member.save()
+
+    await logActivity({
+      businessId: viewer.businessId,
+      action: "member_updated",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: member.name,
+      detail: `${member.role}${member.shift ? ` · shift ${member.shift}` : ""}`,
+      targetKind: "member",
+      targetId: member._id,
+      href: "/dashboard/people",
+    })
 
     return ok({ member: toUserDTO(member) })
   } catch (error) {
@@ -112,6 +125,20 @@ export async function DELETE(
       { assignees: member._id, status: "pending" },
       { $set: { status: "cancelled" } }
     )
+
+    await logActivity({
+      businessId: viewer.businessId,
+      action: "member_removed",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: member.name,
+      detail: cancelled.modifiedCount
+        ? `${cancelled.modifiedCount} unstarted task${cancelled.modifiedCount === 1 ? "" : "s"} cancelled`
+        : undefined,
+      targetKind: "member",
+      targetId: member._id,
+      href: "/dashboard/people",
+    })
 
     return ok({
       member: toUserDTO(member),

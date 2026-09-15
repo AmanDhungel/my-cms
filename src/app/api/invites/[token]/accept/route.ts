@@ -4,6 +4,7 @@ import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { findPendingInvite } from "@/lib/auth/invites"
 import { hashPassword } from "@/lib/auth/password"
 import { connectToDatabase } from "@/lib/mongodb"
+import { logActivity } from "@/lib/activity"
 import { notifySupervisors } from "@/lib/notify"
 import { acceptInviteSchema } from "@/lib/validations/auth"
 import { Invite } from "@/models/invite"
@@ -85,6 +86,19 @@ export async function POST(
     }
 
     const user = await User.findById(userId).orFail()
+
+    // The new member is their own actor here — nobody else pressed anything.
+    await logActivity({
+      businessId: invite.businessId,
+      action: "member_joined",
+      actorId: user._id,
+      actorName: user.name,
+      subject: user.name,
+      detail: `${invite.role}${invite.shift ? ` · shift ${invite.shift}` : ""}`,
+      targetKind: "member",
+      targetId: user._id,
+      href: "/dashboard/people",
+    })
 
     await notifySupervisors({
       businessId: invite.businessId,

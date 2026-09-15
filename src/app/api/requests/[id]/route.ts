@@ -3,6 +3,7 @@ import type { HydratedDocument } from "mongoose"
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
+import { logActivity } from "@/lib/activity"
 import { notifyUser } from "@/lib/notify"
 import { requestDecisionSchema } from "@/lib/validations/work"
 import { Attendance } from "@/models/attendance"
@@ -57,6 +58,20 @@ export async function PATCH(
     }
 
     await decided.populate("user", "name")
+
+    await logActivity({
+      businessId: viewer.businessId,
+      action: "request_decided",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: `${(decided.user as { name?: string })?.name ?? "someone"}’s ${decided.kind} request`,
+      detail: values.decisionNote,
+      from: "pending",
+      to: values.status,
+      targetKind: "request",
+      targetId: decided._id,
+      href: "/dashboard/approvals",
+    })
 
     await notifyUser({
       businessId: viewer.businessId,

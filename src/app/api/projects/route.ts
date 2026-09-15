@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server"
 
 import { handleApiError, ok } from "@/lib/api-response"
 import { requireRole, requireUser } from "@/lib/auth/guards"
+import { logActivity } from "@/lib/activity"
 import { connectToDatabase } from "@/lib/mongodb"
 import { projectSchema } from "@/lib/validations/work"
 import { Project, toProjectDTO } from "@/models/project"
@@ -76,6 +77,18 @@ export async function POST(request: Request) {
       site: values.site,
       createdBy: viewer.id,
       status: "active",
+    })
+
+    await logActivity({
+      businessId: viewer.businessId,
+      action: "project_created",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: project.name,
+      detail: values.site ?? undefined,
+      targetKind: "project",
+      targetId: project._id,
+      href: `/dashboard/projects/${String(project._id)}`,
     })
 
     return ok({ project: toProjectDTO(project) }, 201)

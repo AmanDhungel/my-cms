@@ -39,6 +39,7 @@ export function TaskDialog({
   onClose,
   onSaved,
   task,
+  projectId,
 }: {
   open: boolean
   onClose: () => void
@@ -48,6 +49,8 @@ export function TaskDialog({
    */
   onSaved?: () => void
   task?: TaskDTO
+  /** Preselects the project when opened from inside one. */
+  projectId?: string
 }) {
   const editing = Boolean(task)
 
@@ -67,7 +70,14 @@ export function TaskDialog({
         </DialogHeader>
         {/* Mounted only while open, so each visit starts from the task as it
             stands rather than from whatever was typed last time. */}
-        {open ? <Body onClose={onClose} onSaved={onSaved} task={task} /> : null}
+        {open ? (
+          <Body
+            onClose={onClose}
+            onSaved={onSaved}
+            task={task}
+            projectId={projectId}
+          />
+        ) : null}
       </DialogContent>
     </Dialog>
   )
@@ -77,12 +87,14 @@ function Body({
   onClose,
   onSaved,
   task,
+  projectId,
 }: {
   onClose: () => void
   onSaved?: () => void
   task?: TaskDTO
+  projectId?: string
 }) {
-  const [form, setForm] = React.useState(() => blank(task))
+  const [form, setForm] = React.useState(() => blank(task, projectId))
   const [pin, setPin] = React.useState<Pin | null>(
     task ? { lat: task.lat, lng: task.lng } : null
   )
@@ -410,11 +422,11 @@ function Body({
   )
 }
 
-function blank(task?: TaskDTO) {
+function blank(task?: TaskDTO, fallbackProjectId?: string) {
   return {
     title: task?.title ?? "",
     description: task?.description ?? "",
-    projectId: task?.project?.id ?? "",
+    projectId: task?.project?.id ?? fallbackProjectId ?? "",
     site: task?.site ?? "",
     radiusM: String(task?.radiusM ?? DEFAULT_RADIUS_M),
     startAt: toLocal(task?.startAt),

@@ -1,5 +1,7 @@
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
+import { logActivity } from "@/lib/activity"
+import { prettyState } from "@/lib/activity-labels"
 import { markDeparture } from "@/lib/attendance"
 import { notifySupervisors, notifyUser } from "@/lib/notify"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -61,6 +63,8 @@ export async function PATCH(
       throw new HttpError(409, `That task is already ${label(values.status)}`)
     }
 
+    const cameFrom = task.status
+
     task.status = values.status
     task.blockedReason =
       values.status === "blocked" ? values.blockedReason : undefined
@@ -100,6 +104,20 @@ export async function PATCH(
       { path: "assignees", select: "name" },
       { path: "project", select: "name" },
     ])
+
+    await logActivity({
+      businessId: task.business,
+      action: "task_status",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: task.title,
+      detail: values.status === "blocked" ? values.blockedReason : task.site,
+      from: prettyState(cameFrom),
+      to: prettyState(values.status),
+      targetKind: "task",
+      targetId: task._id,
+      href: "/dashboard/tasks",
+    })
 
     await announce(task, values, viewer, isReviewer)
 

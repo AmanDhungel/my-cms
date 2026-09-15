@@ -1,5 +1,6 @@
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole, requireUser } from "@/lib/auth/guards"
+import { logActivity } from "@/lib/activity"
 import { notifyUser } from "@/lib/notify"
 import { taskSchema } from "@/lib/validations/work"
 import { loadCrew, loadTaskForViewer } from "@/lib/tasks"
@@ -105,6 +106,18 @@ export async function PATCH(
       { path: "assignees", select: "name" },
       { path: "project", select: "name" },
     ])
+
+    await logActivity({
+      businessId: viewer.businessId,
+      action: "task_updated",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: values.title,
+      detail: `${project.name} · ${values.site}`,
+      targetKind: "task",
+      targetId: task._id,
+      href: "/dashboard/tasks",
+    })
 
     // Only the people newly put on it are told; the rest already knew.
     await Promise.all(

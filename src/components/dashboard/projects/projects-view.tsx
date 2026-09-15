@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { toast } from "sonner"
 import { cn } from "cn"
 
@@ -186,9 +187,12 @@ function ProjectCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
-          <span className="font-heading text-[16px] font-semibold">
+          <Link
+            href={`/dashboard/projects/${project.id}`}
+            className="font-heading hover:text-p-600 text-[16px] font-semibold"
+          >
             {project.name}
-          </span>
+          </Link>
           {project.site ? (
             <span className="text-n-500 text-[12.5px]">{project.site}</span>
           ) : null}
@@ -220,6 +224,13 @@ function ProjectCard({
         />
         <Count label="DONE" value={project.tasks.done} />
       </div>
+
+      <Link
+        href={`/dashboard/projects/${project.id}`}
+        className="text-p-600 hover:text-p-700 w-fit text-[13px] font-semibold"
+      >
+        Open the board →
+      </Link>
 
       {canManage ? (
         <div className="flex flex-wrap gap-2">

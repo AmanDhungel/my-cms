@@ -149,3 +149,32 @@ export const AWAY_REASONS = [
   "other",
 ] as const
 export type AwayReason = (typeof AWAY_REASONS)[number]
+
+/**
+ * Everything the activity log records. A notification is addressed to someone
+ * and deliberately skips the actor; a log entry is the opposite — one row per
+ * event, including the owner's own, so the day can be read back as it happened.
+ */
+export const ACTIVITY_ACTIONS = [
+  "task_created",
+  "task_updated",
+  "task_status",
+  "task_checked_in",
+  "task_checked_out",
+  "project_created",
+  "project_updated",
+  "project_archived",
+  "project_reopened",
+  "shift_started",
+  "shift_ended",
+  "request_raised",
+  "request_decided",
+  "member_joined",
+  "member_updated",
+  "member_removed",
+] as const
+export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number]
+
+/** What an entry points at, so the log can link back to it. */
+export const ACTIVITY_TARGETS = ["task", "project", "request", "member"] as const
+export type ActivityTarget = (typeof ACTIVITY_TARGETS)[number]

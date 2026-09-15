@@ -8,6 +8,7 @@ import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
 import { taskSchema } from "@/lib/validations/work"
 import { loadCrew } from "@/lib/tasks"
 import { getWorkspace } from "@/lib/workspace"
+import { logActivity } from "@/lib/activity"
 import { notifyUser } from "@/lib/notify"
 import { Project } from "@/models/project"
 import { Task, toTaskDTO } from "@/models/task"
@@ -134,6 +135,18 @@ export async function POST(request: Request) {
       { path: "assignees", select: "name" },
       { path: "project", select: "name" },
     ])
+
+    await logActivity({
+      businessId: viewer.businessId,
+      action: "task_created",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: values.title,
+      detail: `${project.name} · ${values.site} · ${crew.map((m) => m.name).join(", ")}`,
+      targetKind: "task",
+      targetId: task._id,
+      href: "/dashboard/tasks",
+    })
 
     // Everyone put on it hears about it, except whoever did the assigning.
     await Promise.all(

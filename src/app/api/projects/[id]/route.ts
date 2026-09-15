@@ -1,5 +1,6 @@
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
+import { logActivity } from "@/lib/activity"
 import { connectToDatabase } from "@/lib/mongodb"
 import { projectUpdateSchema } from "@/lib/validations/work"
 import { Project, toProjectDTO } from "@/models/project"
@@ -46,6 +47,22 @@ export async function PATCH(
         )
       }
 
+      await logActivity({
+        businessId: viewer.businessId,
+        action:
+          values.status === "archived" ? "project_archived" : "project_reopened",
+        actorId: viewer.id,
+        actorName: viewer.name,
+        subject: project.name,
+        detail:
+          values.status === "archived"
+            ? "Tasks nobody had started were cancelled"
+            : undefined,
+        targetKind: "project",
+        targetId: project._id,
+        href: `/dashboard/projects/${String(project._id)}`,
+      })
+
       return ok({ project: toProjectDTO(project) })
     }
 
@@ -53,6 +70,18 @@ export async function PATCH(
     project.description = values.description
     project.site = values.site
     await project.save()
+
+    await logActivity({
+      businessId: viewer.businessId,
+      action: "project_updated",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: project.name,
+      detail: project.site ?? undefined,
+      targetKind: "project",
+      targetId: project._id,
+      href: `/dashboard/projects/${String(project._id)}`,
+    })
 
     return ok({ project: toProjectDTO(project) })
   } catch (error) {

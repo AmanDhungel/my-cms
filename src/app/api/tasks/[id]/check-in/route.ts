@@ -2,6 +2,7 @@ import { Types } from "mongoose"
 
 import { HttpError, fail, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
+import { logActivity } from "@/lib/activity"
 import { markArrival } from "@/lib/attendance"
 import { distanceInMetres, formatDistance } from "@/lib/geo"
 import { clockInZone } from "@/lib/time"
@@ -118,6 +119,21 @@ export async function POST(
       { path: "assignees", select: "name" },
       { path: "project", select: "name" },
     ])
+
+    await logActivity({
+      businessId: task.business,
+      action: "task_checked_in",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: task.title,
+      detail: insideFence
+        ? `${task.site} · ${formatDistance(distanceM)} from the marker`
+        : `${task.site} · outside the area (${formatDistance(distanceM)}) — "${values.reason}"`,
+      targetKind: "task",
+      targetId: task._id,
+      href: "/dashboard/tasks",
+      at,
+    })
 
     await notifySupervisors({
       businessId: task.business,

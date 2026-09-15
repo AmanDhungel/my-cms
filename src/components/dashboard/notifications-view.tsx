@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { cn } from "cn"
 
+import { ActivityLog } from "@/components/dashboard/activity-log"
 import { CardsSkeleton } from "@/components/dashboard/skeletons"
 import {
   DashboardMain,
@@ -37,7 +38,15 @@ const DOT: Record<NotificationKind, string> = {
  * A real feed: every row was written when something actually happened —
  * a check-in, a block, a decision — rather than being derived at read time.
  */
-export function NotificationsView({ timeZone }: { timeZone: string }) {
+export function NotificationsView({
+  timeZone,
+  canSeeLogs,
+}: {
+  timeZone: string
+  /** The audit log is the owner’s view; supervisors get the feed alone. */
+  canSeeLogs: boolean
+}) {
+  const [tab, setTab] = React.useState<"feed" | "logs">("feed")
   const [unreadOnly, setUnreadOnly] = React.useState(false)
   const query = useNotifications(unreadOnly)
   const markRead = useMarkRead()
@@ -51,8 +60,13 @@ export function NotificationsView({ timeZone }: { timeZone: string }) {
       <PageHeading
         eyebrow="Account"
         title="Notifications"
-        subtitle="Check-ins, blocked work and decisions, as they happen."
+        subtitle={
+          tab === "feed"
+            ? "Check-ins, blocked work and decisions, as they happen."
+            : "Everything that changed in the workspace, and who changed it."
+        }
         actions={
+          tab === "logs" ? null : (
           <button
             type="button"
             onClick={() =>
@@ -65,8 +79,36 @@ export function NotificationsView({ timeZone }: { timeZone: string }) {
           >
             {markRead.isPending ? "Marking…" : `Mark all read${unread ? ` (${unread})` : ""}`}
           </button>
+          )
         }
       />
+
+      {canSeeLogs ? (
+        <div className="border-n-200 flex w-fit gap-0.5 rounded-md border bg-white p-0.5">
+          {([
+            ["feed", "Notifications"],
+            ["logs", "Logs"],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTab(value)}
+              aria-pressed={tab === value}
+              className={cn(
+                "rounded-[5px] px-3.5 py-2 text-[13px] transition-colors",
+                tab === value
+                  ? "bg-p-100 text-p-700 font-semibold"
+                  : "text-n-600 hover:bg-n-100 font-medium"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {tab === "logs" ? <ActivityLog timeZone={timeZone} /> : (
+        <>
 
       <div className="flex flex-wrap gap-2">
         {[
@@ -135,6 +177,8 @@ export function NotificationsView({ timeZone }: { timeZone: string }) {
             </Panel>
           </div>
         ))
+      )}
+        </>
       )}
     </DashboardMain>
   )

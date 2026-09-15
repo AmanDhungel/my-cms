@@ -13,5 +13,10 @@ export default async function NotificationsPage() {
   await connectToDatabase()
   const business = await getWorkspace(viewer.businessId)
 
-  return <NotificationsView timeZone={business.timeZone} />
+  return (
+    <NotificationsView
+      timeZone={business.timeZone}
+      canSeeLogs={viewer.role === "owner"}
+    />
+  )
 }

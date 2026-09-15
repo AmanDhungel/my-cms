@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole, requireUser } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
+import { logActivity } from "@/lib/activity"
 import { notifySupervisors } from "@/lib/notify"
 import { loadTaskForViewer } from "@/lib/tasks"
 import { requestSchemaChecked } from "@/lib/validations/work"
@@ -90,6 +91,18 @@ export async function POST(request: Request) {
     })
 
     await created.populate("user", "name")
+
+    await logActivity({
+      businessId: viewer.businessId,
+      action: "request_raised",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: `a ${values.kind} request`,
+      detail: values.message,
+      targetKind: "request",
+      targetId: created._id,
+      href: "/dashboard/approvals",
+    })
 
     await notifySupervisors({
       businessId: viewer.businessId,

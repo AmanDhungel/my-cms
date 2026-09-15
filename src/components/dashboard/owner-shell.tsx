@@ -8,6 +8,7 @@ import {
   ApprovalsIcon,
   BellIcon,
   BoxIcon,
+  ClockIcon,
   ContactIcon,
   DashboardIcon,
   PeopleIcon,
@@ -77,6 +78,11 @@ export function OwnerShell({
       label: "People",
       icon: PeopleIcon,
       count: counts.people,
+    },
+    {
+      href: "/dashboard/attendance",
+      label: "Attendance",
+      icon: ClockIcon,
     },
     {
       href: "/dashboard/approvals",

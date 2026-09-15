@@ -3,6 +3,7 @@ import { Types } from "mongoose"
 
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
+import { logActivity } from "@/lib/activity"
 import {
   autoCloseFinishedShifts,
   markArrival,
@@ -10,7 +11,12 @@ import {
 } from "@/lib/attendance"
 import { formatDistance } from "@/lib/geo"
 import { connectToDatabase } from "@/lib/mongodb"
-import { placeAgainstOffice, type ShiftPlacement } from "@/lib/office"
+import {
+  AWAY_REASON_LABELS,
+  PLACE_LABELS,
+  placeAgainstOffice,
+  type ShiftPlacement,
+} from "@/lib/office"
 import { dayKeyInZone } from "@/lib/time"
 import { attendanceActionSchema } from "@/lib/validations/work"
 import { getWorkspace } from "@/lib/workspace"
@@ -98,21 +104,28 @@ export async function POST(request: Request) {
      */
     let place: ShiftPlacement | null = null
 
-    if (action === "start" && business.office) {
-      if (values.lat === undefined || values.lng === undefined) {
+    if (business.office) {
+      // Opening the day needs a position; closing it only records one if the
+      // phone offered it. Nobody should be kept at work by a refused fix.
+      if (
+        action === "start" &&
+        (values.lat === undefined || values.lng === undefined)
+      ) {
         throw new HttpError(
           400,
           "Share your location to start your shift — your workspace records where the day opened."
         )
       }
 
-      place = placeAgainstOffice(business.office, {
-        lat: values.lat,
-        lng: values.lng,
-      })
+      if (values.lat !== undefined && values.lng !== undefined) {
+        place = placeAgainstOffice(business.office, {
+          lat: values.lat,
+          lng: values.lng,
+        })
+      }
 
       // The phone asks first; this is the half that can't be skipped.
-      if (place.needsReason && !values.reason) {
+      if (action === "start" && place?.needsReason && !values.reason) {
         throw new HttpError(
           409,
           `You are ${formatDistance(place.distanceM)} from the office. Say why you are starting from here.`
@@ -168,7 +181,32 @@ export async function POST(request: Request) {
             source: "manual",
             shift: me?.shift,
             timeZone: business.timeZone,
+            place:
+              place && values.lat !== undefined && values.lng !== undefined
+                ? {
+                    place: place.place,
+                    distanceM: place.distanceM,
+                    lat: values.lat,
+                    lng: values.lng,
+                    accuracyM: values.accuracyM,
+                  }
+                : undefined,
           })
+
+    await logActivity({
+      businessId: business._id,
+      action: action === "start" ? "shift_started" : "shift_ended",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      // The sentence already reads "started their shift"; the subject is the
+      // person, so the log can be filtered by them.
+      subject: viewer.name,
+      detail: whereFrom(place, values.reason, values.note),
+      targetKind: "member",
+      targetId: viewer.id,
+      href: "/dashboard/attendance",
+      at,
+    })
 
     return ok({ attendance: toAttendanceDTO(record) }, 201)
   } catch (error) {
@@ -179,4 +217,22 @@ export async function POST(request: Request) {
 /** "2026-09", falling back to the month `today` sits in. */
 function normaliseMonth(value: string | null, today: string) {
   return value && /^\d{4}-\d{2}$/.test(value) ? value : today.slice(0, 7)
+}
+
+/**
+ * The second line of a shift entry in the log — where it happened and, when
+ * one was required, why. Empty on a workspace with no office pinned.
+ */
+function whereFrom(
+  place: ShiftPlacement | null,
+  reason?: string,
+  note?: string
+) {
+  if (!place) return undefined
+
+  const head = `${PLACE_LABELS[place.place]} · ${formatDistance(place.distanceM)} away`
+  if (!place.needsReason || !reason) return head
+
+  const why = AWAY_REASON_LABELS[reason as keyof typeof AWAY_REASON_LABELS]
+  return note ? `${head} · ${why} — ${note}` : `${head} · ${why}`
 }

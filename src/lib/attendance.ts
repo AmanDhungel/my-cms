@@ -111,6 +111,7 @@ export async function markDeparture({
   source,
   shift,
   timeZone,
+  place,
 }: Mark) {
   const day = dayKeyInZone(at, timeZone)
   const record = await ensureDay({ businessId, userId, day, shift })
@@ -136,7 +137,23 @@ export async function markDeparture({
 
   await Attendance.updateOne(
     { _id: record._id, ...guard },
-    { $set: { outAt: at, outSource: source } }
+    {
+      $set: {
+        outAt: at,
+        outSource: source,
+        // Written with the departure it belongs to, under the same guard, so
+        // a losing race cannot leave one press’s distance on another’s time.
+        ...(place
+          ? {
+              outPlace: place.place,
+              outDistanceM: place.distanceM,
+              outLat: place.lat,
+              outLng: place.lng,
+              outAccuracyM: place.accuracyM,
+            }
+          : {}),
+      },
+    }
   )
 
   return Attendance.findById(record._id).orFail()

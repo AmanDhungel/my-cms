@@ -81,8 +81,23 @@ export function EmployeeHome({
   async function press(action: "start" | "end") {
     if (shiftAction.isPending || locating) return
 
-    if (action === "end" || !office) {
+    if (!office) {
       send({ action })
+      return
+    }
+
+    // Ending is recorded wherever they are, but never held up by it: a phone
+    // that won't give a fix still closes the day.
+    if (action === "end") {
+      setLocating(true)
+      try {
+        const fix = await getCurrentFix()
+        send({ action, lat: fix.lat, lng: fix.lng, accuracyM: fix.accuracyM })
+      } catch {
+        send({ action })
+      } finally {
+        setLocating(false)
+      }
       return
     }
 
@@ -191,6 +206,7 @@ export function EmployeeHome({
           onClick={() => press("end")}
           disabled={
             shiftAction.isPending ||
+            locating ||
             !today?.inAt ||
             today?.outSource === "manual"
           }
