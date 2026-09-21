@@ -216,3 +216,41 @@ export function FlagIcon({ className }: IconProps) {
     </svg>
   )
 }
+
+export function ChartIcon({ className }: IconProps) {
+  return (
+    <svg {...stroke} className={className} aria-hidden>
+      <path d="M4 20V4M4 20h16" />
+      <path d="M8 20v-6M12.5 20V9M17 20v-9" />
+    </svg>
+  )
+}
+
+export function StackIcon({ className }: IconProps) {
+  return (
+    <svg {...stroke} className={className} aria-hidden>
+      <path d="M12 3 3 7.5l9 4.5 9-4.5z" />
+      <path d="M3 12.5 12 17l9-4.5M3 16.5 12 21l9-4.5" />
+    </svg>
+  )
+}
+
+export function CoinsIcon({ className }: IconProps) {
+  return (
+    <svg {...stroke} className={className} aria-hidden>
+      <ellipse cx="9" cy="6.5" rx="6" ry="2.8" />
+      <path d="M3 6.5v4c0 1.5 2.7 2.8 6 2.8s6-1.3 6-2.8v-4" />
+      <path d="M9 13.3v4c0 1.5 2.7 2.8 6 2.8s6-1.3 6-2.8v-7" />
+      <ellipse cx="15" cy="10.3" rx="6" ry="2.8" />
+    </svg>
+  )
+}
+
+export function BadgeIcon({ className }: IconProps) {
+  return (
+    <svg {...stroke} className={className} aria-hidden>
+      <circle cx="12" cy="9" r="4" />
+      <path d="M8.5 12.5 7 21l5-2.5L17 21l-1.5-8.5" />
+    </svg>
+  )
+}

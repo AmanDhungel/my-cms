@@ -7,8 +7,11 @@ import { cn } from "cn";
 import {
   ApprovalsIcon,
   BellIcon,
+  BadgeIcon,
   BoxIcon,
   CalendarIcon,
+  ChartIcon,
+  CoinsIcon,
   ClockIcon,
   ContactIcon,
   DashboardIcon,
@@ -16,6 +19,7 @@ import {
   HandshakeIcon,
   LoopIcon,
   RosterIcon,
+  StackIcon,
   WrenchIcon,
   PeopleIcon,
   ProjectsIcon,
@@ -156,6 +160,31 @@ export function OwnerShell({
       : []),
   ];
 
+  // Four groups rather than twenty-five links: each opens a hub listing the
+  // reports under it, which keeps the sidebar readable without hiding any.
+  const reports: NavItem[] = [
+    {
+      href: "/dashboard/reports/sales",
+      label: "Sales reports",
+      icon: ChartIcon,
+    },
+    {
+      href: "/dashboard/reports/inventory",
+      label: "Inventory reports",
+      icon: StackIcon,
+    },
+    {
+      href: "/dashboard/reports/finance",
+      label: "Finance reports",
+      icon: CoinsIcon,
+    },
+    {
+      href: "/dashboard/reports/employee",
+      label: "Employee reports",
+      icon: BadgeIcon,
+    },
+  ];
+
   const account: NavItem[] = [
     {
       href: "/dashboard/notifications",
@@ -207,7 +236,7 @@ export function OwnerShell({
       </header>
 
       <div className="grid min-h-[calc(100vh-49px)] lg:grid-cols-[236px_1fr]">
-        <aside className="border-n-200 bg-n-100 top-[49px] hidden h-[calc(100vh-49px)] flex-col gap-[26px] self-start border-r px-4 py-6 lg:sticky lg:flex">
+        <aside className="border-n-200 bg-n-100 ems-thin-scroll top-[49px] hidden h-[calc(100vh-49px)] flex-col gap-[26px] self-start overflow-y-auto overscroll-contain border-r px-4 py-6 lg:sticky lg:flex">
           <div className="flex items-center gap-2.5 px-2">
             <span
               aria-hidden
@@ -239,6 +268,12 @@ export function OwnerShell({
           <NavGroup
             label="Sales & stock"
             items={salesStock}
+            pathname={pathname}
+            pendingInvites={counts.pendingInvites}
+          />
+          <NavGroup
+            label="Reports & analytics"
+            items={reports}
             pathname={pathname}
             pendingInvites={counts.pendingInvites}
           />
@@ -279,7 +314,13 @@ export function OwnerShell({
       </div>
 
       <MobileNav
-        items={[...workspace, ...operations, ...salesStock, ...account]}
+        items={[
+          ...workspace,
+          ...operations,
+          ...salesStock,
+          ...reports,
+          ...account,
+        ]}
         pathname={pathname}
       />
     </div>

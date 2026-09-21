@@ -20,6 +20,7 @@ import type { CustomerDTO } from "@/models/customer"
 import type { ItemDTO } from "@/models/inventory-item"
 import type { PaymentDTO } from "@/models/payment"
 import type { ActivityDTO } from "@/models/activity"
+import type { ReportColumn } from "@/lib/reports"
 import type { OperationDTO } from "@/models/operation"
 import type { ScheduleDTO } from "@/models/schedule"
 import type { NotificationDTO } from "@/models/notification"
@@ -54,6 +55,7 @@ export const keys = {
   operations: (kind?: string) => ["operations", kind ?? "all"] as const,
   schedules: (from?: string) => ["schedules", from ?? "this-week"] as const,
   calendar: (month?: string) => ["calendar", month ?? "this-month"] as const,
+  report: (slug: string, filters: string) => ["report", slug, filters] as const,
   requests: (status?: RequestStatus) => ["requests", status ?? "all"] as const,
   people: (includeRemoved?: boolean) =>
     ["people", includeRemoved ? "all" : "active"] as const,
@@ -1013,4 +1015,45 @@ function refreshOperations(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["operations"] })
   void client.invalidateQueries({ queryKey: ["calendar"] })
   void client.invalidateQueries({ queryKey: ["activity"] })
+}
+
+// ---- reports -------------------------------------------------------------
+
+export type ReportFilters = {
+  from?: string
+  to?: string
+  employeeId?: string
+  customerId?: string
+  categoryId?: string
+  payment?: string
+}
+
+type ReportResponse = {
+  slug: string
+  blocked: boolean
+  missing?: string
+  unlock?: string[]
+  columns?: ReportColumn[]
+  rows?: Record<string, string | number | null>[]
+  totals?: { label: string; value: string }[]
+  stats?: { label: string; value: string; accent?: boolean }[]
+  note?: string
+}
+
+/**
+ * One report, run server-side. `enabled` is false for a report with nothing
+ * behind it, so a blocked page never makes a request it knows will be empty.
+ */
+export function useReport(
+  slug: string,
+  filters: ReportFilters,
+  enabled = true
+) {
+  const query = buildQueryString(filters)
+
+  return useQuery({
+    enabled,
+    queryKey: keys.report(slug, query),
+    queryFn: () => apiFetch<ReportResponse>(`/api/reports/${slug}${query}`),
+  })
 }

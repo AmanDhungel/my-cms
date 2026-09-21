@@ -65,7 +65,7 @@ export function EmployeeShell({
       </header>
 
       <div className="grid min-h-[calc(100vh-49px)] lg:grid-cols-[236px_1fr]">
-        <aside className="border-n-200 bg-n-100 top-[49px] hidden h-[calc(100vh-49px)] flex-col gap-[26px] self-start border-r px-4 py-6 lg:sticky lg:flex">
+        <aside className="border-n-200 bg-n-100 ems-thin-scroll top-[49px] hidden h-[calc(100vh-49px)] flex-col gap-[26px] self-start overflow-y-auto overscroll-contain border-r px-4 py-6 lg:sticky lg:flex">
           <div className="flex items-center gap-2.5 px-2">
             <span
               aria-hidden
