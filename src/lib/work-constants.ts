@@ -172,9 +172,52 @@ export const ACTIVITY_ACTIONS = [
   "member_joined",
   "member_updated",
   "member_removed",
+  "operation_created",
+  "operation_updated",
+  "operation_status",
+  "operation_deleted",
+  "schedule_set",
+  "schedule_cleared",
 ] as const
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number]
 
 /** What an entry points at, so the log can link back to it. */
-export const ACTIVITY_TARGETS = ["task", "project", "request", "member"] as const
+export const ACTIVITY_TARGETS = [
+  "task",
+  "project",
+  "request",
+  "member",
+  "operation",
+  "schedule",
+] as const
 export type ActivityTarget = (typeof ACTIVITY_TARGETS)[number]
+
+/**
+ * The dated things a workspace runs on, beyond its tasks. One shape covers
+ * all four — a title, a time, people, a state — so they share a model, an
+ * API and a calendar; only the words on screen differ per kind.
+ */
+export const OPERATION_KINDS = [
+  "meeting",
+  "installation",
+  "follow_up",
+  "deadline",
+] as const
+export type OperationKind = (typeof OPERATION_KINDS)[number]
+
+/**
+ * Three states, read differently per kind: a meeting is held, an installation
+ * is installed, a follow-up is done and a deadline is met.
+ */
+export const OPERATION_STATUSES = ["scheduled", "done", "cancelled"] as const
+export type OperationStatus = (typeof OPERATION_STATUSES)[number]
+
+/** What a rostered day is. "off" and "leave" carry no hours. */
+export const SCHEDULE_KINDS = [
+  "work",
+  "off",
+  "leave",
+  "training",
+  "overtime",
+] as const
+export type ScheduleKind = (typeof SCHEDULE_KINDS)[number]

@@ -23,6 +23,12 @@ export const ACTION_VERBS: Record<ActivityAction, string> = {
   member_joined: "joined the workspace",
   member_updated: "updated",
   member_removed: "removed",
+  operation_created: "scheduled",
+  operation_updated: "edited",
+  operation_status: "moved",
+  operation_deleted: "deleted",
+  schedule_set: "rostered",
+  schedule_cleared: "cleared the roster for",
 }
 
 /**
@@ -53,6 +59,12 @@ export const ACTION_TONE: Record<ActivityAction, string> = {
   member_joined: "bg-p-500",
   member_updated: "bg-s-progress",
   member_removed: "bg-s-overdue",
+  operation_created: "bg-p-500",
+  operation_updated: "bg-s-progress",
+  operation_status: "bg-s-time",
+  operation_deleted: "bg-s-overdue",
+  schedule_set: "bg-s-progress",
+  schedule_cleared: "bg-n-400",
 }
 
 /** "in progress" — statuses are stored snake_case but never shown that way. */

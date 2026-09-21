@@ -8,9 +8,15 @@ import {
   ApprovalsIcon,
   BellIcon,
   BoxIcon,
+  CalendarIcon,
   ClockIcon,
   ContactIcon,
   DashboardIcon,
+  FlagIcon,
+  HandshakeIcon,
+  LoopIcon,
+  RosterIcon,
+  WrenchIcon,
   PeopleIcon,
   ProjectsIcon,
   ReceiptIcon,
@@ -90,6 +96,29 @@ export function OwnerShell({
       icon: ApprovalsIcon,
       count: counts.approvals,
       accent: true,
+    },
+  ];
+
+  // Everything with a date on it that isn't a task: what is coming up, and
+  // who is meant to be where.
+  const operations: NavItem[] = [
+    { href: "/dashboard/calendar", label: "Calendar", icon: CalendarIcon },
+    { href: "/dashboard/meetings", label: "Meetings", icon: HandshakeIcon },
+    {
+      href: "/dashboard/installations",
+      label: "Installation dates",
+      icon: WrenchIcon,
+    },
+    { href: "/dashboard/follow-ups", label: "Follow-ups", icon: LoopIcon },
+    {
+      href: "/dashboard/schedules",
+      label: "Employee schedules",
+      icon: RosterIcon,
+    },
+    {
+      href: "/dashboard/deadlines",
+      label: "Important deadlines",
+      icon: FlagIcon,
     },
   ];
 
@@ -202,6 +231,12 @@ export function OwnerShell({
             pendingInvites={counts.pendingInvites}
           />
           <NavGroup
+            label="Operations"
+            items={operations}
+            pathname={pathname}
+            pendingInvites={counts.pendingInvites}
+          />
+          <NavGroup
             label="Sales & stock"
             items={salesStock}
             pathname={pathname}
@@ -244,7 +279,7 @@ export function OwnerShell({
       </div>
 
       <MobileNav
-        items={[...workspace, ...salesStock, ...account]}
+        items={[...workspace, ...operations, ...salesStock, ...account]}
         pathname={pathname}
       />
     </div>

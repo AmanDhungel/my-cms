@@ -20,6 +20,8 @@ import type { CustomerDTO } from "@/models/customer"
 import type { ItemDTO } from "@/models/inventory-item"
 import type { PaymentDTO } from "@/models/payment"
 import type { ActivityDTO } from "@/models/activity"
+import type { OperationDTO } from "@/models/operation"
+import type { ScheduleDTO } from "@/models/schedule"
 import type { NotificationDTO } from "@/models/notification"
 import type { ProjectDTO } from "@/models/project"
 import type { RequestDTO } from "@/models/request"
@@ -49,6 +51,9 @@ export const keys = {
   crewAttendance: (day?: string) => ["attendance", "crew", day ?? "today"] as const,
   visits: (day?: string) => ["attendance", "visits", day ?? "today"] as const,
   activity: (day?: string) => ["activity", day ?? "today"] as const,
+  operations: (kind?: string) => ["operations", kind ?? "all"] as const,
+  schedules: (from?: string) => ["schedules", from ?? "this-week"] as const,
+  calendar: (month?: string) => ["calendar", month ?? "this-month"] as const,
   requests: (status?: RequestStatus) => ["requests", status ?? "all"] as const,
   people: (includeRemoved?: boolean) =>
     ["people", includeRemoved ? "all" : "active"] as const,
@@ -865,4 +870,147 @@ export function useActivity(day?: string) {
     queryFn: () =>
       apiFetch<ActivityResponse>(`/api/activity${buildQueryString({ day })}`),
   })
+}
+
+// ---- operations ----------------------------------------------------------
+
+type OperationsResponse = { operations: OperationDTO[] }
+
+export type CalendarItem = {
+  id: string
+  source: "operation" | "task"
+  kind: string
+  title: string
+  day: string
+  startAt: string
+  endAt: string | null
+  allDay: boolean
+  status: string
+  priority: string
+  people: string[]
+  where: string | null
+}
+
+type CalendarResponse = {
+  month: string
+  today: string
+  timeZone: string
+  items: CalendarItem[]
+  summary: { total: number; operations: number; tasks: number }
+}
+
+export type CrewMember = {
+  id: string
+  name: string
+  role: string
+  shift: string | null
+}
+
+type SchedulesResponse = {
+  from: string
+  days: string[]
+  today: string
+  timeZone: string
+  crew: CrewMember[]
+  entries: ScheduleDTO[]
+}
+
+/** One kind of operation, or every kind when `kind` is left out. */
+export function useOperations(kind?: string) {
+  return useQuery({
+    queryKey: keys.operations(kind),
+    queryFn: () =>
+      apiFetch<OperationsResponse>(
+        `/api/operations${buildQueryString({ kind })}`
+      ),
+  })
+}
+
+export function useCreateOperation() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ operation: OperationDTO }>("/api/operations", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => refreshOperations(client),
+  })
+}
+
+export function useUpdateOperation(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ operation: OperationDTO }>(`/api/operations/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => refreshOperations(client),
+  })
+}
+
+export function useDeleteOperation(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ id: string }>(`/api/operations/${id}`, { method: "DELETE" }),
+    onSuccess: () => refreshOperations(client),
+  })
+}
+
+/** One month of everything dated — operations and the tasks beside them. */
+export function useCalendar(month?: string) {
+  return useQuery({
+    queryKey: keys.calendar(month),
+    queryFn: () =>
+      apiFetch<CalendarResponse>(`/api/calendar${buildQueryString({ month })}`),
+  })
+}
+
+export function useSchedules(from?: string) {
+  return useQuery({
+    queryKey: keys.schedules(from),
+    queryFn: () =>
+      apiFetch<SchedulesResponse>(`/api/schedules${buildQueryString({ from })}`),
+  })
+}
+
+export function useSetSchedule() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ entry: ScheduleDTO }>("/api/schedules", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["schedules"] })
+      void client.invalidateQueries({ queryKey: ["activity"] })
+    },
+  })
+}
+
+export function useClearSchedule() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ id: string }>(`/api/schedules/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["schedules"] })
+      void client.invalidateQueries({ queryKey: ["activity"] })
+    },
+  })
+}
+
+/** Every operation write moves the calendar and the log as well as the list. */
+function refreshOperations(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: ["operations"] })
+  void client.invalidateQueries({ queryKey: ["calendar"] })
+  void client.invalidateQueries({ queryKey: ["activity"] })
 }
