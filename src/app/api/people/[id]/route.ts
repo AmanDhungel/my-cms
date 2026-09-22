@@ -1,6 +1,7 @@
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { logActivity } from "@/lib/activity"
+import { cleanWeek } from "@/lib/week-server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { composeShift, memberUpdateSchema } from "@/lib/validations/auth"
 import { getWorkspace } from "@/lib/workspace"
@@ -47,6 +48,13 @@ export async function PATCH(
       values.role === "owner" || !values.shiftStart || !values.shiftEnd
         ? undefined
         : composeShift(values.shiftStart, values.shiftEnd)
+
+    // Undefined leaves their week alone; null puts them back on the
+    // workspace's standard one.
+    if (values.week !== undefined) {
+      if (values.week === null) member.set("week", undefined)
+      else member.set("week", cleanWeek(values.week))
+    }
 
     await member.save()
 

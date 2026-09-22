@@ -4,6 +4,7 @@ import Link from "next/link"
 import { auth } from "@/auth"
 import { EmployeeHome } from "@/components/dashboard/employee/employee-home"
 import { TaskStatusBadge } from "@/components/dashboard/task-status-badge"
+import { DashboardCharts } from "@/components/dashboard/reports/dashboard-charts"
 import { NewTaskButton } from "@/components/dashboard/tasks/new-task-button"
 import {
   DashboardMain,
@@ -216,6 +217,10 @@ export default async function DashboardPage() {
           )}
         </Panel>
       </div>
+
+      {/* The crew never reach this page — they are returned an EmployeeHome
+          above — so these need no guard of their own. */}
+      <DashboardCharts />
     </DashboardMain>
   )
 }

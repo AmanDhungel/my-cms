@@ -7,12 +7,42 @@ import {
   type Model,
 } from "mongoose"
 
-import { MEMBER_STATUSES, type MemberStatus } from "@/lib/work-constants"
+import {
+  MEMBER_STATUSES,
+  PATTERN_KINDS,
+  type MemberStatus,
+} from "@/lib/work-constants"
+import type { WeekPattern } from "@/lib/week"
 
 export { MEMBER_STATUSES, type MemberStatus }
 
 export const USER_ROLES = ["owner", "supervisor", "employee"] as const
 export type UserRole = (typeof USER_ROLES)[number]
+
+/** One day of a repeating week. Shaped exactly as the workspace's own. */
+const dayPlanSchema = new Schema(
+  {
+    kind: { type: String, required: true, enum: PATTERN_KINDS },
+    startTime: { type: String, trim: true, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+    endTime: { type: String, trim: true, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+  },
+  { _id: false }
+)
+
+const weekField = {
+  type: [dayPlanSchema],
+  /**
+   * Without this mongoose creates an empty array on every new document, and
+   * an empty array is not seven days — which would fail the validator below
+   * on a record that simply has no week.
+   */
+  default: undefined,
+  validate: {
+    validator: (list: unknown[] | undefined) =>
+      list === undefined || list.length === 0 || list.length === 7,
+    message: "A week has seven days",
+  },
+}
 
 const userSchema = new Schema(
   {
@@ -36,6 +66,11 @@ const userSchema = new Schema(
     business: { type: Schema.Types.ObjectId, ref: "Business", required: true },
     /** Working hours, set from the invite. Owners have none by default. */
     shift: { type: String, trim: true, maxlength: 32 },
+    /**
+     * Their own repeating week, when it differs from the workspace's. Absent
+     * means they follow the standard one.
+     */
+    week: weekField,
     /**
      * "removed" keeps the row (tasks, check-ins and attendance all point at
      * it) while revoking every way in. Accepting another workspace's invite
@@ -74,6 +109,7 @@ export type UserDTO = {
   phone: string
   role: UserRole
   shift: string | null
+  week: WeekPattern | null
   status: MemberStatus
   blockedAt: string | null
   businessId: string
@@ -88,6 +124,13 @@ export function toUserDTO(user: HydratedDocument<UserDocument>): UserDTO {
     phone: user.phone,
     role: user.role,
     shift: user.shift ?? null,
+    week: (user.week?.length === 7
+      ? user.week.map((day) => ({
+          kind: day.kind,
+          startTime: day.startTime ?? null,
+          endTime: day.endTime ?? null,
+        }))
+      : null) as WeekPattern | null,
     status: user.status,
     blockedAt: user.blockedAt ? user.blockedAt.toISOString() : null,
     businessId: String(user.business),

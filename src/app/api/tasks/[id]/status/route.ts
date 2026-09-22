@@ -5,6 +5,8 @@ import { prettyState } from "@/lib/activity-labels"
 import { markDeparture } from "@/lib/attendance"
 import { notifySupervisors, notifyUser } from "@/lib/notify"
 import { connectToDatabase } from "@/lib/mongodb"
+import { dayKeyInZone } from "@/lib/time"
+import { shiftOn } from "@/lib/week-server"
 import { loadTaskForViewer } from "@/lib/tasks"
 import { taskStatusSchema } from "@/lib/validations/work"
 import { getWorkspace } from "@/lib/workspace"
@@ -86,7 +88,7 @@ export async function PATCH(
 
       const [business, me] = await Promise.all([
         getWorkspace(viewer.businessId),
-        User.findById(viewer.id).select("shift"),
+        User.findById(viewer.id).select("shift week"),
       ])
 
       await markDeparture({
@@ -94,7 +96,7 @@ export async function PATCH(
         userId: viewer.id,
         at,
         source: "derived",
-        shift: me?.shift,
+        shift: shiftOn(dayKeyInZone(at, business.timeZone), me, business),
         timeZone: business.timeZone,
       })
     }

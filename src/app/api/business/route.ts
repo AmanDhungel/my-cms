@@ -2,6 +2,7 @@ import { handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { businessSettingsSchema } from "@/lib/validations/auth"
+import { cleanWeek } from "@/lib/week-server"
 import { Business, toBusinessDTO } from "@/models/business"
 
 export const runtime = "nodejs"
@@ -24,10 +25,19 @@ export async function PATCH(request: Request) {
           pan: values.pan,
           vatRate: values.vatRate,
           ...(values.office ? { office: values.office } : {}),
+          ...(values.week ? { week: cleanWeek(values.week) } : {}),
         },
         // Clearing the pin puts shift starts back to unrestricted, so it has
         // to actually remove the field rather than leave a stale one.
-        ...(values.office === null ? { $unset: { office: "" } } : {}),
+        // Clearing either of these has to remove the field, not blank it.
+        ...(values.office === null || values.week === null
+          ? {
+              $unset: {
+                ...(values.office === null ? { office: "" } : {}),
+                ...(values.week === null ? { week: "" } : {}),
+              },
+            }
+          : {}),
       },
       { new: true, runValidators: true }
     ).orFail()

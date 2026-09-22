@@ -2,6 +2,7 @@ import { formatDistance } from "@/lib/geo"
 import { AWAY_REASON_LABELS, PLACE_LABELS } from "@/lib/office"
 import { formatMinutes } from "@/lib/time"
 import type { AttendanceStatus } from "@/lib/work-constants"
+import { isRestDay, type WeekPattern } from "@/lib/week"
 import type { AttendanceDTO } from "@/models/attendance"
 
 /**
@@ -15,6 +16,8 @@ export type SheetRow = {
   date: string
   weekday: string
   status: AttendanceStatus | null
+  /** Their week says this is a rest day, so nothing was expected. */
+  resting: boolean
   inAt: string | null
   outAt: string | null
   lateBy: string
@@ -32,6 +35,7 @@ export type SheetTotals = {
   late: number
   leave: number
   absent: number
+  rest: number
   away: number
   /** Days with a recorded start, which is what "worked" means here. */
   worked: number
@@ -51,20 +55,25 @@ export function monthDays(month: string) {
  * Joins a month's records onto its calendar.
  *
  * A past day with no record reads as absent, which is how the rest of the app
- * already treats one. There is no holiday calendar in EMS, so a weekend the
- * crew were never expected to work reads the same way — the reader is the one
- * who knows which Saturdays counted.
+ * already treats one — unless their repeating week makes it a rest day, in
+ * which case nothing was expected and nothing is counted against them.
+ *
+ * Without a week set anywhere the old reading stands: every past day without
+ * a record is an absence, weekends included.
  */
 export function buildSheet(
   month: string,
   days: AttendanceDTO[],
-  today: string
+  today: string,
+  week: WeekPattern | null = null
 ): SheetRow[] {
   const byDay = new Map(days.map((entry) => [entry.day, entry]))
 
   return monthDays(month).map((day) => {
     const record = byDay.get(day)
     const future = day > today
+    // Somebody who was never due in cannot be absent.
+    const resting = isRestDay(week, day)
 
     return {
       day,
@@ -74,7 +83,7 @@ export function buildSheet(
         ? record.status
         : record?.status === "leave"
           ? "leave"
-          : future
+          : future || resting
             ? null
             : "absent",
       inAt: record?.inAt ?? null,
@@ -95,6 +104,7 @@ export function buildSheet(
           }`
         : "",
       future,
+      resting,
     }
   })
 }
@@ -105,6 +115,7 @@ export function totalsOf(rows: SheetRow[]): SheetTotals {
     late: rows.filter((row) => row.status === "late").length,
     leave: rows.filter((row) => row.status === "leave").length,
     absent: rows.filter((row) => row.status === "absent").length,
+    rest: rows.filter((row) => row.resting).length,
     away: rows.filter((row) => row.place === PLACE_LABELS.away).length,
     worked: rows.filter((row) => row.inAt).length,
   }
@@ -171,6 +182,7 @@ export function toCsv({
     ["Late", String(totals.late)],
     ["Leave", String(totals.leave)],
     ["Absent", String(totals.absent)],
+    ["Rest days", String(totals.rest)],
     ["Opened away from the office", String(totals.away)],
   ]
 

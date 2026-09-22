@@ -18,6 +18,7 @@ import {
   type ShiftPlacement,
 } from "@/lib/office"
 import { dayKeyInZone } from "@/lib/time"
+import { shiftOn, weekFor } from "@/lib/week-server"
 import { attendanceActionSchema } from "@/lib/validations/work"
 import { getWorkspace } from "@/lib/workspace"
 import { Attendance, toAttendanceDTO } from "@/models/attendance"
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     // Close anything the shift has outlasted before reading, so a day nobody
     // ended doesn't sit open forever.
-    const owner = await User.findById(userId).select("shift")
+    const owner = await User.findById(userId).select("shift week")
     await autoCloseFinishedShifts({
       userId,
       fallbackShift: owner?.shift,
@@ -70,6 +71,8 @@ export async function GET(request: NextRequest) {
       month,
       today,
       timeZone: business.timeZone,
+      // The repeating week, so a rest day reads as off rather than absent.
+      week: weekFor(owner, business),
       days,
       summary: {
         present: days.filter((d) => d.status === "present").length,
@@ -94,7 +97,7 @@ export async function POST(request: Request) {
 
     const [business, me] = await Promise.all([
       getWorkspace(viewer.businessId),
-      User.findById(viewer.id).select("shift"),
+      User.findById(viewer.id).select("shift week"),
     ])
 
     /**
@@ -158,7 +161,7 @@ export async function POST(request: Request) {
             userId: viewer.id,
             at,
             source: "manual",
-            shift: me?.shift,
+            shift: shiftOn(day, me, business),
             timeZone: business.timeZone,
             place:
               place && values.lat !== undefined && values.lng !== undefined
@@ -179,7 +182,7 @@ export async function POST(request: Request) {
             userId: viewer.id,
             at,
             source: "manual",
-            shift: me?.shift,
+            shift: shiftOn(day, me, business),
             timeZone: business.timeZone,
             place:
               place && values.lat !== undefined && values.lng !== undefined

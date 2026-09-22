@@ -6,6 +6,7 @@ import { logActivity } from "@/lib/activity"
 import { connectToDatabase } from "@/lib/mongodb"
 import { weekFrom, weekStart } from "@/lib/operations"
 import { dayKeyInZone } from "@/lib/time"
+import { weekFor } from "@/lib/week-server"
 import { scheduleSchema } from "@/lib/validations/operations"
 import { getWorkspace } from "@/lib/workspace"
 import { Schedule, toScheduleDTO } from "@/models/schedule"
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     const [members, rows] = await Promise.all([
       User.find({ business: business._id, status: { $ne: "removed" } })
-        .select("name role shift")
+        .select("name role shift week")
         .sort({ name: 1 }),
       Schedule.find({
         business: business._id,
@@ -47,6 +48,9 @@ export async function GET(request: NextRequest) {
         name: member.name,
         role: member.role,
         shift: member.shift ?? null,
+        // The repeating week behind the grid: cells with no row of their own
+        // are drawn from this rather than left blank.
+        week: weekFor(member, business),
       })),
       entries: rows.map(toScheduleDTO),
     })

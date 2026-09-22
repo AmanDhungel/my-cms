@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { PATTERN_KINDS } from "@/lib/work-constants"
+
 import { isValidTimeZone } from "@/lib/time"
 
 /**
@@ -33,6 +35,38 @@ const officeSchema = officePinSchema
     message: "The outer ring has to be at least as wide as the office one",
     path: ["awayRadiusM"],
   })
+
+
+const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/**
+ * A repeating week: seven days, Monday first. A working day has to carry
+ * hours and a rest day must not, so the two can never disagree.
+ */
+export const weekPatternSchema = z
+  .array(
+    z
+      .object({
+        kind: z.enum(PATTERN_KINDS),
+        startTime: z
+          .union([z.literal(""), z.string().regex(CLOCK, "Use a time like 09:30")])
+          .nullish(),
+        endTime: z
+          .union([z.literal(""), z.string().regex(CLOCK, "Use a time like 17:00")])
+          .nullish(),
+      })
+      .refine(
+        (day) =>
+          day.kind !== "work" ||
+          (Boolean(day.startTime) &&
+            Boolean(day.endTime) &&
+            String(day.endTime) > String(day.startTime)),
+        { message: "A working day needs a start and a later end" }
+      )
+  )
+  .length(7, "A week has seven days")
+
+export type WeekPatternValues = z.infer<typeof weekPatternSchema>
 
 /** What the Credentials provider accepts. Kept loose — the DB decides. */
 export const credentialsSchema = z.object({
@@ -163,6 +197,8 @@ export const businessSettingsSchema = z.object({
     .max(100, "A rate over 100% is not a rate"),
   /** Null clears it, which puts shift starts back to unrestricted. */
   office: officeSchema.nullish(),
+  /** The standard week. Null clears it and everyone falls back to `shift`. */
+  week: weekPatternSchema.nullish(),
 })
 
 export type BusinessSettingsValues = z.infer<typeof businessSettingsSchema>
@@ -174,6 +210,8 @@ export const memberUpdateSchema = z.object({
   role: z.enum(["owner", "supervisor", "employee"]),
   shiftStart: timeOfDay.optional(),
   shiftEnd: timeOfDay.optional(),
+  /** Their own week. Null means they follow the workspace's standard one. */
+  week: weekPatternSchema.nullish(),
 })
   .refine(
     (values) =>

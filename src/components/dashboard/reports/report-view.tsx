@@ -10,6 +10,7 @@ import {
   type DateRange,
 } from "@/components/dashboard/date-range-filter"
 import { paginate, Pagination } from "@/components/dashboard/pagination"
+import { ReportChart } from "@/components/dashboard/reports/report-chart"
 import { RowsSkeleton, StatGridSkeleton } from "@/components/dashboard/skeletons"
 import {
   DashboardMain,
@@ -227,6 +228,12 @@ export function ReportView({ report }: { report: ReportDef }) {
             <p className="border-a-200 bg-a-50 text-a-700 m-0 rounded-[10px] border px-4 py-3 text-[13px] leading-relaxed">
               {data.note}
             </p>
+          ) : null}
+
+          {!query.isPending && data?.chart ? (
+            <Panel className="p-[18px]" data-report-chart>
+              <ReportChart chart={data.chart} />
+            </Panel>
           ) : null}
 
           {query.isPending ? (
@@ -510,6 +517,8 @@ const printCss = `
   header, aside, nav, [data-no-print] { display: none !important; }
   main { padding: 0 !important; animation: none !important; }
   [data-report-table] { border: 0 !important; overflow: visible !important; }
+  /* The chart prints with the table it belongs to. */
+  [data-report-chart] { border: 0 !important; break-inside: avoid; }
   table { font-size: 10px !important; }
   tr { break-inside: avoid; }
   @page { margin: 12mm; }

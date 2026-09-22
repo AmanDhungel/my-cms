@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { SCHEDULE_COPY, shiftDays } from "@/lib/operations"
+import { planFor } from "@/lib/week"
 import {
   reportMutationError,
   useClearSchedule,
@@ -107,6 +108,12 @@ export function SchedulesView() {
         </div>
       )}
 
+      <p className="text-n-500 m-0 text-[12.5px]">
+        Faint cells come from the repeating week; set one in Organization
+        settings, or give a person their own on People. Clicking any cell
+        overrides it for that day alone.
+      </p>
+
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {SCHEDULE_KINDS.map((kind) => (
           <span
@@ -179,6 +186,10 @@ export function SchedulesView() {
 
                 {days.map((day) => {
                   const entry = byCell.get(`${member.id}:${day}`) ?? null
+                  // No row of its own: fall back to their repeating week, drawn
+                  // faintly so a standing rule can't be mistaken for a decision
+                  // somebody made about this particular day.
+                  const planned = entry ? null : planFor(member.week, day)
                   return (
                     <button
                       key={day}
@@ -203,6 +214,17 @@ export function SchedulesView() {
                             </span>
                           ) : null}
                         </>
+                      ) : planned ? (
+                        <span className="text-n-400 flex flex-col opacity-80">
+                          <span className="font-medium">
+                            {planned.kind === "off" ? "Off" : "Working"}
+                          </span>
+                          {planned.kind === "work" && planned.startTime ? (
+                            <span className="font-mono text-[10.5px]">
+                              {planned.startTime}–{planned.endTime}
+                            </span>
+                          ) : null}
+                        </span>
                       ) : (
                         <span className="font-mono text-[14px]">+</span>
                       )}
@@ -257,14 +279,18 @@ function ScheduleDialog({
 }
 
 function ScheduleBody({ cell, onClose }: { cell: Cell; onClose: () => void }) {
+  // What the repeating week already says about this day, so opening a cell
+  // starts from the standing rule rather than from nothing.
+  const planned = planFor(cell.member.week, cell.day)
+
   const [kind, setKind] = React.useState<ScheduleKind>(
-    cell.entry?.kind ?? "work"
+    cell.entry?.kind ?? (planned?.kind === "off" ? "off" : "work")
   )
   const [startTime, setStartTime] = React.useState(
-    cell.entry?.startTime ?? defaultStart(cell.member.shift)
+    cell.entry?.startTime ?? planned?.startTime ?? defaultStart(cell.member.shift)
   )
   const [endTime, setEndTime] = React.useState(
-    cell.entry?.endTime ?? defaultEnd(cell.member.shift)
+    cell.entry?.endTime ?? planned?.endTime ?? defaultEnd(cell.member.shift)
   )
   const [note, setNote] = React.useState(cell.entry?.note ?? "")
   const [errors, setErrors] = React.useState<Record<string, string>>({})

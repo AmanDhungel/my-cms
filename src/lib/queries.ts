@@ -20,7 +20,8 @@ import type { CustomerDTO } from "@/models/customer"
 import type { ItemDTO } from "@/models/inventory-item"
 import type { PaymentDTO } from "@/models/payment"
 import type { ActivityDTO } from "@/models/activity"
-import type { ReportColumn } from "@/lib/reports"
+import type { ReportColumn, ReportChartData } from "@/lib/reports"
+import type { WeekPattern } from "@/lib/week"
 import type { OperationDTO } from "@/models/operation"
 import type { ScheduleDTO } from "@/models/schedule"
 import type { NotificationDTO } from "@/models/notification"
@@ -77,6 +78,7 @@ type AttendanceResponse = {
   month: string
   today: string
   timeZone: string
+  week: WeekPattern | null
   days: AttendanceDTO[]
   summary: { present: number; late: number; leave: number; absent: number }
 }
@@ -787,6 +789,9 @@ export type CrewAttendanceRow = {
     role: string
     shift: string | null
     removed: boolean
+    /** Their repeating week makes this day a rest day. */
+    resting: boolean
+    week: WeekPattern | null
   }
   attendance: AttendanceDTO | null
 }
@@ -799,6 +804,7 @@ type CrewAttendanceResponse = {
   summary: {
     crew: number
     present: number
+    resting: number
     absent: number
     late: number
     leave: number
@@ -906,6 +912,8 @@ export type CrewMember = {
   name: string
   role: string
   shift: string | null
+  /** The week behind the grid, for cells with no row of their own. */
+  week: WeekPattern | null
 }
 
 type SchedulesResponse = {
@@ -1037,6 +1045,7 @@ type ReportResponse = {
   rows?: Record<string, string | number | null>[]
   totals?: { label: string; value: string }[]
   stats?: { label: string; value: string; accent?: boolean }[]
+  chart?: ReportChartData
   note?: string
 }
 
@@ -1055,5 +1064,33 @@ export function useReport(
     enabled,
     queryKey: keys.report(slug, query),
     queryFn: () => apiFetch<ReportResponse>(`/api/reports/${slug}${query}`),
+  })
+}
+
+export type GroupReportCard = {
+  slug: string
+  title: string
+  subtitle: string
+  status: "ready" | "partial" | "blocked"
+  missing?: string
+  chart: ReportChartData | null
+  stats: { label: string; value: string; accent?: boolean }[]
+  rows: number
+}
+
+type ReportGroupResponse = { group: string; reports: GroupReportCard[] }
+
+/**
+ * A whole category's reports in one request — what the hub pages draw. Asking
+ * per report would be eight round trips and eight chances for the cards to
+ * disagree about the window they cover.
+ */
+export function useReportGroup(group: string, filters: ReportFilters) {
+  const query = buildQueryString(filters)
+
+  return useQuery({
+    queryKey: ["report-group", group, query],
+    queryFn: () =>
+      apiFetch<ReportGroupResponse>(`/api/report-groups/${group}${query}`),
   })
 }

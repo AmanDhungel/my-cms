@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/guards"
 import { autoCloseFinishedShifts } from "@/lib/attendance"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone } from "@/lib/time"
+import { restsOn, weekFor } from "@/lib/week-server"
 import { getWorkspace } from "@/lib/workspace"
 import { Attendance, toAttendanceDTO } from "@/models/attendance"
 import { User } from "@/models/user"
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
     // Removed people stay listed for days they actually worked, so history
     // doesn't lose them — but they aren't marked absent for days after.
     const members = await User.find({ business: business._id }).select(
-      "name role shift status removedAt"
+      "name role shift status removedAt week"
     )
 
     // A day nobody closed is closed here first, so the owner isn't reading
@@ -70,6 +71,9 @@ export async function GET(request: NextRequest) {
             role: member.role,
             shift: member.shift ?? null,
             removed: member.status === "removed",
+            /** Their repeating week says they were never due in today. */
+            resting: restsOn(day, member, business),
+            week: weekFor(member, business),
           },
           attendance: record ? toAttendanceDTO(record) : null,
         }
@@ -77,6 +81,9 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => a.user.name.localeCompare(b.user.name))
 
     const present = rows.filter((row) => row.attendance?.inAt).length
+    const resting = rows.filter(
+      (row) => row.user.resting && !row.attendance?.inAt
+    ).length
 
     return ok({
       day,
@@ -86,7 +93,9 @@ export async function GET(request: NextRequest) {
       summary: {
         crew: rows.length,
         present,
-        absent: rows.length - present,
+        resting,
+        // A rest day is not an absence — that is the whole point of a week.
+        absent: rows.length - present - resting,
         late: rows.filter((row) => row.attendance?.status === "late").length,
         leave: rows.filter((row) => row.attendance?.status === "leave").length,
         // Days opened from outside the office's outer ring, which are the

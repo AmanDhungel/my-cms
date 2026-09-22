@@ -5,10 +5,11 @@ import { requireRole } from "@/lib/auth/guards"
 import { logActivity } from "@/lib/activity"
 import { markArrival } from "@/lib/attendance"
 import { distanceInMetres, formatDistance } from "@/lib/geo"
-import { clockInZone } from "@/lib/time"
+import { clockInZone, dayKeyInZone } from "@/lib/time"
 import { CHECK_IN_OPENS_MIN } from "@/lib/work-constants"
 import { notifySupervisors } from "@/lib/notify"
 import { connectToDatabase } from "@/lib/mongodb"
+import { shiftOn } from "@/lib/week-server"
 import { loadTaskForViewer } from "@/lib/tasks"
 import { checkInSchema } from "@/lib/validations/work"
 import { getWorkspace } from "@/lib/workspace"
@@ -104,14 +105,14 @@ export async function POST(
     }
     await task.save()
 
-    const me = await User.findById(viewer.id).select("shift")
+    const me = await User.findById(viewer.id).select("shift week")
 
     const attendance = await markArrival({
       businessId: task.business,
       userId: viewer.id,
       at,
       source: "derived",
-      shift: me?.shift,
+      shift: shiftOn(dayKeyInZone(at, business.timeZone), me, business),
       timeZone: business.timeZone,
     })
 

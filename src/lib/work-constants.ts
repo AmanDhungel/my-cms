@@ -221,3 +221,27 @@ export const SCHEDULE_KINDS = [
   "overtime",
 ] as const
 export type ScheduleKind = (typeof SCHEDULE_KINDS)[number]
+
+/**
+ * What a day of a repeating week can be. Deliberately narrower than
+ * SCHEDULE_KINDS: leave and training are things that happen to a particular
+ * day, not a standing rule about every Tuesday.
+ */
+export const PATTERN_KINDS = ["work", "off"] as const
+export type PatternKind = (typeof PATTERN_KINDS)[number]
+
+/**
+ * A week runs Monday-first here — index 0 is Monday — because that is how the
+ * roster grid and the attendance calendar are already drawn. JavaScript's own
+ * `getDay()` is Sunday-first, so it is converted, never used raw.
+ */
+export const WEEKDAYS = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const
+export const WEEKDAYS_SHORT = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"] as const

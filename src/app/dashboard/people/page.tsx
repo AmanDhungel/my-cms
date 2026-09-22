@@ -4,6 +4,7 @@ import { PeopleView } from "@/components/dashboard/people/people-view"
 import { requirePageRole } from "@/lib/auth/page-guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { getWorkspace } from "@/lib/workspace"
+import { toBusinessDTO } from "@/models/business"
 import { Invite, toInviteDTO } from "@/models/invite"
 import { User, toUserDTO } from "@/models/user"
 
@@ -32,6 +33,7 @@ export default async function PeoplePage() {
       ownerId={String(business.owner)}
       members={members.map(toUserDTO)}
       invites={invites.map(toInviteDTO)}
+      workspaceWeek={toBusinessDTO(business).week}
     />
   )
 }

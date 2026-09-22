@@ -34,6 +34,9 @@ const TABS = [
 ] as const
 type Tab = (typeof TABS)[number]["value"]
 
+/** A rest day is its own reading, so it needs a look of its own. */
+const REST_LOOK = "border-n-300 bg-n-100 text-n-600"
+
 const STATUS_LOOK: Record<AttendanceStatus, string> = {
   present: "border-p-200 bg-p-100 text-p-700",
   late: "border-a-200 bg-a-50 text-a-700",
@@ -137,6 +140,7 @@ function DaysTab({
       ) : (
         <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="TURNED UP" value={`${summary.present}/${summary.crew}`} />
+          <StatCard label="RESTING" value={summary.resting} />
           <StatCard label="LATE" value={summary.late} accent={summary.late > 0} />
           <StatCard
             label="AWAY FROM OFFICE"
@@ -190,6 +194,8 @@ function CrewRow({
   onDownload: (person: SheetPerson) => void
 }) {
   const day = row.attendance
+  // Somebody who was never due in today is off, not missing.
+  const resting = row.user.resting && !day?.inAt
   const status: AttendanceStatus = day?.inAt ? day.status : "absent"
 
   return (
@@ -210,7 +216,7 @@ function CrewRow({
       </div>
 
       <span className="text-n-700 font-mono text-[13px]">
-        {day?.inAt ? clock(day.inAt, timeZone) : "—"}
+        {day?.inAt ? clock(day.inAt, timeZone) : resting ? "rest day" : "—"}
         {day && day.lateByMin > 0 ? (
           <span className="text-a-700 block text-[11px]">
             {formatMinutes(day.lateByMin)} late
@@ -249,10 +255,10 @@ function CrewRow({
       <span
         className={cn(
           "w-fit rounded-full border px-2.5 py-1 text-[11.5px] font-medium capitalize",
-          STATUS_LOOK[status]
+          resting ? REST_LOOK : STATUS_LOOK[status]
         )}
       >
-        {status}
+        {resting ? "Off" : status}
       </span>
 
       <div className="flex lg:justify-end">

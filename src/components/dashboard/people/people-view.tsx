@@ -19,6 +19,7 @@ import {
   primaryButtonClass,
 } from "@/components/dashboard/ui"
 import type { InviteDTO } from "@/models/invite"
+import type { WeekPattern } from "@/lib/week"
 import type { UserDTO } from "@/models/user"
 
 type Filter = "all" | "owner" | "supervisor" | "employee" | "removed"
@@ -37,12 +38,15 @@ export function PeopleView({
   ownerId,
   members,
   invites,
+  workspaceWeek,
 }: {
   canManage: boolean
   viewerId: string
   ownerId: string
   members: UserDTO[]
   invites: InviteDTO[]
+  /** The standard week, shown against anyone who just follows it. */
+  workspaceWeek: WeekPattern | null
 }) {
   const router = useRouter()
   const [filter, setFilter] = React.useState<Filter>("all")
@@ -288,6 +292,7 @@ export function PeopleView({
           key={editing.id}
           member={editing}
           isWorkspaceOwner={editing.id === ownerId}
+          workspaceWeek={workspaceWeek}
           open
           onClose={() => {
             setEditing(null)

@@ -104,7 +104,10 @@ function Body({
   const today = query.data?.today ?? ""
 
   const rows = React.useMemo(
-    () => (query.data ? buildSheet(month, query.data.days, today) : []),
+    () =>
+      query.data
+        ? buildSheet(month, query.data.days, today, query.data.week)
+        : [],
     [query.data, month, today]
   )
   const totals = React.useMemo(() => totalsOf(rows), [rows])
@@ -164,7 +167,7 @@ function Body({
           ) : (
             <>
               {totals.worked} worked · {totals.late} late · {totals.leave} leave
-              · {totals.absent} absent
+              · {totals.absent} absent · {totals.rest} rest
             </>
           )}
         </span>
@@ -303,6 +306,7 @@ function Sheet({
         <Total label="Late" value={totals.late} />
         <Total label="Leave" value={totals.leave} />
         <Total label="Absent" value={totals.absent} />
+        <Total label="Rest days" value={totals.rest} />
         <Total label="Away from the office" value={totals.away} />
       </div>
 

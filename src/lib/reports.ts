@@ -325,6 +325,22 @@ export type ReportColumn = {
   format?: "text" | "number" | "money" | "day" | "month"
 }
 
+/**
+ * A chart, computed server-side alongside the table.
+ *
+ * The values are precomputed rather than pointed at row keys, so a chart can
+ * group differently from the table it sits above — daily movement out of a
+ * per-line stock report, ageing buckets out of a per-bill receivables list.
+ */
+export type ReportChartData = {
+  /** "bar" is horizontal (ranking); "column" is vertical (over time). */
+  kind: "bar" | "column"
+  labels: string[]
+  series: { label: string; values: number[] }[]
+  format: "money" | "number"
+  caption?: string
+}
+
 export type ReportPayload = {
   slug: string
   columns: ReportColumn[]
@@ -333,5 +349,6 @@ export type ReportPayload = {
   totals: { label: string; value: string }[]
   /** Big numbers above it. */
   stats: { label: string; value: string; accent?: boolean }[]
+  chart?: ReportChartData
   note?: string
 }

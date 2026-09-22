@@ -13,6 +13,7 @@ import {
   type OfficeValue,
 } from "@/components/dashboard/office-picker"
 import { initialsOf } from "@/components/dashboard/viewer"
+import { WeekEditor } from "@/components/dashboard/week-editor"
 import {
   DashboardMain,
   PageHeading,
@@ -58,6 +59,7 @@ export function SettingsView({
       timeZone: business.timeZone,
       pan: business.pan ?? "",
       vatRate: business.vatRate,
+      week: business.week,
       office: business.office
         ? {
             lat: business.office.lat,
@@ -71,6 +73,7 @@ export function SettingsView({
   })
 
   const office = useWatch({ control, name: "office" })
+  const week = useWatch({ control, name: "week" })
 
   const mutation = useMutation({
     mutationFn: (values: BusinessSettingsValues) =>
@@ -85,6 +88,7 @@ export function SettingsView({
         timeZone: saved.timeZone,
         pan: saved.pan ?? "",
         vatRate: saved.vatRate,
+        week: saved.week,
         office: saved.office
           ? {
               lat: saved.office.lat,
@@ -220,6 +224,29 @@ export function SettingsView({
               </span>
               <FieldError message={errors.timeZone?.message} />
             </label>
+          </div>
+        </Panel>
+
+        <Panel className="mt-[22px] grid gap-6 p-[22px] lg:grid-cols-[210px_1fr]">
+          <div className="flex flex-col gap-1.5">
+            <h2 className="font-heading m-0 text-base font-semibold">
+              The standard week
+            </h2>
+            <p className="text-n-500 m-0 text-[13px] leading-[1.55]">
+              What a normal week looks like here. Everyone follows it unless
+              you give someone their own on People.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2.5">
+            <WeekEditor
+              value={week ?? null}
+              onChange={(next) => setValue("week", next, { shouldDirty: true })}
+            />
+            <span className="text-n-400 text-[12px] leading-relaxed">
+              A rest day is never counted as an absence, and lateness on a
+              working day is judged against that day&rsquo;s hours.
+            </span>
           </div>
         </Panel>
 

@@ -19,6 +19,11 @@ import {
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import { reportMutationError, useUpdateMember } from "@/lib/queries"
 import { ShiftPicker } from "@/components/dashboard/shift-picker"
+import {
+  WeekEditor,
+  WeekSummary,
+} from "@/components/dashboard/week-editor"
+import { describeWeek, type WeekPattern } from "@/lib/week"
 import { memberUpdateSchema, splitShift } from "@/lib/validations/auth"
 import type { UserDTO } from "@/models/user"
 
@@ -28,11 +33,14 @@ type Errors = Partial<Record<string, string>>
 export function MemberDialog({
   member,
   isWorkspaceOwner,
+  workspaceWeek,
   open,
   onClose,
 }: {
   member: UserDTO
   isWorkspaceOwner: boolean
+  /** The standard week, so the dialog can show what they are following. */
+  workspaceWeek: WeekPattern | null
   open: boolean
   onClose: () => void
 }) {
@@ -54,6 +62,7 @@ export function MemberDialog({
           <Body
             member={member}
             isWorkspaceOwner={isWorkspaceOwner}
+            workspaceWeek={workspaceWeek}
             onClose={onClose}
           />
         ) : null}
@@ -65,10 +74,13 @@ export function MemberDialog({
 function Body({
   member,
   isWorkspaceOwner,
+  workspaceWeek,
   onClose,
 }: {
   member: UserDTO
   isWorkspaceOwner: boolean
+  /** The standard week, shown when this person just follows it. */
+  workspaceWeek: WeekPattern | null
   onClose: () => void
 }) {
   const [name, setName] = React.useState(member.name)
@@ -77,6 +89,9 @@ function Body({
   const initial = splitShift(member.shift)
   const [shiftStart, setShiftStart] = React.useState(initial.shiftStart)
   const [shiftEnd, setShiftEnd] = React.useState(initial.shiftEnd)
+  // Null means they follow the workspace's standard week.
+  const [week, setWeek] = React.useState<WeekPattern | null>(member.week)
+  const [ownWeek, setOwnWeek] = React.useState(Boolean(member.week))
   const [errors, setErrors] = React.useState<Errors>({})
 
   const mutation = useUpdateMember(member.id)
@@ -90,6 +105,8 @@ function Body({
       role,
       shiftStart: role === "owner" ? undefined : shiftStart,
       shiftEnd: role === "owner" ? undefined : shiftEnd,
+      // Null puts them back on the workspace's week; a value overrides it.
+      week: ownWeek ? week : null,
     })
 
     if (!parsed.success) {
@@ -188,6 +205,55 @@ function Body({
           }}
           error={errors.shiftEnd ?? errors.shiftStart}
         />
+
+        {role === "owner" ? null : (
+          <div className="flex flex-col gap-2.5">
+            <FieldLabel>Their week</FieldLabel>
+
+            <div className="border-n-200 flex w-fit gap-0.5 rounded-md border bg-white p-0.5">
+              {[
+                { own: false, label: "Follows the standard week" },
+                { own: true, label: "Has their own" },
+              ].map((option) => (
+                <button
+                  key={String(option.own)}
+                  type="button"
+                  aria-pressed={ownWeek === option.own}
+                  onClick={() => {
+                    setOwnWeek(option.own)
+                    if (option.own && !week) setWeek(workspaceWeek ?? null)
+                  }}
+                  className={cn(
+                    "rounded-[5px] px-3 py-1.5 text-[12.5px] transition-colors",
+                    ownWeek === option.own
+                      ? "bg-p-100 text-p-700 font-semibold"
+                      : "text-n-600 hover:bg-n-100 font-medium"
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {ownWeek ? (
+              <WeekEditor
+                value={week}
+                onChange={setWeek}
+                suggestFrom={workspaceWeek ?? `${shiftStart}–${shiftEnd}`}
+              />
+            ) : (
+              <>
+                <WeekSummary week={workspaceWeek ?? null} />
+                <span className="text-n-500 text-[12px]">
+                  {workspaceWeek
+                    ? describeWeek(workspaceWeek)
+                    : "Set one in Organization settings and everyone picks it up."}
+                </span>
+              </>
+            )}
+            <FieldError message={errors.week} />
+          </div>
+        )}
       </div>
 
       <DialogFooter className="gap-2 sm:gap-2.5">

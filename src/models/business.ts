@@ -8,7 +8,12 @@ import {
 } from "mongoose"
 
 import { CREW_SIZES } from "@/lib/validations/auth"
-import { AWAY_RADIUS_M, OFFICE_RADIUS_M } from "@/lib/work-constants"
+import {
+  AWAY_RADIUS_M,
+  OFFICE_RADIUS_M,
+  PATTERN_KINDS,
+} from "@/lib/work-constants"
+import type { WeekPattern } from "@/lib/week"
 
 /**
  * Where the office is, and how far from it a shift may be opened. Absent on
@@ -41,6 +46,35 @@ const officeSchema = new Schema(
   { _id: false }
 )
 
+/**
+ * One day of a repeating week. A rest day carries no hours — an "off" day
+ * with 09:00–17:00 on it would be a contradiction, so the API strips them.
+ */
+const dayPlanSchema = new Schema(
+  {
+    kind: { type: String, required: true, enum: PATTERN_KINDS },
+    startTime: { type: String, trim: true, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+    endTime: { type: String, trim: true, match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+  },
+  { _id: false }
+)
+
+/** Exactly seven, Monday first. Absent means nobody has set one. */
+const weekField = {
+  type: [dayPlanSchema],
+  /**
+   * Without this mongoose creates an empty array on every new document, and
+   * an empty array is not seven days — which would fail the validator below
+   * on a record that simply has no week.
+   */
+  default: undefined,
+  validate: {
+    validator: (list: unknown[] | undefined) =>
+      list === undefined || list.length === 0 || list.length === 7,
+    message: "A week has seven days",
+  },
+}
+
 const businessSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 120 },
@@ -51,6 +85,8 @@ const businessSchema = new Schema(
      */
     timeZone: { type: String, required: true, default: "Asia/Kathmandu" },
     office: { type: officeSchema },
+    /** The standard week everyone follows unless they have their own. */
+    week: weekField,
     /** PAN / VAT registration number, printed on tax invoices. */
     pan: { type: String, trim: true, maxlength: 30 },
     /** Percent added to a bill that has VAT switched on. Nepal is 13%. */
@@ -93,6 +129,7 @@ export type BusinessDTO = {
     radiusM: number
     awayRadiusM: number
   } | null
+  week: WeekPattern | null
   pan: string | null
   vatRate: number
   blockedAt: string | null
@@ -116,6 +153,13 @@ export function toBusinessDTO(
           awayRadiusM: business.office.awayRadiusM,
         }
       : null,
+    week: (business.week?.length === 7
+      ? business.week.map((day) => ({
+          kind: day.kind,
+          startTime: day.startTime ?? null,
+          endTime: day.endTime ?? null,
+        }))
+      : null) as WeekPattern | null,
     pan: business.pan ?? null,
     vatRate: business.vatRate,
     blockedAt: business.blockedAt ? business.blockedAt.toISOString() : null,
