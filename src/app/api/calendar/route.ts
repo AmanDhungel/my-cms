@@ -6,7 +6,7 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
 import { getWorkspace } from "@/lib/workspace"
 import { Operation } from "@/models/operation"
-import { Task } from "@/models/task"
+import { Ticket } from "@/models/ticket"
 import { OPERATION_POPULATE } from "@/lib/operations-server"
 
 export const runtime = "nodejs"
@@ -14,7 +14,7 @@ export const runtime = "nodejs"
 /**
  * One month, flattened into things that happen on a day.
  *
- * Tasks ride along with the operations: they are the workspace's other dated
+ * Tickets ride along with the operations: they are the workspace's other dated
  * record, and a calendar that showed meetings but not the jobs they are about
  * would be the wrong shape of empty.
  */
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       business.timeZone
     )
 
-    const [operations, tasks] = await Promise.all([
+    const [operations, tickets] = await Promise.all([
       Operation.find({
         business: business._id,
         startAt: { $gte: start, $lt: end },
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
         .sort({ startAt: 1 })
         .limit(500)
         .populate(OPERATION_POPULATE),
-      Task.find({
+      Ticket.find({
         business: business._id,
         startAt: { $gte: start, $lt: end },
         status: { $ne: "cancelled" },
@@ -77,21 +77,21 @@ export async function GET(request: NextRequest) {
           (entry.customer as { name?: string } | null)?.name ??
           null,
       })),
-      ...tasks.map((task) => ({
-        id: String(task._id),
-        source: "task" as const,
-        kind: "task" as const,
-        title: task.title,
-        day: dayKeyInZone(task.startAt, zone),
-        startAt: task.startAt.toISOString(),
-        endAt: task.endAt.toISOString(),
+      ...tickets.map((ticket) => ({
+        id: String(ticket._id),
+        source: "ticket" as const,
+        kind: "ticket" as const,
+        title: ticket.title,
+        day: dayKeyInZone(ticket.startAt, zone),
+        startAt: ticket.startAt.toISOString(),
+        endAt: ticket.endAt.toISOString(),
         allDay: false,
-        status: task.status,
-        priority: task.priority,
-        people: (task.assignees ?? [])
+        status: ticket.status,
+        priority: ticket.priority,
+        people: (ticket.assignees ?? [])
           .map((ref) => (ref as { name?: string })?.name)
           .filter(Boolean) as string[],
-        where: task.site,
+        where: ticket.site,
       })),
     ].sort((a, b) => a.startAt.localeCompare(b.startAt))
 
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
       summary: {
         total: items.length,
         operations: operations.length,
-        tasks: tasks.length,
+        tickets: tickets.length,
       },
     })
   } catch (error) {

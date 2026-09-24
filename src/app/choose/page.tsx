@@ -50,7 +50,7 @@ export default async function ChoosePage() {
               My workspace
             </span>
             <span className="text-n-600 text-[13px] leading-relaxed">
-              Your own tasks, crew, stock and bills — the app as an owner sees
+              Your own tickets, crew, stock and bills — the app as an owner sees
               it.
             </span>
           </Link>

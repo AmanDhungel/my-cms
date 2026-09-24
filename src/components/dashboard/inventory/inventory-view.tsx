@@ -7,6 +7,7 @@ import {
   DeleteCategoryDialog,
   DeleteItemDialog,
 } from "@/components/dashboard/inventory/delete-dialogs"
+import { ExpensesPanel } from "@/components/dashboard/expenses/expenses-panel"
 import { CategoryDialog } from "@/components/dashboard/inventory/category-dialog"
 import { ItemDialog } from "@/components/dashboard/inventory/item-dialog"
 import { PlusIcon } from "@/components/dashboard/nav-icons"
@@ -28,7 +29,7 @@ import {
 } from "@/lib/queries"
 import type { ItemDTO } from "@/models/inventory-item"
 
-type Tab = "items" | "categories"
+type Tab = "items" | "categories" | "purchases"
 
 const PER_PAGE = 10
 
@@ -37,7 +38,7 @@ const PER_PAGE = 10
  * themselves with what they cost and how many are left. Owners and
  * supervisors only — the crew never sees this page.
  */
-export function InventoryView() {
+export function InventoryView({ today }: { today: string }) {
   const [tab, setTab] = React.useState<Tab>("items")
   const [search, setSearch] = React.useState("")
   const [categoryId, setCategoryId] = React.useState("all")
@@ -126,7 +127,7 @@ export function InventoryView() {
       )}
 
       <div className="border-n-200 flex w-fit gap-0.5 rounded-md border bg-white p-0.5">
-        {(["items", "categories"] as const).map((option) => (
+        {(["items", "categories", "purchases"] as const).map((option) => (
           <button
             key={option}
             type="button"
@@ -144,7 +145,10 @@ export function InventoryView() {
         ))}
       </div>
 
-      {loading ? (
+      {/* Purchases load on their own, so they aren't held up by the shelf. */}
+      {tab === "purchases" ? (
+        <ExpensesPanel today={today} kinds={["stock"]} stockOnly />
+      ) : loading ? (
         <RowsSkeleton rows={4} />
       ) : itemsQuery.isError || categoriesQuery.isError ? (
         <EmptyState

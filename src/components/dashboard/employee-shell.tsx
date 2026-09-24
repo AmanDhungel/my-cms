@@ -116,7 +116,7 @@ export function EmployeeShell({
               {viewer.shift ?? "Not set"}
             </span>
             <p className="text-n-600 m-0 text-[12.5px] leading-[1.55]">
-              Check in from inside a task&rsquo;s geofence to start the day.
+              Check in from inside a ticket&rsquo;s geofence to start the day.
             </p>
           </div>
         </aside>

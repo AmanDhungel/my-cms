@@ -3,30 +3,30 @@ import Link from "next/link";
 import { ScrollEffects } from "@/components/landing/scroll-effects";
 import { SiteFooter } from "@/components/landing/site-footer";
 import { SiteHeader } from "@/components/landing/site-header";
-import { TaskBeacon } from "@/components/landing/task-beacon";
+import { TicketBeacon } from "@/components/landing/ticket-beacon";
 import { StatusBadge } from "@/components/status-badge";
-import { TaskCard } from "@/components/task-card";
-import type { TaskStatus } from "@/lib/task-status";
+import { TicketCard } from "@/components/ticket-card";
+import type { TicketStatus } from "@/lib/ticket-status";
 import Image from "next/image";
 
 const STATS = [
   { value: "100 m", label: "GEOFENCE RADIUS" },
-  { value: "6 states", label: "TASK LIFECYCLE" },
+  { value: "6 states", label: "TICKET LIFECYCLE" },
   { value: "Offline", label: "CHECK-IN QUEUE" },
 ];
 
 const STEPS = [
   {
     step: "01",
-    title: "Task created",
+    title: "Ticket created",
     body: "Title, destination, start time, deadline, priority. Assigned to one employee.",
-    note: "POST /tasks",
+    note: "POST /tickets",
   },
   {
     step: "02",
     title: "Employee notified",
     body: "Push lands immediately. If no check-in by start time, a nudge fires on a delayed job.",
-    note: "task_assigned",
+    note: "ticket_assigned",
   },
   {
     step: "03",
@@ -44,7 +44,7 @@ const STEPS = [
 ];
 
 /** The chip row; "In progress" is carried by the card beside it. */
-const CHIP_STATUSES: TaskStatus[] = [
+const CHIP_STATUSES: TicketStatus[] = [
   "pending",
   "material",
   "time",
@@ -89,7 +89,7 @@ export default function Home() {
               data-reveal
               data-delay="120"
               className="text-n-600 max-w-[520px] text-[17px] leading-[1.65] text-pretty">
-              Owners create located tasks. Employees check in inside the
+              Owners create located tickets. Employees check in inside the
               geofence. Status flows back the moment it changes — no phone
               calls, no guessing where the crew is.
             </p>
@@ -125,7 +125,7 @@ export default function Home() {
             </dl>
           </div>
 
-          <TaskBeacon />
+          <TicketBeacon />
 
           <div
             aria-hidden
@@ -170,7 +170,7 @@ export default function Home() {
               data-reveal
               data-delay="160"
               className="text-p-100 mt-[22px] max-w-[560px] text-[17px] leading-[1.7]">
-              So every arrival is measured against the task&rsquo;s coordinates,
+              So every arrival is measured against the ticket&rsquo;s coordinates,
               logged with distance, and stamped in the audit trail. The owner
               sees it the second it happens.
             </p>
@@ -246,7 +246,7 @@ export default function Home() {
                 03 — What the owner sees
               </p>
               <h2 className="font-heading text-[28px] leading-[1.22] font-semibold tracking-[-0.015em] sm:text-[34px]">
-                One card per task. Colour never carries the meaning alone.
+                One card per ticket. Colour never carries the meaning alone.
               </h2>
               <p className="text-n-600 max-w-[440px] text-base leading-[1.7]">
                 Every status dot ships with a label, so it still reads correctly
@@ -265,9 +265,9 @@ export default function Home() {
               data-delay="120"
               data-para="0.05"
               className="lg:justify-self-end">
-              <TaskCard
-                task={{
-                  id: "#TASK-0412",
+              <TicketCard
+                ticket={{
+                  id: "#TICKET-0412",
                   title: "Warehouse restock — Bay 3",
                   location: "Balaju Industrial Area",
                   owner: "RS",
@@ -312,7 +312,7 @@ export default function Home() {
               data-reveal
               data-delay="160"
               className="text-a-100 mt-[22px] max-w-[540px] text-[17px] leading-[1.7]">
-              Leave requests, advance payments, blocked tasks waiting on
+              Leave requests, advance payments, blocked tickets waiting on
               material. Everything else stays quiet in warm neutrals.
             </p>
           </div>
@@ -331,7 +331,7 @@ export default function Home() {
             </h2>
             <p className="text-n-600 max-w-[520px] text-[16.5px] leading-[1.7]">
               Create the business, invite your crew by link, assign the first
-              located task today.
+              located ticket today.
             </p>
             <div className="flex flex-wrap justify-center gap-3">
               <Link

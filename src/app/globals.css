@@ -46,7 +46,7 @@
   --n-800: #2b2721;
   --n-900: #1b1815;
 
-  /* Status — task lifecycle. Never used without its text label. */
+  /* Status — ticket lifecycle. Never used without its text label. */
   --s-pending: #64748b;
   --s-progress: #2f7de1;
   --s-material: #e8a317;

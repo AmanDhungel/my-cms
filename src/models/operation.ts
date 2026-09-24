@@ -10,10 +10,10 @@ import {
 import {
   OPERATION_KINDS,
   OPERATION_STATUSES,
-  TASK_PRIORITIES,
+  TICKET_PRIORITIES,
   type OperationKind,
   type OperationStatus,
-  type TaskPriority,
+  type TicketPriority,
 } from "@/lib/work-constants"
 
 export {
@@ -24,7 +24,7 @@ export {
 }
 
 /**
- * A dated thing that isn't a task: a meeting, an installation date, a
+ * A dated thing that isn't a ticket: a meeting, an installation date, a
  * follow-up or a deadline.
  *
  * All four are the same record — a title, a time, people, a state — so they
@@ -58,7 +58,7 @@ const operationSchema = new Schema(
     priority: {
       type: String,
       required: true,
-      enum: TASK_PRIORITIES,
+      enum: TICKET_PRIORITIES,
       default: "normal",
     },
 
@@ -99,7 +99,7 @@ export type OperationDTO = {
   endAt: string | null
   allDay: boolean
   status: OperationStatus
-  priority: TaskPriority
+  priority: TicketPriority
   assignees: { id: string; name: string }[]
   customer: { id: string; name: string } | null
   project: { id: string; name: string } | null
@@ -135,7 +135,7 @@ export function toOperationDTO(
     endAt: entry.endAt ? entry.endAt.toISOString() : null,
     allDay: entry.allDay,
     status: entry.status as OperationStatus,
-    priority: entry.priority as TaskPriority,
+    priority: entry.priority as TicketPriority,
     assignees: (entry.assignees ?? [])
       .map((ref) => named(ref as MaybePopulated))
       .filter((one): one is { id: string; name: string } => one !== null),

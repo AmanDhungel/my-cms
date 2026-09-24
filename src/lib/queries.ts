@@ -18,6 +18,11 @@ import type { WorkspaceInviteDTO } from "@/models/workspace-invite"
 import type { BillDTO } from "@/models/bill"
 import type { CustomerDTO } from "@/models/customer"
 import type { ItemDTO } from "@/models/inventory-item"
+import type { ExpenseDTO } from "@/models/expense"
+import type { AccountDTO } from "@/models/account"
+import type { MaintenanceDTO } from "@/models/maintenance"
+import type { PartyLedger } from "@/lib/ledger"
+import type { SiteDTO } from "@/models/site"
 import type { PaymentDTO } from "@/models/payment"
 import type { ActivityDTO } from "@/models/activity"
 import type { ReportColumn, ReportChartData } from "@/lib/reports"
@@ -32,10 +37,10 @@ import type {
   ProjectStatus,
   RequestStatus,
 } from "@/lib/work-constants"
-import type { TaskDTO } from "@/models/task"
+import type { TicketDTO } from "@/models/ticket"
 import type { UserDTO } from "@/models/user"
 
-export type TaskScope =
+export type TicketScope =
   | "today"
   | "in_progress"
   | "in_review"
@@ -45,9 +50,9 @@ export type TaskScope =
 
 /** One place for every key, so invalidation can't drift from the fetches. */
 export const keys = {
-  tasks: (scope: TaskScope, projectId?: string) =>
-    ["tasks", scope, projectId ?? "all"] as const,
-  task: (id: string) => ["task", id] as const,
+  tickets: (scope: TicketScope, projectId?: string) =>
+    ["tickets", scope, projectId ?? "all"] as const,
+  ticket: (id: string) => ["ticket", id] as const,
   attendance: (month?: string, userId?: string) =>
     ["attendance", month ?? "current", userId ?? "me"] as const,
   crewAttendance: (day?: string) => ["attendance", "crew", day ?? "today"] as const,
@@ -68,12 +73,17 @@ export const keys = {
   inventoryCategories: () => ["inventory", "categories"] as const,
   bills: () => ["bills"] as const,
   payments: () => ["payments"] as const,
+  expenses: () => ["expenses"] as const,
+  site: () => ["site"] as const,
+  accounts: () => ["accounts"] as const,
+  maintenance: () => ["maintenance"] as const,
+  partyLedger: (id: string) => ["customers", id, "ledger"] as const,
   customers: () => ["customers"] as const,
   adminOverview: () => ["admin", "overview"] as const,
 }
 
-type TasksResponse = { tasks: TaskDTO[] }
-type TaskResponse = { task: TaskDTO; history: CheckInDTO[] }
+type TicketsResponse = { tickets: TicketDTO[] }
+type TicketResponse = { ticket: TicketDTO; history: CheckInDTO[] }
 type AttendanceResponse = {
   month: string
   today: string
@@ -87,25 +97,25 @@ type RequestsResponse = {
   counts: { pending: number; approved: number; rejected: number }
 }
 type CheckInResponse = {
-  task: TaskDTO
+  ticket: TicketDTO
   checkIn: CheckInDTO
   attendance: AttendanceDTO
 }
 
-export function useTasks(scope: TaskScope, projectId?: string) {
+export function useTickets(scope: TicketScope, projectId?: string) {
   return useQuery({
-    queryKey: keys.tasks(scope, projectId),
+    queryKey: keys.tickets(scope, projectId),
     queryFn: () =>
-      apiFetch<TasksResponse>(
-        `/api/tasks${buildQueryString({ scope, projectId })}`
+      apiFetch<TicketsResponse>(
+        `/api/tickets${buildQueryString({ scope, projectId })}`
       ),
   })
 }
 
-export function useTask(id: string) {
+export function useTicket(id: string) {
   return useQuery({
-    queryKey: keys.task(id),
-    queryFn: () => apiFetch<TaskResponse>(`/api/tasks/${id}`),
+    queryKey: keys.ticket(id),
+    queryFn: () => apiFetch<TicketResponse>(`/api/tickets/${id}`),
   })
 }
 
@@ -144,12 +154,12 @@ export function usePeople(includeRemoved = false) {
  * the client half of the double-submit guard — the server holds the other half
  * by rejecting a second check-in with 409.
  */
-export function useCheckIn(taskId: string) {
+export function useCheckIn(ticketId: string) {
   const client = useQueryClient()
 
   return useMutation({
     mutationFn: (body: Fix & { reason?: string }) =>
-      apiFetch<CheckInResponse>(`/api/tasks/${taskId}/check-in`, {
+      apiFetch<CheckInResponse>(`/api/tickets/${ticketId}/check-in`, {
         method: "POST",
         body: JSON.stringify(body),
       }),
@@ -157,12 +167,12 @@ export function useCheckIn(taskId: string) {
   })
 }
 
-export function useCheckOut(taskId: string) {
+export function useCheckOut(ticketId: string) {
   const client = useQueryClient()
 
   return useMutation({
     mutationFn: (body: Fix & { reason?: string }) =>
-      apiFetch<CheckInResponse>(`/api/tasks/${taskId}/check-out`, {
+      apiFetch<CheckInResponse>(`/api/tickets/${ticketId}/check-out`, {
         method: "POST",
         body: JSON.stringify(body),
       }),
@@ -170,12 +180,32 @@ export function useCheckOut(taskId: string) {
   })
 }
 
-export function useTaskStatus(taskId: string) {
+export function useTicketMaterials(ticketId: string) {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: (body: { status: string; blockedReason?: string }) =>
-      apiFetch<{ task: TaskDTO }>(`/api/tasks/${taskId}/status`, {
+    mutationFn: (body: unknown) =>
+      apiFetch<{ ticket: TicketDTO }>(
+        `/api/tickets/${ticketId}/materials`,
+        { method: "PUT", body: JSON.stringify(body) }
+      ),
+    onSuccess: () => invalidateWork(client),
+  })
+}
+
+export function useTicketStatus(ticketId: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: {
+      status: string
+      blockedReason?: string
+      /** What kind of problem, so the owner can sort by cause. */
+      blockerReason?: string
+      /** What the job is short of, when the cause is material. */
+      needs?: { name: string; qty?: number; unit?: string }[]
+    }) =>
+      apiFetch<{ ticket: TicketDTO }>(`/api/tickets/${ticketId}/status`, {
         method: "PATCH",
         body: JSON.stringify(body),
       }),
@@ -240,25 +270,25 @@ export function useDecideRequest(id: string) {
   })
 }
 
-export function useCreateTask() {
+export function useCreateTicket() {
   const client = useQueryClient()
 
   return useMutation({
     mutationFn: (body: unknown) =>
-      apiFetch<{ task: TaskDTO }>("/api/tasks", {
+      apiFetch<{ ticket: TicketDTO }>("/api/tickets", {
         method: "POST",
         body: JSON.stringify(body),
       }),
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["tasks"] })
+      void client.invalidateQueries({ queryKey: ["tickets"] })
     },
   })
 }
 
-/** A check-in moves a task, the day's attendance, and every task list. */
+/** A check-in moves a ticket, the day's attendance, and every ticket list. */
 function invalidateWork(client: QueryClient) {
-  void client.invalidateQueries({ queryKey: ["tasks"] })
-  void client.invalidateQueries({ queryKey: ["task"] })
+  void client.invalidateQueries({ queryKey: ["tickets"] })
+  void client.invalidateQueries({ queryKey: ["ticket"] })
   void client.invalidateQueries({ queryKey: ["attendance"] })
 }
 
@@ -283,7 +313,7 @@ export function reportMutationError(
 }
 
 export type ProjectWithCounts = ProjectDTO & {
-  tasks: { total: number; open: number; blocked: number; done: number }
+  tickets: { total: number; open: number; blocked: number; done: number }
 }
 
 export function useProjects(status?: ProjectStatus) {
@@ -322,7 +352,7 @@ export function useSetProjectStatus(id: string) {
       }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["projects"] })
-      void client.invalidateQueries({ queryKey: ["tasks"] })
+      void client.invalidateQueries({ queryKey: ["tickets"] })
     },
   })
 }
@@ -369,12 +399,12 @@ export function useUnreadCount(initial: number) {
   })
 }
 
-export function useUpdateTask(id: string) {
+export function useUpdateTicket(id: string) {
   const client = useQueryClient()
 
   return useMutation({
     mutationFn: (body: unknown) =>
-      apiFetch<{ task: TaskDTO }>(`/api/tasks/${id}`, {
+      apiFetch<{ ticket: TicketDTO }>(`/api/tickets/${id}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       }),
@@ -393,7 +423,7 @@ export function useUpdateProject(id: string) {
       }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["projects"] })
-      void client.invalidateQueries({ queryKey: ["tasks"] })
+      void client.invalidateQueries({ queryKey: ["tickets"] })
     },
   })
 }
@@ -411,19 +441,19 @@ export function useUpdateMember(id: string) {
   })
 }
 
-/** Removal cancels their unstarted tasks, so task lists move too. */
+/** Removal cancels their unstarted tickets, so ticket lists move too. */
 export function useRemoveMember(id: string) {
   const client = useQueryClient()
 
   return useMutation({
     mutationFn: () =>
-      apiFetch<{ member: UserDTO; cancelledTasks: number }>(
+      apiFetch<{ member: UserDTO; cancelledTickets: number }>(
         `/api/people/${id}`,
         { method: "DELETE" }
       ),
     onSuccess: () => {
       invalidatePeople(client)
-      void client.invalidateQueries({ queryKey: ["tasks"] })
+      void client.invalidateQueries({ queryKey: ["tickets"] })
     },
   })
 }
@@ -434,14 +464,14 @@ function invalidatePeople(client: QueryClient) {
 
 /**
  * Board moves: the id comes with the call rather than the hook, so one
- * mutation serves every card instead of one hook per task.
+ * mutation serves every card instead of one hook per ticket.
  */
-export function useMoveTask() {
+export function useMoveTicket() {
   const client = useQueryClient()
 
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
-      apiFetch<{ task: TaskDTO }>(`/api/tasks/${id}/status`, {
+      apiFetch<{ ticket: TicketDTO }>(`/api/tickets/${id}/status`, {
         method: "PATCH",
         body: JSON.stringify({ status }),
       }),
@@ -652,6 +682,224 @@ function invalidateMoney(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["bills"] })
 }
 
+/* ----------------------------------------------------------------- expenses */
+
+export function useExpenses() {
+  return useQuery({
+    queryKey: keys.expenses(),
+    queryFn: () => apiFetch<{ expenses: ExpenseDTO[] }>("/api/expenses"),
+  })
+}
+
+export function useCreateExpense() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ expense: ExpenseDTO }>("/api/expenses", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateSpend(client),
+  })
+}
+
+export function useUpdateExpense(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ expense: ExpenseDTO }>(`/api/expenses/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateSpend(client),
+  })
+}
+
+export function useDeleteExpense(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ id: string }>(`/api/expenses/${id}`, { method: "DELETE" }),
+    onSuccess: () => invalidateSpend(client),
+  })
+}
+
+/**
+ * A stock purchase raises the shelf and mirrors itself onto the cash ledger,
+ * so recording one moves the inventory and the payments lists as well as its
+ * own.
+ */
+function invalidateSpend(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: ["expenses"] })
+  void client.invalidateQueries({ queryKey: ["payments"] })
+  void client.invalidateQueries({ queryKey: ["inventory"] })
+}
+
+/* -------------------------------------------------------------- maintenance */
+
+export function useMaintenance() {
+  return useQuery({
+    queryKey: keys.maintenance(),
+    queryFn: () =>
+      apiFetch<{ items: MaintenanceDTO[]; uploads: boolean }>(
+        "/api/maintenance"
+      ),
+  })
+}
+
+export function useCreateMaintenance() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ item: MaintenanceDTO }>("/api/maintenance", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.maintenance() })
+    },
+  })
+}
+
+export function useUpdateMaintenance(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ item: MaintenanceDTO }>(`/api/maintenance/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.maintenance() })
+    },
+  })
+}
+
+export function useDeleteMaintenance(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ id: string }>(`/api/maintenance/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.maintenance() })
+    },
+  })
+}
+
+/* ----------------------------------------------------------------- accounts */
+
+export function useAccounts(enabled = true) {
+  return useQuery({
+    queryKey: keys.accounts(),
+    queryFn: () => apiFetch<{ accounts: AccountDTO[] }>("/api/accounts"),
+    enabled,
+  })
+}
+
+export function useCreateAccount() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ account: AccountDTO }>("/api/accounts", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateAccounts(client),
+  })
+}
+
+export function useUpdateAccount(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ account: AccountDTO }>(`/api/accounts/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateAccounts(client),
+  })
+}
+
+export function useCloseAccount(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ id: string; archived: boolean; movements: number }>(
+        `/api/accounts/${id}`,
+        { method: "DELETE" }
+      ),
+    onSuccess: () => invalidateAccounts(client),
+  })
+}
+
+/** A balance is derived from the ledger, so both move together. */
+function invalidateAccounts(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: ["accounts"] })
+  void client.invalidateQueries({ queryKey: ["payments"] })
+}
+
+/** One party's account with the business: bills, payments, what is owed. */
+export function usePartyLedger(id: string) {
+  return useQuery({
+    queryKey: keys.partyLedger(id),
+    queryFn: () =>
+      apiFetch<{ party: CustomerDTO; ledger: PartyLedger }>(
+        `/api/customers/${id}/ledger`
+      ),
+    enabled: Boolean(id),
+  })
+}
+
+/* --------------------------------------------------------------------- site */
+
+export function useSite() {
+  return useQuery({
+    queryKey: keys.site(),
+    queryFn: () =>
+      apiFetch<{ site: SiteDTO; uploads: boolean }>("/api/site"),
+  })
+}
+
+export function useSaveSite() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ site: SiteDTO }>("/api/site", {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.site() })
+    },
+  })
+}
+
+/** Publishing is one flag — the subdomain serves it the moment it is set. */
+export function usePublishSite() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (published: boolean) =>
+      apiFetch<{ site: SiteDTO }>("/api/site", {
+        method: "POST",
+        body: JSON.stringify({ published }),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.site() })
+    },
+  })
+}
+
 /* -------------------------------------------------------------- super admin */
 
 export type AdminOverview = {
@@ -818,7 +1066,7 @@ export type Visit = {
   type: "in" | "out"
   at: string
   user: { id: string; name: string }
-  task: { id: string; title: string; site: string }
+  ticket: { id: string; title: string; site: string }
   lat: number
   lng: number
   accuracyM: number | null
@@ -860,7 +1108,7 @@ export function useCrewAttendance(day?: string) {
   })
 }
 
-/** Arrivals at and departures from tasks, for the same day. */
+/** Arrivals at and departures from tickets, for the same day. */
 export function useVisits(day?: string) {
   return useQuery({
     queryKey: keys.visits(day),
@@ -886,7 +1134,7 @@ type OperationsResponse = { operations: OperationDTO[] }
 
 export type CalendarItem = {
   id: string
-  source: "operation" | "task"
+  source: "operation" | "ticket"
   kind: string
   title: string
   day: string
@@ -904,7 +1152,7 @@ type CalendarResponse = {
   today: string
   timeZone: string
   items: CalendarItem[]
-  summary: { total: number; operations: number; tasks: number }
+  summary: { total: number; operations: number; tickets: number }
 }
 
 export type CrewMember = {
@@ -972,7 +1220,7 @@ export function useDeleteOperation(id: string) {
   })
 }
 
-/** One month of everything dated — operations and the tasks beside them. */
+/** One month of everything dated — operations and the tickets beside them. */
 export function useCalendar(month?: string) {
   return useQuery({
     queryKey: keys.calendar(month),

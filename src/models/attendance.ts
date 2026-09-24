@@ -44,7 +44,7 @@ const attendanceSchema = new Schema(
 
     /**
      * "manual" means the employee pressed Start/End shift; "derived" means it
-     * came from a task check-in. Manual always wins on reconcile.
+     * came from a ticket check-in. Manual always wins on reconcile.
      */
     inSource: { type: String, enum: ATTENDANCE_SOURCES },
     outSource: { type: String, enum: ATTENDANCE_SOURCES },

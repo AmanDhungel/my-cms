@@ -6,13 +6,13 @@ import { logActivity } from "@/lib/activity"
 import { connectToDatabase } from "@/lib/mongodb"
 import { projectSchema } from "@/lib/validations/work"
 import { Project, toProjectDTO } from "@/models/project"
-import { Task } from "@/models/task"
+import { Ticket } from "@/models/ticket"
 
 export const runtime = "nodejs"
 
 /**
- * Projects for the workspace, each with the task counts the board shows.
- * Employees can read them so their task cards can name the project.
+ * Projects for the workspace, each with the ticket counts the board shows.
+ * Employees can read them so their ticket cards can name the project.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const projects = await Project.find(filter).sort({ createdAt: -1 }).limit(200)
 
     // One grouped query rather than a count per project.
-    const grouped = await Task.aggregate<{
+    const grouped = await Ticket.aggregate<{
       _id: { project: unknown; status: string }
       n: number
     }>([
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         const total = Object.values(bucket).reduce((sum, n) => sum + n, 0)
         return {
           ...toProjectDTO(project),
-          tasks: {
+          tickets: {
             total,
             open: (bucket.pending ?? 0) + (bucket.in_progress ?? 0),
             blocked: bucket.blocked ?? 0,

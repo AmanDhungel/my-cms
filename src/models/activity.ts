@@ -27,7 +27,7 @@ export {
  * notification. The owner reads it to answer "who moved that, and when".
  *
  * Rows are written and never updated. Nothing here is derived at read time,
- * so a task renamed tomorrow doesn't rewrite what yesterday's entry said.
+ * so a ticket renamed tomorrow doesn't rewrite what yesterday's entry said.
  */
 const activitySchema = new Schema(
   {
@@ -42,7 +42,7 @@ const activitySchema = new Schema(
      */
     actorName: { type: String, required: true, trim: true, maxlength: 120 },
 
-    /** What it was about — a task title, a project name, a person's name. */
+    /** What it was about — a ticket title, a project name, a person's name. */
     subject: { type: String, required: true, trim: true, maxlength: 200 },
     /** The second line: a site, a reason, a distance. */
     detail: { type: String, trim: true, maxlength: 500 },

@@ -21,7 +21,7 @@ import { inputClass } from "@/components/auth/field"
 import { useLocationFix } from "@/components/dashboard/employee/use-location"
 import { distanceInMetres, formatDistance } from "@/lib/geo"
 import { reportMutationError, useCheckIn, useCheckOut } from "@/lib/queries"
-import type { TaskDTO } from "@/models/task"
+import type { TicketDTO } from "@/models/ticket"
 
 type Mode = "in" | "out"
 
@@ -31,12 +31,12 @@ type Mode = "in" | "out"
  * person holding the phone, not for the decision.
  */
 export function CheckInDialog({
-  task,
+  ticket,
   mode,
   open,
   onClose,
 }: {
-  task: TaskDTO
+  ticket: TicketDTO
   mode: Mode
   open: boolean
   onClose: () => void
@@ -52,24 +52,24 @@ export function CheckInDialog({
             {mode === "in" ? "Check in" : "Check out"}
           </DialogTitle>
           <DialogDescription className="text-n-500 text-[13.5px]">
-            {task.title} · {task.site}
+            {ticket.title} · {ticket.site}
           </DialogDescription>
         </DialogHeader>
 
         {/* Mounted only while open, so every reopen starts from a fresh
             position rather than a stale one. */}
-        {open ? <Body task={task} mode={mode} onClose={onClose} /> : null}
+        {open ? <Body ticket={ticket} mode={mode} onClose={onClose} /> : null}
       </DialogContent>
     </Dialog>
   )
 }
 
 function Body({
-  task,
+  ticket,
   mode,
   onClose,
 }: {
-  task: TaskDTO
+  ticket: TicketDTO
   mode: Mode
   onClose: () => void
 }) {
@@ -77,14 +77,14 @@ function Body({
   const [reason, setReason] = React.useState("")
   const [reasonError, setReasonError] = React.useState<string | null>(null)
 
-  const checkIn = useCheckIn(task.id)
-  const checkOut = useCheckOut(task.id)
+  const checkIn = useCheckIn(ticket.id)
+  const checkOut = useCheckOut(ticket.id)
   const mutation = mode === "in" ? checkIn : checkOut
 
   const distanceM = fix
-    ? distanceInMetres(fix, { lat: task.lat, lng: task.lng })
+    ? distanceInMetres(fix, { lat: ticket.lat, lng: ticket.lng })
     : null
-  const inside = distanceM !== null && distanceM <= task.radiusM
+  const inside = distanceM !== null && distanceM <= ticket.radiusM
   const needsReason = distanceM !== null && !inside
 
   function submit() {
@@ -101,8 +101,8 @@ function Body({
         onSuccess: () => {
           toast.success(
             mode === "in"
-              ? `Checked in at ${task.site}`
-              : `Checked out of ${task.site}`
+              ? `Checked in at ${ticket.site}`
+              : `Checked out of ${ticket.site}`
           )
           onClose()
         },
@@ -158,10 +158,10 @@ function Body({
                 inside ? "text-p-700" : "text-a-900"
               )}
             >
-              {formatDistance(distanceM)} from {task.site}
+              {formatDistance(distanceM)} from {ticket.site}
             </span>
             <span className="text-n-500 text-[12.5px]">
-              Area is {formatDistance(task.radiusM)} · your GPS is accurate to
+              Area is {formatDistance(ticket.radiusM)} · your GPS is accurate to
               about {formatDistance(fix.accuracyM)}
             </span>
           </div>

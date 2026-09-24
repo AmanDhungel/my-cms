@@ -7,11 +7,11 @@ import type { ActivityAction } from "@/lib/work-constants"
 
 /** How each action reads in the log, with the subject appended by the UI. */
 export const ACTION_VERBS: Record<ActivityAction, string> = {
-  task_created: "assigned",
-  task_updated: "edited",
-  task_status: "moved",
-  task_checked_in: "checked in to",
-  task_checked_out: "checked out of",
+  ticket_created: "assigned",
+  ticket_updated: "edited",
+  ticket_status: "moved",
+  ticket_checked_in: "checked in to",
+  ticket_checked_out: "checked out of",
   project_created: "created project",
   project_updated: "edited project",
   project_archived: "archived project",
@@ -29,6 +29,15 @@ export const ACTION_VERBS: Record<ActivityAction, string> = {
   operation_deleted: "deleted",
   schedule_set: "rostered",
   schedule_cleared: "cleared the roster for",
+  expense_recorded: "recorded",
+  expense_updated: "corrected",
+  expense_deleted: "deleted",
+  site_published: "put the website live at",
+  site_unpublished: "took the website down at",
+  maintenance_received: "took in",
+  maintenance_updated: "updated",
+  maintenance_status: "moved",
+  maintenance_deleted: "removed",
 }
 
 /**
@@ -43,11 +52,11 @@ export const SUBJECTLESS: readonly ActivityAction[] = [
 
 /** Which dot colour a row gets, grouped the way the feed already is. */
 export const ACTION_TONE: Record<ActivityAction, string> = {
-  task_created: "bg-s-progress",
-  task_updated: "bg-s-progress",
-  task_status: "bg-s-time",
-  task_checked_in: "bg-s-done",
-  task_checked_out: "bg-s-pending",
+  ticket_created: "bg-s-progress",
+  ticket_updated: "bg-s-progress",
+  ticket_status: "bg-s-time",
+  ticket_checked_in: "bg-s-done",
+  ticket_checked_out: "bg-s-pending",
   project_created: "bg-p-500",
   project_updated: "bg-p-500",
   project_archived: "bg-n-400",
@@ -65,6 +74,15 @@ export const ACTION_TONE: Record<ActivityAction, string> = {
   operation_deleted: "bg-s-overdue",
   schedule_set: "bg-s-progress",
   schedule_cleared: "bg-n-400",
+  expense_recorded: "bg-a-400",
+  expense_updated: "bg-s-progress",
+  expense_deleted: "bg-s-overdue",
+  site_published: "bg-s-done",
+  site_unpublished: "bg-n-400",
+  maintenance_received: "bg-p-500",
+  maintenance_updated: "bg-s-progress",
+  maintenance_status: "bg-s-time",
+  maintenance_deleted: "bg-s-overdue",
 }
 
 /** "in progress" — statuses are stored snake_case but never shown that way. */

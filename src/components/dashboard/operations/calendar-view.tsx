@@ -17,13 +17,13 @@ import { KIND_COPY, KIND_ROUTES } from "@/lib/operations"
 import { useCalendar, type CalendarItem } from "@/lib/queries"
 import type { OperationKind } from "@/lib/work-constants"
 
-/** Tasks ride along with the four kinds, so they need a colour of their own. */
+/** Tickets ride along with the four kinds, so they need a colour of their own. */
 const DOT: Record<string, string> = {
   meeting: KIND_COPY.meeting.dot,
   installation: KIND_COPY.installation.dot,
   follow_up: KIND_COPY.follow_up.dot,
   deadline: KIND_COPY.deadline.dot,
-  task: "bg-n-400",
+  ticket: "bg-n-400",
 }
 
 const LEGEND: { kind: string; label: string }[] = [
@@ -31,7 +31,7 @@ const LEGEND: { kind: string; label: string }[] = [
   { kind: "installation", label: "Installations" },
   { kind: "follow_up", label: "Follow-ups" },
   { kind: "deadline", label: "Deadlines" },
-  { kind: "task", label: "Tasks" },
+  { kind: "ticket", label: "Tickets" },
 ]
 
 /**
@@ -79,7 +79,7 @@ export function CalendarView() {
       <PageHeading
         eyebrow="Operations"
         title="Calendar"
-        subtitle="Meetings, installations, follow-ups, deadlines and the tasks already booked — one month at a time."
+        subtitle="Meetings, installations, follow-ups, deadlines and the tickets already booked — one month at a time."
         actions={
           activeMonth ? (
             <div className="flex items-center gap-1.5">
@@ -99,7 +99,7 @@ export function CalendarView() {
         <div className="grid gap-3.5 sm:grid-cols-3">
           <StatCard label="ON THE MONTH" value={query.data?.summary.total ?? 0} />
           <StatCard label="OPERATIONS" value={query.data?.summary.operations ?? 0} />
-          <StatCard label="TASKS" value={query.data?.summary.tasks ?? 0} />
+          <StatCard label="TICKETS" value={query.data?.summary.tickets ?? 0} />
         </div>
       )}
 
@@ -248,8 +248,8 @@ export function CalendarView() {
 
 function DayRow({ item }: { item: CalendarItem }) {
   const href =
-    item.source === "task"
-      ? "/dashboard/tasks"
+    item.source === "ticket"
+      ? "/dashboard/tickets"
       : KIND_ROUTES[item.kind as OperationKind]
 
   return (

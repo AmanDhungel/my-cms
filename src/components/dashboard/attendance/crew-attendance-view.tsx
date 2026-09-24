@@ -30,7 +30,7 @@ import type { AttendanceStatus } from "@/lib/work-constants"
 
 const TABS = [
   { value: "days", label: "Everyday attendance" },
-  { value: "tasks", label: "Task attendance" },
+  { value: "tickets", label: "Ticket attendance" },
 ] as const
 type Tab = (typeof TABS)[number]["value"]
 
@@ -104,7 +104,7 @@ export function CrewAttendanceView({ businessName }: { businessName: string }) {
           onDownload={setDownloading}
         />
       ) : (
-        <TasksTab query={visits} timeZone={timeZone} />
+        <TicketsTab query={visits} timeZone={timeZone} />
       )}
 
       <AttendanceDownloadDialog
@@ -303,7 +303,7 @@ function DownloadIcon({ className }: { className?: string }) {
   )
 }
 
-function TasksTab({
+function TicketsTab({
   query,
   timeZone,
 }: {
@@ -335,11 +335,11 @@ function TasksTab({
       {query.isPending ? (
         <RowsSkeleton rows={4} />
       ) : visits.length === 0 ? (
-        <EmptyState message="No task check-ins on this day. They appear the moment someone arrives at a job." />
+        <EmptyState message="No ticket check-ins on this day. They appear the moment someone arrives at a job." />
       ) : (
         <Panel className="overflow-hidden">
           <div className="border-n-200 bg-n-100 hidden grid-cols-[92px_1.1fr_1.4fr_1fr] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
-            {["TIME", "PERSON", "TASK / SITE", "DISTANCE"].map((head) => (
+            {["TIME", "PERSON", "TICKET / SITE", "DISTANCE"].map((head) => (
               <span
                 key={head}
                 className="text-n-500 font-mono text-[10.5px] tracking-[0.07em]"
@@ -380,8 +380,8 @@ function VisitRow({ visit, timeZone }: { visit: Visit; timeZone: string }) {
       <span className="text-[13.5px] font-semibold">{visit.user.name}</span>
 
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-[13.5px]">{visit.task.title}</span>
-        <span className="text-n-500 text-[12px]">{visit.task.site}</span>
+        <span className="text-[13.5px]">{visit.ticket.title}</span>
+        <span className="text-n-500 text-[12px]">{visit.ticket.site}</span>
       </div>
 
       <div className="flex min-w-0 flex-col gap-0.5">

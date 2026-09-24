@@ -11,6 +11,7 @@ import {
   type DateRange,
 } from "@/components/dashboard/date-range-filter"
 import { Pagination, paginate } from "@/components/dashboard/pagination"
+import { ExpensesPanel } from "@/components/dashboard/expenses/expenses-panel"
 import { BillDialog } from "@/components/dashboard/sales/bill-dialog"
 import {
   PAYMENT_LABELS,
@@ -28,13 +29,29 @@ import {
 } from "@/components/dashboard/ui"
 import { money } from "@/lib/billing"
 import { useBills } from "@/lib/queries"
+import { EXPENSE_KINDS } from "@/lib/expenses"
 import { BILL_PAYMENTS, type BillPayment } from "@/lib/work-constants"
 
 const PER_PAGE = 10
 
-/** Bills the workspace has raised, and the button that raises another. */
-export function SalesView({ vatRate }: { vatRate: number }) {
+/**
+ * Both halves of the money: the bills raised, and what the workspace spent.
+ *
+ * They share a page because the only useful question spans them — a month's
+ * billing means little without what it cost to earn. The expense side is the
+ * owner's alone, so a supervisor never sees the tab strip at all.
+ */
+export function SalesView({
+  vatRate,
+  canSeeExpenses,
+  today,
+}: {
+  vatRate: number
+  canSeeExpenses: boolean
+  today: string
+}) {
   const router = useRouter()
+  const [tab, setTab] = React.useState<"bills" | "expenses">("bills")
   const [open, setOpen] = React.useState(false)
   const [search, setSearch] = React.useState("")
   const [filter, setFilter] = React.useState<BillPayment | "all">("all")
@@ -87,18 +104,58 @@ export function SalesView({ vatRate }: { vatRate: number }) {
       <PageHeading
         eyebrow="Sales & stock"
         title="Sales"
-        subtitle="Raise a bill by hand or straight from stock, then print it or send it on."
+        subtitle={
+          canSeeExpenses
+            ? "What you billed and what it cost you, side by side."
+            : "Raise a bill by hand or straight from stock, then print it or send it on."
+        }
         actions={
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className={primaryButtonClass}
-          >
-            <PlusIcon className="size-3.5" />
-            New bill
-          </button>
+          // The expense tab carries its own button, beside its own filters.
+          tab === "bills" ? (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className={primaryButtonClass}
+            >
+              <PlusIcon className="size-3.5" />
+              New bill
+            </button>
+          ) : null
         }
       />
+
+      {/* One tab is no choice at all, so a supervisor never sees the strip. */}
+      {canSeeExpenses ? (
+        <div className="border-n-200 flex w-fit gap-0.5 rounded-md border bg-white p-0.5">
+          {(["bills", "expenses"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setTab(option)}
+              aria-pressed={tab === option}
+              className={cn(
+                "rounded-[5px] px-3 py-1.5 text-[12.5px] capitalize transition-colors",
+                tab === option
+                  ? "bg-p-100 text-p-700 font-semibold"
+                  : "text-n-600 hover:bg-n-100 font-medium"
+              )}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {tab === "expenses" ? (
+        <ExpensesPanel
+          today={today}
+          kinds={EXPENSE_KINDS}
+          // What was billed over the same bills this page is showing, so the
+          // ledger can answer "and what is left of it".
+          revenue={revenue}
+        />
+      ) : (
+        <>
 
       {query.isPending ? (
         <StatGridSkeleton count={4} />
@@ -294,6 +351,8 @@ export function SalesView({ vatRate }: { vatRate: number }) {
             onPage={setPage}
           />
         </Panel>
+      )}
+        </>
       )}
 
       <BillDialog

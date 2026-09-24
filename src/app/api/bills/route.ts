@@ -57,6 +57,8 @@ export async function POST(request: Request) {
       price: number
       qty: number
       discountPct: number
+      /** What it cost us, taken off the item as the bill is raised. */
+      cost?: number
     }
 
     let lines: Line[]
@@ -84,6 +86,9 @@ export async function POST(request: Request) {
           price: item.price,
           qty: line.qty,
           discountPct: line.discountPct,
+          // Snapshotted, because what a thing costs changes with every
+          // purchase: asking later would price this sale at a later figure.
+          cost: item.costPrice || undefined,
         }
       })
 

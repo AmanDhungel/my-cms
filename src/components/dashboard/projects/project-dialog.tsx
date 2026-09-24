@@ -28,7 +28,7 @@ import type { ProjectDTO } from "@/models/project"
 type Errors = Partial<Record<string, string>>
 
 /**
- * Used on its own from the Projects page, and nested inside New task so an
+ * Used on its own from the Projects page, and nested inside New ticket so an
  * owner who has no projects yet can make one without losing the form.
  */
 export function ProjectDialog({
@@ -54,7 +54,7 @@ export function ProjectDialog({
             {project ? "Edit project" : "New project"}
           </DialogTitle>
           <DialogDescription className="text-n-500 text-[13.5px]">
-            A project groups the tasks that belong to one job or site.
+            A project groups the tickets that belong to one job or site.
           </DialogDescription>
         </DialogHeader>
         {open ? (
@@ -145,7 +145,7 @@ function Body({
             className={inputClass}
           />
           <span className="text-n-400 text-[12px]">
-            Optional. Pre-fills the site on tasks in this project.
+            Optional. Pre-fills the site on tickets in this project.
           </span>
           <FieldError message={errors.site} />
         </label>

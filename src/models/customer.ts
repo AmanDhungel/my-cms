@@ -7,6 +7,8 @@ import {
   type Model,
 } from "mongoose"
 
+import { PARTY_KINDS, type PartyKind } from "@/lib/work-constants"
+
 /**
  * Someone the workspace bills. A bill still carries its own copy of the name
  * and address — what was on the paper stays on the paper — and points here
@@ -16,6 +18,16 @@ const customerSchema = new Schema(
   {
     business: { type: Schema.Types.ObjectId, ref: "Business", required: true },
     name: { type: String, required: true, trim: true, maxlength: 140 },
+    /**
+     * Customer, vendor, or both. Everyone already on file predates this and
+     * is a customer, which is what the default says.
+     */
+    kind: {
+      type: String,
+      required: true,
+      enum: PARTY_KINDS,
+      default: "customer",
+    },
     company: { type: String, trim: true, maxlength: 140 },
     phone: { type: String, trim: true, maxlength: 30 },
     email: { type: String, trim: true, lowercase: true, maxlength: 160 },
@@ -40,6 +52,7 @@ export const Customer: Model<CustomerDocument> =
 export type CustomerDTO = {
   id: string
   name: string
+  kind: PartyKind
   company: string | null
   phone: string | null
   email: string | null
@@ -55,6 +68,7 @@ export function toCustomerDTO(
   return {
     id: String(customer._id),
     name: customer.name,
+    kind: (customer.kind ?? "customer") as PartyKind,
     company: customer.company ?? null,
     phone: customer.phone ?? null,
     email: customer.email ?? null,

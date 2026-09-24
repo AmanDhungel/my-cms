@@ -1,8 +1,12 @@
 import { z } from "zod"
 
+import { PARTY_KINDS } from "@/lib/work-constants"
+
 /** The "New customer" dialog, and the same fields when editing one. */
 export const customerSchema = z.object({
   name: z.string().trim().min(2, "Give the customer a name").max(140),
+  /** Customer, vendor, or both — which decides where they can be picked. */
+  kind: z.enum(PARTY_KINDS).default("customer"),
   company: z.string().trim().max(140).optional(),
   phone: z.string().trim().max(30).optional(),
   email: z

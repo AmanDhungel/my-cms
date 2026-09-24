@@ -1,10 +1,10 @@
 import { cn } from "cn"
 
 import {
-  TASK_STATUS_DOT,
-  TASK_STATUS_LABELS,
-  type TaskStatus,
-} from "@/lib/task-status"
+  TICKET_STATUS_DOT,
+  TICKET_STATUS_LABELS,
+  type TicketStatus,
+} from "@/lib/ticket-status"
 
 /**
  * Style guide spec: pill on neutral-100, 8px dot, always with its text label.
@@ -15,7 +15,7 @@ export function StatusBadge({
   pulse = false,
   className,
 }: {
-  status: TaskStatus
+  status: TicketStatus
   pulse?: boolean
   className?: string
 }) {
@@ -29,7 +29,7 @@ export function StatusBadge({
       <span className="relative flex size-2 shrink-0">
         <span
           aria-hidden
-          className={cn("size-2 rounded-full", TASK_STATUS_DOT[status])}
+          className={cn("size-2 rounded-full", TICKET_STATUS_DOT[status])}
         />
         {pulse ? (
           <span
@@ -38,7 +38,7 @@ export function StatusBadge({
           />
         ) : null}
       </span>
-      {TASK_STATUS_LABELS[status]}
+      {TICKET_STATUS_LABELS[status]}
     </span>
   )
 }

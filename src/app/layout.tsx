@@ -24,11 +24,11 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "EMS — field task management",
+    default: "EMS — field ticket management",
     template: "%s",
   },
   description:
-    "Assign located tasks, verify check-ins inside the geofence, and watch status flow back the moment it changes.",
+    "Assign located tickets, verify check-ins inside the geofence, and watch status flow back the moment it changes.",
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

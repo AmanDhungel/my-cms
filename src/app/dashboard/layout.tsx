@@ -10,10 +10,12 @@ import { Customer } from "@/models/customer";
 import { InventoryItem } from "@/models/inventory-item";
 import { Invite } from "@/models/invite";
 import { Notification } from "@/models/notification";
+import { Expense } from "@/models/expense";
+import { MaintenanceItem } from "@/models/maintenance";
 import { Payment } from "@/models/payment";
 import { Project } from "@/models/project";
 import { WorkRequest } from "@/models/request";
-import { Task } from "@/models/task";
+import { Ticket } from "@/models/ticket";
 import { User } from "@/models/user";
 
 /** Sessions are per-request; nothing under /dashboard may be cached. */
@@ -54,11 +56,13 @@ export default async function DashboardLayout({
     people,
     pendingInvites,
     projects,
-    tasks,
+    tickets,
     inventory,
     sales,
     customers,
     payments,
+    expenses,
+    maintenance,
     approvals,
     unread,
   ] = await Promise.all([
@@ -68,7 +72,7 @@ export default async function DashboardLayout({
       acceptedAt: { $exists: false },
     }),
     Project.countDocuments({ business: business._id, status: "active" }),
-    Task.countDocuments({
+    Ticket.countDocuments({
       business: business._id,
       status: { $nin: ["done", "cancelled"] },
     }),
@@ -76,6 +80,12 @@ export default async function DashboardLayout({
     Bill.countDocuments({ business: business._id, status: "issued" }),
     Customer.countDocuments({ business: business._id }),
     Payment.countDocuments({ business: business._id }),
+    Expense.countDocuments({ business: business._id }),
+    // Only what is still on the bench; returned items are history.
+    MaintenanceItem.countDocuments({
+      business: business._id,
+      status: { $nin: ["returned", "scrapped"] },
+    }),
     WorkRequest.countDocuments({
       business: business._id,
       status: "pending",
@@ -93,11 +103,13 @@ export default async function DashboardLayout({
         people,
         pendingInvites,
         projects,
-        tasks,
+        tickets,
         inventory,
         sales,
         customers,
         payments,
+        expenses,
+        maintenance,
         approvals,
         unread,
       }}>

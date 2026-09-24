@@ -5,7 +5,7 @@ import { requireRole, requireUser } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { logActivity } from "@/lib/activity"
 import { notifySupervisors } from "@/lib/notify"
-import { loadTaskForViewer } from "@/lib/tasks"
+import { loadTicketForViewer } from "@/lib/tickets"
 import { requestSchemaChecked } from "@/lib/validations/work"
 import { REQUEST_STATUSES, WorkRequest, toRequestDTO } from "@/models/request"
 
@@ -56,11 +56,11 @@ export async function POST(request: Request) {
 
     await connectToDatabase()
 
-    // A material request can name a task, but only one the viewer can see.
-    let taskId: string | undefined
-    if (values.kind === "material" && values.taskId) {
-      const task = await loadTaskForViewer(values.taskId, viewer)
-      taskId = String(task._id)
+    // A material request can name a ticket, but only one the viewer can see.
+    let ticketId: string | undefined
+    if (values.kind === "material" && values.ticketId) {
+      const ticket = await loadTicketForViewer(values.ticketId, viewer)
+      ticketId = String(ticket._id)
     }
 
     // One open request of a kind at a time keeps a double submit — or an
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       startDate: values.kind === "leave" ? values.startDate : undefined,
       endDate: values.kind === "leave" ? values.endDate : undefined,
       amount: values.kind === "advance" ? values.amount : undefined,
-      task: taskId,
+      ticket: ticketId,
       status: "pending",
     })
 

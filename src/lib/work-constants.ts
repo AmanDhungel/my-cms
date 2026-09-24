@@ -5,11 +5,11 @@
  */
 
 /**
- * The task lifecycle. "blocked" is a flag on work already under way rather
+ * The ticket lifecycle. "blocked" is a flag on work already under way rather
  * than a stage of its own, which is why the board shows four columns and
  * draws blocked cards inside "In progress".
  */
-export const TASK_STATUSES = [
+export const TICKET_STATUSES = [
   "pending",
   "in_progress",
   "in_review",
@@ -17,10 +17,10 @@ export const TASK_STATUSES = [
   "done",
   "cancelled",
 ] as const
-export type TaskStatus = (typeof TASK_STATUSES)[number]
+export type TicketStatus = (typeof TICKET_STATUSES)[number]
 
-export const TASK_PRIORITIES = ["normal", "high", "critical"] as const
-export type TaskPriority = (typeof TASK_PRIORITIES)[number]
+export const TICKET_PRIORITIES = ["normal", "high", "critical"] as const
+export type TicketPriority = (typeof TICKET_PRIORITIES)[number]
 
 /** Radius the owner gets if they don't set one, in metres. */
 export const DEFAULT_RADIUS_M = 50
@@ -38,7 +38,7 @@ export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number]
 
 /**
  * "manual" is the employee pressing Start/End shift, "derived" comes from a
- * task check-in, and "auto" is the system closing a day at the end of the
+ * ticket check-in, and "auto" is the system closing a day at the end of the
  * shift because nobody closed it themselves.
  */
 export const ATTENDANCE_SOURCES = ["manual", "derived", "auto"] as const
@@ -59,10 +59,10 @@ export type ProjectStatus = (typeof PROJECT_STATUSES)[number]
 export const NOTIFICATION_KINDS = [
   "check_in",
   "check_out",
-  "task_blocked",
-  "task_in_review",
-  "task_done",
-  "task_assigned",
+  "ticket_blocked",
+  "ticket_in_review",
+  "ticket_done",
+  "ticket_assigned",
   "request_raised",
   "request_decided",
   "member_joined",
@@ -72,7 +72,7 @@ export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
 export const MEMBER_STATUSES = ["active", "removed"] as const
 export type MemberStatus = (typeof MEMBER_STATUSES)[number]
 
-/** How long before a task starts that its check-in becomes available. */
+/** How long before a ticket starts that its check-in becomes available. */
 export const CHECK_IN_OPENS_MIN = 10
 
 /**
@@ -125,6 +125,94 @@ export const PAYMENT_METHODS = ["cash", "cheque", "bank", "online"] as const
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
 /**
+ * Where a repair has got to.
+ *
+ * "awaiting_parts" earns its place beside "repairing": an item stuck waiting
+ * for a component is somebody's job to chase, and one actually on the bench
+ * is not — lumping them together hides the only one that needs a phone call.
+ */
+export const MAINTENANCE_STATUSES = [
+  "received",
+  "diagnosing",
+  "awaiting_parts",
+  "repairing",
+  "repaired",
+  "returned",
+  "scrapped",
+] as const
+export type MaintenanceStatus = (typeof MAINTENANCE_STATUSES)[number]
+
+/**
+ * Why a ticket cannot go on.
+ *
+ * A reason on its own is worth more than a free-text note: the owner can see
+ * at a glance that three jobs are stopped for want of material and one is
+ * waiting on the client, which is two different problems with two different
+ * fixes. The note says the rest.
+ */
+export const BLOCKER_REASONS = [
+  "material",
+  "equipment",
+  "access",
+  "client",
+  "weather",
+  "permit",
+  "payment",
+  "other",
+] as const
+export type BlockerReason = (typeof BLOCKER_REASONS)[number]
+
+/**
+ * Where money sits. A wallet and a bank behave identically here; they are
+ * told apart so the list reads like the business does.
+ */
+export const ACCOUNT_KINDS = ["bank", "wallet", "cash"] as const
+export type AccountKind = (typeof ACCOUNT_KINDS)[number]
+
+/**
+ * Which side of the business someone sits on.
+ *
+ * The same shop often sells to you and buys from you, so "both" is a real
+ * answer rather than a fudge — and a ledger that could only see one direction
+ * would be telling half the story about them.
+ */
+export const PARTY_KINDS = ["customer", "vendor", "both"] as const
+export type PartyKind = (typeof PARTY_KINDS)[number]
+
+/**
+ * What the money was spent on.
+ *
+ * "stock" is the odd one out and deliberately first: buying goods from a
+ * vendor is not a cost of running the month, it is stock you now hold, so it
+ * raises the shelf and only becomes a cost once the goods are sold. Every
+ * other kind is spent the moment it is paid.
+ */
+export const EXPENSE_KINDS = [
+  "stock",
+  "salary",
+  "commission",
+  "contractor",
+  "rent",
+  "utilities",
+  "fuel",
+  "vehicle",
+  "tools",
+  "repairs",
+  "office",
+  "marketing",
+  "travel",
+  "food",
+  "training",
+  "professional",
+  "insurance",
+  "tax",
+  "bank",
+  "software",
+  "other",
+] as const
+export type ExpenseKind = (typeof EXPENSE_KINDS)[number]
+
+/**
  * How far from the office a shift may be opened without explanation.
  * A city GPS fix is easily tens of metres out, so there are two rings: inside
  * the first you are at the office, inside the second you are near enough that
@@ -156,11 +244,11 @@ export type AwayReason = (typeof AWAY_REASONS)[number]
  * event, including the owner's own, so the day can be read back as it happened.
  */
 export const ACTIVITY_ACTIONS = [
-  "task_created",
-  "task_updated",
-  "task_status",
-  "task_checked_in",
-  "task_checked_out",
+  "ticket_created",
+  "ticket_updated",
+  "ticket_status",
+  "ticket_checked_in",
+  "ticket_checked_out",
   "project_created",
   "project_updated",
   "project_archived",
@@ -178,22 +266,34 @@ export const ACTIVITY_ACTIONS = [
   "operation_deleted",
   "schedule_set",
   "schedule_cleared",
+  "expense_recorded",
+  "expense_updated",
+  "expense_deleted",
+  "site_published",
+  "site_unpublished",
+  "maintenance_received",
+  "maintenance_updated",
+  "maintenance_status",
+  "maintenance_deleted",
 ] as const
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number]
 
 /** What an entry points at, so the log can link back to it. */
 export const ACTIVITY_TARGETS = [
-  "task",
+  "ticket",
   "project",
   "request",
   "member",
   "operation",
   "schedule",
+  "expense",
+  "site",
+  "maintenance",
 ] as const
 export type ActivityTarget = (typeof ACTIVITY_TARGETS)[number]
 
 /**
- * The dated things a workspace runs on, beyond its tasks. One shape covers
+ * The dated things a workspace runs on, beyond its tickets. One shape covers
  * all four — a title, a time, people, a state — so they share a model, an
  * API and a calendar; only the words on screen differ per kind.
  */

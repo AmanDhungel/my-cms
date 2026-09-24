@@ -8,6 +8,7 @@ import { dayRangeInZone } from "@/lib/time"
 import { paymentSchema } from "@/lib/validations/payments"
 import { getWorkspace } from "@/lib/workspace"
 import { Bill } from "@/models/bill"
+import { ownAccount, ownParty } from "@/lib/money-refs"
 import { Payment, toPaymentDTO } from "@/models/payment"
 
 export const runtime = "nodejs"
@@ -51,6 +52,11 @@ export async function POST(request: Request) {
     // back as the date that was typed rather than the server's idea of it.
     const { start } = dayRangeInZone(values.paidOn, business.timeZone)
 
+    // Both references are checked against this workspace rather than trusted:
+    // an id from a request is a claim until it is found here.
+    const partyRef = await ownParty(viewer.businessId, values.partyId)
+    const account = await ownAccount(viewer.businessId, values.accountId)
+
     if (values.billId) {
       const bill = await Bill.findOne({
         _id: values.billId,
@@ -74,6 +80,8 @@ export async function POST(request: Request) {
       business: viewer.businessId,
       direction: values.direction,
       party: values.party,
+      partyRef,
+      account,
       amount: values.amount,
       method: values.method,
       reference: values.reference,

@@ -50,7 +50,7 @@ export default async function JoinPage({
                 : "Invites are one link, one person."}
             </h2>
             <p className="text-p-100 text-[15px] leading-[1.7]">
-              Your phone becomes the job sheet: today&rsquo;s tasks, the
+              Your phone becomes the job sheet: today&rsquo;s tickets, the
               geofence you check in from, and the requests you send back.
             </p>
           </div>

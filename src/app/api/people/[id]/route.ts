@@ -5,7 +5,7 @@ import { cleanWeek } from "@/lib/week-server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { composeShift, memberUpdateSchema } from "@/lib/validations/auth"
 import { getWorkspace } from "@/lib/workspace"
-import { Task } from "@/models/task"
+import { Ticket } from "@/models/ticket"
 import { User, toUserDTO } from "@/models/user"
 
 export const runtime = "nodejs"
@@ -77,7 +77,7 @@ export async function PATCH(
 }
 
 /**
- * Remove someone from the workspace. The row survives — tasks, check-ins and
+ * Remove someone from the workspace. The row survives — tickets, check-ins and
  * attendance all point at it — but every route in is closed until another
  * workspace's invite adopts the account.
  */
@@ -113,13 +113,13 @@ export async function DELETE(
     }
 
     // An open check-in would be stranded: they can no longer reach the app to
-    // close it, so the owner has to settle the task first.
-    const openTask = await Task.findOne({ "openCheckIns.user": member._id })
+    // close it, so the owner has to settle the ticket first.
+    const openTicket = await Ticket.findOne({ "openCheckIns.user": member._id })
 
-    if (openTask) {
+    if (openTicket) {
       throw new HttpError(
         409,
-        `${member.name} is still checked in to "${openTask.title}". Close that task first`
+        `${member.name} is still checked in to "${openTicket.title}". Close that ticket first`
       )
     }
 
@@ -129,7 +129,7 @@ export async function DELETE(
 
     // Work nobody has started goes back on the shelf; anything in progress or
     // finished stays as it is, because it is history now.
-    const cancelled = await Task.updateMany(
+    const cancelled = await Ticket.updateMany(
       { assignees: member._id, status: "pending" },
       { $set: { status: "cancelled" } }
     )
@@ -141,7 +141,7 @@ export async function DELETE(
       actorName: viewer.name,
       subject: member.name,
       detail: cancelled.modifiedCount
-        ? `${cancelled.modifiedCount} unstarted task${cancelled.modifiedCount === 1 ? "" : "s"} cancelled`
+        ? `${cancelled.modifiedCount} unstarted ticket${cancelled.modifiedCount === 1 ? "" : "s"} cancelled`
         : undefined,
       targetKind: "member",
       targetId: member._id,
@@ -150,7 +150,7 @@ export async function DELETE(
 
     return ok({
       member: toUserDTO(member),
-      cancelledTasks: cancelled.modifiedCount,
+      cancelledTickets: cancelled.modifiedCount,
     })
   } catch (error) {
     return handleApiError(error)

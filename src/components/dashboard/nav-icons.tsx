@@ -27,7 +27,7 @@ export function ProjectsIcon({ className }: IconProps) {
   )
 }
 
-export function TasksIcon({ className }: IconProps) {
+export function TicketsIcon({ className }: IconProps) {
   return (
     <svg {...stroke} className={className} aria-hidden>
       <path d="M4 6h16M4 12h16M4 18h10" />
@@ -242,6 +242,18 @@ export function CoinsIcon({ className }: IconProps) {
       <path d="M3 6.5v4c0 1.5 2.7 2.8 6 2.8s6-1.3 6-2.8v-4" />
       <path d="M9 13.3v4c0 1.5 2.7 2.8 6 2.8s6-1.3 6-2.8v-7" />
       <ellipse cx="15" cy="10.3" rx="6" ry="2.8" />
+    </svg>
+  )
+}
+
+/** A banknote with the arrow leaving it: money on its way out. */
+export function OutgoingIcon({ className }: IconProps) {
+  return (
+    <svg {...stroke} className={className} aria-hidden>
+      <rect x="2.5" y="6" width="14" height="9" rx="1.6" />
+      <circle cx="9.5" cy="10.5" r="1.8" />
+      <path d="M20 12v7" />
+      <path d="M17.2 16.2 20 19l2.8-2.8" />
     </svg>
   )
 }

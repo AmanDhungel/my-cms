@@ -11,7 +11,7 @@ import {
   PhoneEmpty,
 } from "@/components/dashboard/employee/screen"
 import { ShiftStartDialog } from "@/components/dashboard/employee/shift-start-dialog"
-import { EmployeeTaskCard } from "@/components/dashboard/employee/task-card"
+import { EmployeeTicketCard } from "@/components/dashboard/employee/ticket-card"
 import { CardsSkeleton } from "@/components/dashboard/skeletons"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getCurrentFix, LocationError } from "@/lib/geolocation"
@@ -22,11 +22,11 @@ import {
   reportMutationError,
   useAttendance,
   useShiftAction,
-  useTasks,
-  type TaskScope,
+  useTickets,
+  type TicketScope,
 } from "@/lib/queries"
 
-const SCOPES: { value: TaskScope; label: string }[] = [
+const SCOPES: { value: TicketScope; label: string }[] = [
   { value: "today", label: "Today" },
   { value: "upcoming", label: "Upcoming" },
   { value: "done", label: "Done" },
@@ -42,7 +42,7 @@ export function EmployeeHome({
   /** Absent when the workspace has never pinned one; then nothing is asked. */
   office: Office | null
 }) {
-  const [scope, setScope] = React.useState<TaskScope>("today")
+  const [scope, setScope] = React.useState<TicketScope>("today")
   const [asking, setAsking] = React.useState<{
     distanceM: number
     lat: number
@@ -52,7 +52,7 @@ export function EmployeeHome({
   const [locating, setLocating] = React.useState(false)
 
   const attendance = useAttendance()
-  const tasks = useTasks(scope)
+  const tickets = useTickets(scope)
   const shiftAction = useShiftAction()
 
   const timeZone = attendance.data?.timeZone ?? "UTC"
@@ -60,8 +60,8 @@ export function EmployeeHome({
     (day) => day.day === attendance.data?.today
   )
 
-  const list = tasks.data?.tasks ?? []
-  const checkedIn = list.filter((task) => task.myCheckedInAt).length
+  const list = tickets.data?.tickets ?? []
+  const checkedIn = list.filter((ticket) => ticket.myCheckedInAt).length
 
   function send(body: Parameters<typeof shiftAction.mutate>[0]) {
     shiftAction.mutate(body, {
@@ -138,7 +138,7 @@ export function EmployeeHome({
   return (
     <EmployeeScreen
       eyebrow={shortDate()}
-      title="Today's tasks"
+      title="Today's tickets"
       aside={
         <Link
           href="/dashboard/requests"
@@ -175,11 +175,11 @@ export function EmployeeHome({
 
         <Tile
           label="ASSIGNED TODAY"
-          value={tasks.isPending ? "…" : String(list.length)}
+          value={tickets.isPending ? "…" : String(list.length)}
         />
         <Tile
           label="CHECKED IN"
-          value={tasks.isPending ? "…" : String(checkedIn)}
+          value={tickets.isPending ? "…" : String(checkedIn)}
           tone={checkedIn > 0 ? "good" : "muted"}
         />
       </div>
@@ -217,7 +217,7 @@ export function EmployeeHome({
         <span className="text-n-400 self-center text-[12px]">
           {office
             ? "Started away from the office, your day asks why."
-            : "Checking in to a task also opens your day."}
+            : "Checking in to a ticket also opens your day."}
         </span>
       </div>
 
@@ -240,10 +240,10 @@ export function EmployeeHome({
         ))}
       </div>
 
-      {tasks.isPending ? (
+      {tickets.isPending ? (
         <CardsSkeleton cards={2} />
-      ) : tasks.isError ? (
-        <ErrorPanel onRetry={() => void tasks.refetch()} />
+      ) : tickets.isError ? (
+        <ErrorPanel onRetry={() => void tickets.refetch()} />
       ) : list.length === 0 ? (
         <PhoneEmpty
           message={
@@ -251,13 +251,13 @@ export function EmployeeHome({
               ? `Nothing assigned to you today, ${firstName(name)}. Anything your owner assigns will appear here with its site and check-in area.`
               : scope === "upcoming"
                 ? "Nothing scheduled ahead of today."
-                : "No finished tasks yet."
+                : "No finished tickets yet."
           }
         />
       ) : (
         <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:items-start">
-          {list.map((task) => (
-            <EmployeeTaskCard key={task.id} task={task} timeZone={timeZone} />
+          {list.map((ticket) => (
+            <EmployeeTicketCard key={ticket.id} ticket={ticket} timeZone={timeZone} />
           ))}
         </div>
       )}

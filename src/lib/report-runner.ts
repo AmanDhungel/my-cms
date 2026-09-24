@@ -2,6 +2,7 @@ import { Types } from "mongoose"
 
 import { HttpError } from "@/lib/api-response"
 import { money, round2 } from "@/lib/billing"
+import { kindLabel } from "@/lib/expenses"
 import { paidByBill } from "@/lib/payments"
 import type { ReportChartData, ReportPayload } from "@/lib/reports"
 import { dayKeyInZone } from "@/lib/time"
@@ -10,11 +11,12 @@ import { isRestDay } from "@/lib/week"
 import { getWorkspace } from "@/lib/workspace"
 import { Attendance } from "@/models/attendance"
 import { Bill } from "@/models/bill"
+import { Expense } from "@/models/expense"
 import { CheckIn } from "@/models/check-in"
 import { InventoryItem } from "@/models/inventory-item"
 import { Payment } from "@/models/payment"
 import { WorkRequest } from "@/models/request"
-import { Task } from "@/models/task"
+import { Ticket } from "@/models/ticket"
 import { User } from "@/models/user"
 
 /**
@@ -83,6 +85,8 @@ export async function buildReport(slug: string, s: Scope): Promise<ReportPayload
       return revenue(s)
     case "expenses":
       return expenses(s)
+    case "profit":
+      return profit(s)
     case "receivables":
       return receivables(s)
     case "customer-payments":
@@ -786,46 +790,233 @@ async function loadPayments(direction: "in" | "out", s: Scope) {
     .populate<{ bill: { _id: unknown; number?: string } }>("bill", "number")
 }
 
-async function expenses(s: Scope): Promise<ReportPayload> {
-  const payments = await loadPayments("out", s)
+/** Everything in the expense ledger for the dates asked for. */
+async function loadExpenses(s: Scope) {
+  const filter: Record<string, unknown> = { business: s.businessId }
+  if (s.from || s.to) {
+    filter.spentOn = {
+      ...(s.from ? { $gte: s.from } : {}),
+      ...(s.to ? { $lte: s.to } : {}),
+    }
+  }
+  return Expense.find(filter).sort({ spentOn: -1 }).limit(5000)
+}
 
-  const buckets = new Map<string, { n: number; amount: number; methods: Set<string> }>()
-  for (const one of payments) {
-    const at = buckets.get(one.party) ?? { n: 0, amount: 0, methods: new Set<string>() }
+async function expenses(s: Scope): Promise<ReportPayload> {
+  const ledger = await loadExpenses(s)
+
+  /**
+   * Money out entered straight onto the Payments page, with no expense behind
+   * it. Counted here so the report is every rupee that left, and filtered by
+   * the back-reference so an expense's own cash row is not counted twice.
+   */
+  const loose = (await loadPayments("out", s)).filter((one) => !one.expense)
+
+  const buckets = new Map<
+    string,
+    { n: number; amount: number; payees: Set<string> }
+  >()
+
+  for (const one of ledger) {
+    const at = buckets.get(one.kind) ?? {
+      n: 0,
+      amount: 0,
+      payees: new Set<string>(),
+    }
     at.n += 1
     at.amount += one.amount
-    at.methods.add(one.method)
-    buckets.set(one.party, at)
+    at.payees.add(one.payee)
+    buckets.set(one.kind, at)
+  }
+
+  // One row per party rather than a single "uncategorised" blob: a workspace
+  // that records its money out on the Payments page and never categorises it
+  // would otherwise get one bar and learn nothing from this report.
+  for (const one of loose) {
+    const key = `__loose:${one.party}`
+    const at = buckets.get(key) ?? {
+      n: 0,
+      amount: 0,
+      payees: new Set<string>(),
+    }
+    at.n += 1
+    at.amount += one.amount
+    at.payees.add(one.party)
+    buckets.set(key, at)
   }
 
   const rows = [...buckets.entries()]
-    .map(([party, at]) => ({
-      party,
-      payments: at.n,
-      methods: [...at.methods].join(", "),
+    .map(([kind, at]) => ({
+      kind: kind.startsWith("__loose:")
+        ? `${kind.slice(8)} — uncategorised`
+        : kindLabel(kind),
+      entries: at.n,
+      payees: at.payees.size,
       amount: round2(at.amount),
     }))
     .sort((a, b) => b.amount - a.amount)
 
   const total = rows.reduce((n, r) => n + r.amount, 0)
+  // Stock is not a cost of running the month — it is shelf you now hold, and
+  // becomes a cost through being sold. Both figures are shown so neither
+  // reading is hidden.
+  const stock = round2(
+    ledger
+      .filter((one) => one.kind === "stock")
+      .reduce((n, one) => n + one.amount, 0)
+  )
 
   return {
     slug: "expenses",
     columns: [
-      { key: "party", label: "Paid to" },
-      { key: "payments", label: "Payments", align: "right", format: "number" },
-      { key: "methods", label: "How" },
+      { key: "kind", label: "What for" },
+      { key: "entries", label: "Entries", align: "right", format: "number" },
+      { key: "payees", label: "Paid to", align: "right", format: "number" },
       { key: "amount", label: "Amount", align: "right", format: "money" },
     ],
     rows,
     stats: [
-      { label: "PAID OUT", value: money(total) },
-      { label: "PARTIES", value: String(rows.length) },
-      { label: "PAYMENTS", value: String(rows.reduce((n, r) => n + r.payments, 0)) },
+      { label: "SPENT", value: money(total) },
+      { label: "RUNNING COSTS", value: money(round2(total - stock)) },
+      { label: "ON STOCK", value: money(stock) },
+      { label: "ENTRIES", value: String(ledger.length + loose.length) },
     ],
-    totals: [{ label: "Paid out", value: money(total) }],
-    chart: rankChart(rows, "party", "amount", "Paid out", "money"),
-    note: "Everything recorded on the Payments page as money going out. It is not a full expense ledger — only what was entered there.",
+    totals: [{ label: "Spent", value: money(total) }],
+    chart: rankChart(rows, "kind", "amount", "Spent", "money"),
+    note:
+      loose.length > 0
+        ? "Every expense recorded on the Sales and Inventory pages, plus money out entered straight onto the Payments page — that last row has no category because none was given. Stock purchases are listed but are not a running cost; they become one through the profit report, as the goods are sold."
+        : "Every expense recorded on the Sales and Inventory pages. Stock purchases are listed but are not a running cost — they become one through the profit report, as the goods are sold.",
+  }
+}
+
+/**
+ * Revenue less what the goods cost less what it took to run the month.
+ *
+ * This report was blocked until purchases were recorded, and for a good
+ * reason: items carried a selling price and nothing else, so the only figure
+ * available was cash in minus cash out, which is not profit. Now each sale
+ * carries what its goods cost, so the three lines can be told apart.
+ */
+async function profit(s: Scope): Promise<ReportPayload> {
+  const bills = await loadBills(s)
+  const ledger = await loadExpenses(s)
+
+  // Bills raised before costs were recorded carry no snapshot, so the item's
+  // cost today stands in. Flagged in the note rather than passed off as exact.
+  const items = await InventoryItem.find({ business: s.businessId }).select(
+    "costPrice"
+  )
+  const costNow = new Map(
+    items.map((item) => [String(item._id), item.costPrice ?? 0])
+  )
+
+  type Bucket = { revenue: number; cogs: number; costed: number; lines: number }
+  const buckets = new Map<string, Bucket>()
+  const bucket = (key: string) => {
+    const at = buckets.get(key) ?? { revenue: 0, cogs: 0, costed: 0, lines: 0 }
+    buckets.set(key, at)
+    return at
+  }
+
+  for (const { doc } of bills) {
+    const key = dayKeyInZone(doc.createdAt as Date, s.zone).slice(0, 7)
+    const at = bucket(key)
+    // Net of VAT and of any discount given: what the sale actually earned.
+    at.revenue += doc.taxable
+
+    for (const line of doc.lines) {
+      if (!line.item) continue
+      at.lines += 1
+      const cost = line.cost ?? costNow.get(String(line.item)) ?? 0
+      if (cost > 0) at.costed += 1
+      at.cogs += cost * line.qty
+    }
+  }
+
+  /** Running costs only — a stock purchase is shelf, not a cost of the month. */
+  const running = new Map<string, number>()
+  const add = (at: Date, amount: number) => {
+    const key = dayKeyInZone(at, s.zone).slice(0, 7)
+    running.set(key, (running.get(key) ?? 0) + amount)
+  }
+
+  for (const one of ledger) {
+    if (one.kind === "stock") continue
+    add(one.spentOn as Date, one.amount)
+  }
+
+  // Money out entered straight onto the Payments page counts too. It carries
+  // no category, so the only safe reading is that it was spent — which errs
+  // towards a smaller profit rather than a flattering one. Its back-reference
+  // keeps an expense's own cash row from being counted a second time.
+  const loose = (await loadPayments("out", s)).filter((one) => !one.expense)
+  for (const one of loose) add(one.paidOn as Date, one.amount)
+
+  for (const key of running.keys()) bucket(key)
+
+  const rows = [...buckets.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([period, at]) => {
+      const costs = running.get(period) ?? 0
+      const gross = at.revenue - at.cogs
+      return {
+        period,
+        revenue: round2(at.revenue),
+        cogs: round2(at.cogs),
+        gross: round2(gross),
+        costs: round2(costs),
+        profit: round2(gross - costs),
+      }
+    })
+
+  const sum = (key: "revenue" | "cogs" | "gross" | "costs" | "profit") =>
+    round2(rows.reduce((n, r) => n + r[key], 0))
+
+  const soldLines = [...buckets.values()].reduce((n, at) => n + at.lines, 0)
+  const costedLines = [...buckets.values()].reduce((n, at) => n + at.costed, 0)
+  const margin =
+    sum("revenue") > 0
+      ? `${Math.round((sum("profit") / sum("revenue")) * 1000) / 10}%`
+      : "—"
+
+  return {
+    slug: "profit",
+    columns: [
+      { key: "period", label: "Month", format: "month" },
+      { key: "revenue", label: "Revenue", align: "right", format: "money" },
+      { key: "cogs", label: "Goods cost", align: "right", format: "money" },
+      { key: "gross", label: "Gross", align: "right", format: "money" },
+      { key: "costs", label: "Running costs", align: "right", format: "money" },
+      { key: "profit", label: "Profit", align: "right", format: "money" },
+    ],
+    rows,
+    stats: [
+      { label: "REVENUE", value: money(sum("revenue")) },
+      { label: "GOODS COST", value: money(sum("cogs")) },
+      { label: "RUNNING COSTS", value: money(sum("costs")) },
+      { label: "PROFIT", value: money(sum("profit")) },
+    ],
+    totals: [
+      { label: "Gross", value: money(sum("gross")) },
+      { label: "Profit", value: money(sum("profit")) },
+      { label: "Margin", value: margin },
+    ],
+    chart: timeChart(
+      rows,
+      "period",
+      [
+        { key: "revenue", label: "Revenue" },
+        { key: "profit", label: "Profit" },
+      ],
+      "money"
+    ),
+    note:
+      soldLines > 0 && costedLines < soldLines
+        ? `Revenue is net of VAT and discounts. ${soldLines - costedLines} of ${soldLines} sold lines have no purchase behind them yet, so their goods cost counts as nothing and the profit here is flattering. Record what those items cost and the figure corrects itself.`
+        : loose.length > 0
+          ? `Revenue is net of VAT and discounts. Goods cost is what the items on each bill were bought for. ${loose.length} payment${loose.length === 1 ? "" : "s"} out entered on the Payments page carries no category, so ${loose.length === 1 ? "it counts" : "they count"} as a running cost.`
+          : "Revenue is net of VAT and discounts. Goods cost is what the items on each bill were bought for. Stock purchases are not counted as a running cost — they are counted as they are sold.",
   }
 }
 
@@ -1176,8 +1367,8 @@ async function employeeActivity(s: Scope): Promise<ReportPayload> {
   }
   const hasWindow = Object.keys(window).length > 0
 
-  const [tasks, visits, bills] = await Promise.all([
-    Task.find({
+  const [tickets, visits, bills] = await Promise.all([
+    Ticket.find({
       business: s.businessId,
       assignees: { $in: ids },
       ...(hasWindow ? { startAt: window } : {}),
@@ -1199,7 +1390,7 @@ async function employeeActivity(s: Scope): Promise<ReportPayload> {
 
   const rows = crew.map((member) => {
     const id = String(member._id)
-    const mine = tasks.filter((t) =>
+    const mine = tickets.filter((t) =>
       (t.assignees ?? []).some((a) => String(a) === id)
     )
     const myVisits = visits.filter((v) => String(v.user) === id)
@@ -1208,7 +1399,7 @@ async function employeeActivity(s: Scope): Promise<ReportPayload> {
     return {
       person: member.name,
       role: member.role,
-      tasks: mine.length,
+      tickets: mine.length,
       done: mine.filter((t) => t.status === "done").length,
       checkIns: myVisits.length,
       outside: myVisits.filter((v) => !v.insideFence).length,
@@ -1222,7 +1413,7 @@ async function employeeActivity(s: Scope): Promise<ReportPayload> {
     columns: [
       { key: "person", label: "Person" },
       { key: "role", label: "Role" },
-      { key: "tasks", label: "Tasks", align: "right", format: "number" },
+      { key: "tickets", label: "Tickets", align: "right", format: "number" },
       { key: "done", label: "Finished", align: "right", format: "number" },
       { key: "checkIns", label: "Check-ins", align: "right", format: "number" },
       { key: "outside", label: "Outside fence", align: "right", format: "number" },
@@ -1232,12 +1423,12 @@ async function employeeActivity(s: Scope): Promise<ReportPayload> {
     rows,
     stats: [
       { label: "CREW", value: String(rows.length) },
-      { label: "TASKS FINISHED", value: String(rows.reduce((n, r) => n + r.done, 0)) },
+      { label: "TICKETS FINISHED", value: String(rows.reduce((n, r) => n + r.done, 0)) },
       { label: "CHECK-INS", value: String(rows.reduce((n, r) => n + r.checkIns, 0)) },
       { label: "BILLED", value: money(rows.reduce((n, r) => n + r.billed, 0)) },
     ],
     totals: [{ label: "Billed", value: money(rows.reduce((n, r) => n + r.billed, 0)) }],
-    chart: rankChart(rows, "person", "done", "Tasks finished", "number", 12),
+    chart: rankChart(rows, "person", "done", "Tickets finished", "number", 12),
   }
 }
 

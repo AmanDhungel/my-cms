@@ -7,10 +7,10 @@ import { cn } from "cn"
 import { EyeIcon, PlusIcon } from "@/components/dashboard/nav-icons"
 import { ProjectDialog } from "@/components/dashboard/projects/project-dialog"
 import { RowsSkeleton, StatGridSkeleton } from "@/components/dashboard/skeletons"
-import { TaskBoard } from "@/components/dashboard/tasks/task-board"
-import { TaskDetailDialog } from "@/components/dashboard/tasks/task-detail-dialog"
-import { TaskDialog } from "@/components/dashboard/tasks/task-dialog"
-import { TaskStatusBadge } from "@/components/dashboard/task-status-badge"
+import { TicketBoard } from "@/components/dashboard/tickets/ticket-board"
+import { TicketDetailDialog } from "@/components/dashboard/tickets/ticket-detail-dialog"
+import { TicketDialog } from "@/components/dashboard/tickets/ticket-dialog"
+import { TicketStatusBadge } from "@/components/dashboard/ticket-status-badge"
 import {
   DashboardMain,
   EmptyState,
@@ -20,11 +20,11 @@ import {
   primaryButtonClass,
 } from "@/components/dashboard/ui"
 import { formatDistance } from "@/lib/geo"
-import { useTasks, type TaskScope } from "@/lib/queries"
+import { useTickets, type TicketScope } from "@/lib/queries"
 import type { ProjectDTO } from "@/models/project"
-import type { TaskDTO } from "@/models/task"
+import type { TicketDTO } from "@/models/ticket"
 
-const SCOPES: { value: TaskScope; label: string }[] = [
+const SCOPES: { value: TicketScope; label: string }[] = [
   { value: "all", label: "All" },
   { value: "today", label: "Today" },
   { value: "in_progress", label: "In progress" },
@@ -48,23 +48,23 @@ export function ProjectDetailView({
   timeZone: string
 }) {
   const [view, setView] = React.useState<"board" | "list">("board")
-  const [scope, setScope] = React.useState<TaskScope>("all")
+  const [scope, setScope] = React.useState<TicketScope>("all")
   const [newOpen, setNewOpen] = React.useState(false)
   const [editProject, setEditProject] = React.useState(false)
-  const [editing, setEditing] = React.useState<TaskDTO | null>(null)
-  const [viewing, setViewing] = React.useState<TaskDTO | null>(null)
+  const [editing, setEditing] = React.useState<TicketDTO | null>(null)
+  const [viewing, setViewing] = React.useState<TicketDTO | null>(null)
 
-  const query = useTasks(scope, project.id)
-  const tasks = query.data?.tasks ?? []
+  const query = useTickets(scope, project.id)
+  const tickets = query.data?.tickets ?? []
   const archived = project.status === "archived"
 
   const counts = {
-    open: tasks.filter(
+    open: tickets.filter(
       (t) => t.status === "pending" || t.status === "in_progress"
     ).length,
-    inReview: tasks.filter((t) => t.status === "in_review").length,
-    blocked: tasks.filter((t) => t.status === "blocked").length,
-    done: tasks.filter((t) => t.status === "done").length,
+    inReview: tickets.filter((t) => t.status === "in_review").length,
+    blocked: tickets.filter((t) => t.status === "blocked").length,
+    done: tickets.filter((t) => t.status === "done").length,
   }
 
   return (
@@ -85,7 +85,7 @@ export function ProjectDetailView({
           project.description ??
           (project.site
             ? `Default site: ${project.site}`
-            : "Every task under this job, wherever it is scheduled.")
+            : "Every ticket under this job, wherever it is scheduled.")
         }
         actions={
           canAssign ? (
@@ -102,10 +102,10 @@ export function ProjectDetailView({
                 onClick={() => setNewOpen(true)}
                 disabled={archived}
                 className={cn(primaryButtonClass, "disabled:opacity-50")}
-                title={archived ? "Archived projects take no new tasks" : undefined}
+                title={archived ? "Archived projects take no new tickets" : undefined}
               >
                 <PlusIcon className="size-3.5" />
-                New task
+                New ticket
               </button>
             </>
           ) : null
@@ -114,7 +114,7 @@ export function ProjectDetailView({
 
       {archived ? (
         <p className="border-n-300 text-n-600 m-0 rounded-[10px] border border-dashed bg-white px-4 py-3 text-[13px]">
-          This project is archived. It takes no new tasks, and anything nobody
+          This project is archived. It takes no new tickets, and anything nobody
           had started was cancelled when it was archived.
         </p>
       ) : null}
@@ -182,7 +182,7 @@ export function ProjectDetailView({
         <RowsSkeleton rows={4} />
       ) : query.isError ? (
         <EmptyState
-          message="Couldn't load this project's tasks. Your connection may have dropped."
+          message="Couldn't load this project's tickets. Your connection may have dropped."
           action={
             <button
               type="button"
@@ -193,11 +193,11 @@ export function ProjectDetailView({
             </button>
           }
         />
-      ) : tasks.length === 0 ? (
+      ) : tickets.length === 0 ? (
         <EmptyState
           message={
             scope === "all"
-              ? "No tasks on this project yet. Assign one with a site, a time window and a check-in radius."
+              ? "No tickets on this project yet. Assign one with a site, a time window and a check-in radius."
               : "Nothing in this view."
           }
           action={
@@ -207,14 +207,14 @@ export function ProjectDetailView({
                 onClick={() => setNewOpen(true)}
                 className={primaryButtonClass}
               >
-                New task
+                New ticket
               </button>
             ) : undefined
           }
         />
       ) : view === "board" ? (
-        <TaskBoard
-          tasks={tasks}
+        <TicketBoard
+          tickets={tickets}
           timeZone={timeZone}
           canMove={canAssign}
           onEdit={setEditing}
@@ -223,7 +223,7 @@ export function ProjectDetailView({
       ) : (
         <Panel className="overflow-hidden">
           <div className="border-n-200 bg-n-100 hidden grid-cols-[1.5fr_150px_170px_150px_84px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
-            {["TASK / SITE", "ASSIGNEE", "WINDOW", "STATUS", ""].map((head) => (
+            {["TICKET / SITE", "ASSIGNEE", "WINDOW", "STATUS", ""].map((head) => (
               <span
                 key={head}
                 className="text-n-500 font-mono text-[10.5px] tracking-[0.07em]"
@@ -233,37 +233,37 @@ export function ProjectDetailView({
             ))}
           </div>
 
-          {tasks.map((task) => (
+          {tickets.map((ticket) => (
             <div
-              key={task.id}
+              key={ticket.id}
               className="border-n-200/70 hover:bg-n-50 grid gap-2.5 border-b px-[18px] py-3.5 last:border-b-0 lg:grid-cols-[1.5fr_150px_170px_150px_84px] lg:items-center lg:gap-3.5"
             >
               <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-[14.5px] font-semibold">{task.title}</span>
+                <span className="text-[14.5px] font-semibold">{ticket.title}</span>
                 <span className="text-n-500 text-[12.5px]">
-                  {task.site} · fence {formatDistance(task.radiusM)}
+                  {ticket.site} · fence {formatDistance(ticket.radiusM)}
                 </span>
-                {task.blockedReason ? (
+                {ticket.blockedReason ? (
                   <span className="text-a-700 text-[12px]">
-                    Blocked: {task.blockedReason}
+                    Blocked: {ticket.blockedReason}
                   </span>
                 ) : null}
               </div>
 
               <span className="text-n-700 truncate text-[13px]">
-                {crewLabel(task)}
+                {crewLabel(ticket)}
               </span>
 
               <span className="text-n-600 font-mono text-[12px]">
-                {dateLabel(task.startAt, timeZone)} ·{" "}
-                {clock(task.startAt, timeZone)}–{clock(task.endAt, timeZone)}
+                {dateLabel(ticket.startAt, timeZone)} ·{" "}
+                {clock(ticket.startAt, timeZone)}–{clock(ticket.endAt, timeZone)}
               </span>
 
               <div className="flex flex-col items-start gap-1">
-                <TaskStatusBadge status={task.status} />
-                {task.onSite.length > 0 ? (
+                <TicketStatusBadge status={ticket.status} />
+                {ticket.onSite.length > 0 ? (
                   <span className="text-p-600 font-mono text-[10.5px]">
-                    {task.onSite.length} ON SITE
+                    {ticket.onSite.length} ON SITE
                   </span>
                 ) : null}
               </div>
@@ -272,7 +272,7 @@ export function ProjectDetailView({
                 <button
                   type="button"
                   aria-label="View details"
-                  onClick={() => setViewing(task)}
+                  onClick={() => setViewing(ticket)}
                   className="border-n-300 text-n-700 hover:bg-n-100 flex items-center justify-center rounded-md border bg-white px-2 py-1.5"
                 >
                   <EyeIcon className="size-3.5" />
@@ -280,9 +280,9 @@ export function ProjectDetailView({
                 {canAssign ? (
                   <button
                     type="button"
-                    onClick={() => setEditing(task)}
+                    onClick={() => setEditing(ticket)}
                     disabled={
-                      task.status === "done" || task.status === "cancelled"
+                      ticket.status === "done" || ticket.status === "cancelled"
                     }
                     className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold disabled:opacity-40"
                   >
@@ -296,9 +296,9 @@ export function ProjectDetailView({
       )}
 
       {viewing ? (
-        <TaskDetailDialog
+        <TicketDetailDialog
           key={viewing.id}
-          task={viewing}
+          ticket={viewing}
           timeZone={timeZone}
           open
           onClose={() => setViewing(null)}
@@ -307,15 +307,15 @@ export function ProjectDetailView({
 
       {canAssign ? (
         <>
-          <TaskDialog
+          <TicketDialog
             open={newOpen}
             onClose={() => setNewOpen(false)}
             projectId={project.id}
           />
           {editing ? (
-            <TaskDialog
+            <TicketDialog
               key={editing.id}
-              task={editing}
+              ticket={editing}
               open
               onClose={() => setEditing(null)}
             />
@@ -331,8 +331,8 @@ export function ProjectDetailView({
   )
 }
 
-function crewLabel(task: TaskDTO) {
-  const [first, ...rest] = task.assignees
+function crewLabel(ticket: TicketDTO) {
+  const [first, ...rest] = ticket.assignees
   if (!first) return "Unassigned"
   return rest.length > 0 ? `${first.name} +${rest.length}` : first.name
 }

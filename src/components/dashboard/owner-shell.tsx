@@ -12,6 +12,7 @@ import {
   CalendarIcon,
   ChartIcon,
   CoinsIcon,
+  OutgoingIcon,
   ClockIcon,
   ContactIcon,
   DashboardIcon,
@@ -25,7 +26,7 @@ import {
   ProjectsIcon,
   ReceiptIcon,
   SettingsIcon,
-  TasksIcon,
+  TicketsIcon,
   WalletIcon,
 } from "@/components/dashboard/nav-icons";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
@@ -54,11 +55,13 @@ export function OwnerShell({
     people: number;
     pendingInvites: number;
     projects: number;
-    tasks: number;
+    tickets: number;
     inventory: number;
     sales: number;
     customers: number;
     payments: number;
+    expenses: number;
+    maintenance: number;
     approvals: number;
     unread: number;
   };
@@ -78,10 +81,10 @@ export function OwnerShell({
       count: counts.projects,
     },
     {
-      href: "/dashboard/tasks",
-      label: "All tasks",
-      icon: TasksIcon,
-      count: counts.tasks,
+      href: "/dashboard/tickets",
+      label: "All tickets",
+      icon: TicketsIcon,
+      count: counts.tickets,
     },
     {
       href: "/dashboard/people",
@@ -103,7 +106,7 @@ export function OwnerShell({
     },
   ];
 
-  // Everything with a date on it that isn't a task: what is coming up, and
+  // Everything with a date on it that isn't a ticket: what is coming up, and
   // who is meant to be where.
   const operations: NavItem[] = [
     { href: "/dashboard/calendar", label: "Calendar", icon: CalendarIcon },
@@ -124,10 +127,16 @@ export function OwnerShell({
       label: "Important deadlines",
       icon: FlagIcon,
     },
+    {
+      href: "/dashboard/maintenance",
+      label: "Maintenance",
+      icon: WrenchIcon,
+      count: counts.maintenance,
+    },
   ];
 
   // Stock and the bills raised against it sit together, away from the
-  // day-to-day task work above them.
+  // day-to-day ticket work above them.
   const salesStock: NavItem[] = [
     {
       href: "/dashboard/inventory",
@@ -143,13 +152,21 @@ export function OwnerShell({
     },
     {
       href: "/dashboard/customers",
-      label: "Customers",
+      label: "Parties",
       icon: ContactIcon,
       count: counts.customers,
     },
-    // What the business pays out is the owner's business alone.
+    // What the business pays out is the owner's business alone. Both of
+    // these sit behind that rule; a supervisor records stock purchases from
+    // the Inventory page instead.
     ...(viewer.role === "owner"
       ? [
+          {
+            href: "/dashboard/expenses",
+            label: "Expenses",
+            icon: OutgoingIcon,
+            count: counts.expenses,
+          },
           {
             href: "/dashboard/payments",
             label: "Payments",

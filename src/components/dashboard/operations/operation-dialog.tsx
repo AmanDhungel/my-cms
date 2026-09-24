@@ -29,7 +29,7 @@ import {
 import { operationSchema } from "@/lib/validations/operations"
 import {
   OPERATION_STATUSES,
-  TASK_PRIORITIES,
+  TICKET_PRIORITIES,
   type OperationKind,
 } from "@/lib/work-constants"
 import type { OperationDTO } from "@/models/operation"
@@ -311,7 +311,7 @@ function Body({
               aria-label="Priority"
               className={cn(inputClass, "cursor-pointer capitalize")}
             >
-              {TASK_PRIORITIES.map((one) => (
+              {TICKET_PRIORITIES.map((one) => (
                 <option key={one} value={one}>
                   {one}
                 </option>

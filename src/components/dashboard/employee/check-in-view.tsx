@@ -7,26 +7,26 @@ import {
   EmployeeScreen,
   PhoneEmpty,
 } from "@/components/dashboard/employee/screen"
-import { EmployeeTaskCard } from "@/components/dashboard/employee/task-card"
+import { EmployeeTicketCard } from "@/components/dashboard/employee/ticket-card"
 import { CardsSkeleton } from "@/components/dashboard/skeletons"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useLocationFix } from "@/components/dashboard/employee/use-location"
 import { distanceInMetres, formatDistance } from "@/lib/geo"
-import { useAttendance, useTasks } from "@/lib/queries"
+import { useAttendance, useTickets } from "@/lib/queries"
 
 /**
  * A single screen for the one thing the crew does most. It reads a position
  * once on open so the cards can be ordered by how close they are.
  */
 export function CheckInView() {
-  const tasks = useTasks("today")
+  const tickets = useTickets("today")
   const attendance = useAttendance()
 
   const { fix, error, locating, retry } = useLocationFix()
 
   const timeZone = attendance.data?.timeZone ?? "UTC"
-  const open = (tasks.data?.tasks ?? []).filter(
-    (task) => task.status !== "done" && task.status !== "cancelled"
+  const open = (tickets.data?.tickets ?? []).filter(
+    (ticket) => ticket.status !== "done" && ticket.status !== "cancelled"
   )
 
   const ordered = fix
@@ -35,7 +35,7 @@ export function CheckInView() {
       )
     : open
 
-  const active = ordered.find((task) => task.myCheckedInAt)
+  const active = ordered.find((ticket) => ticket.myCheckedInAt)
 
   return (
     <EmployeeScreen eyebrow="Where you are" title="Check in">
@@ -70,7 +70,7 @@ export function CheckInView() {
               ? `Checked in at ${active.site}`
               : ordered[0]
                 ? `${formatDistance(distanceInMetres(fix, ordered[0]))} from ${ordered[0].site}`
-                : "No task nearby"}
+                : "No ticket nearby"}
           </span>
           <span className="text-n-500 text-[12.5px]">
             Accurate to about {formatDistance(fix.accuracyM)} ·{" "}
@@ -85,32 +85,32 @@ export function CheckInView() {
         </div>
       ) : null}
 
-      {tasks.isPending ? (
+      {tickets.isPending ? (
         <CardsSkeleton cards={2} />
-      ) : tasks.isError ? (
-        <ErrorPanel onRetry={() => void tasks.refetch()} />
+      ) : tickets.isError ? (
+        <ErrorPanel onRetry={() => void tickets.refetch()} />
       ) : ordered.length === 0 ? (
-        <PhoneEmpty message="Nothing open today. When your owner assigns a task it appears here, nearest first." />
+        <PhoneEmpty message="Nothing open today. When your owner assigns a ticket it appears here, nearest first." />
       ) : (
         <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:items-start">
-          {ordered.map((task) => (
-            <div key={task.id} className="flex flex-col gap-1.5">
+          {ordered.map((ticket) => (
+            <div key={ticket.id} className="flex flex-col gap-1.5">
               {fix ? (
                 <span
                   className={cn(
                     "px-1 font-mono text-[10.5px] tracking-[0.06em]",
-                    distanceInMetres(fix, task) <= task.radiusM
+                    distanceInMetres(fix, ticket) <= ticket.radiusM
                       ? "text-p-600"
                       : "text-a-700"
                   )}
                 >
-                  {formatDistance(distanceInMetres(fix, task))} AWAY ·{" "}
-                  {distanceInMetres(fix, task) <= task.radiusM
+                  {formatDistance(distanceInMetres(fix, ticket))} AWAY ·{" "}
+                  {distanceInMetres(fix, ticket) <= ticket.radiusM
                     ? "INSIDE THE AREA"
                     : "OUTSIDE THE AREA"}
                 </span>
               ) : null}
-              <EmployeeTaskCard task={task} timeZone={timeZone} />
+              <EmployeeTicketCard ticket={ticket} timeZone={timeZone} />
             </div>
           ))}
         </div>

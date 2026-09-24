@@ -44,6 +44,15 @@ const lineSchema = new Schema(
     price: { type: Number, required: true, min: 0 },
     qty: { type: Number, required: true, min: 0 },
     discountPct: { type: Number, required: true, min: 0, max: 100, default: 0 },
+    /**
+     * What the goods cost us, copied off the item as the bill was raised.
+     *
+     * Snapshotted rather than looked up later because the cost of a thing
+     * changes with every purchase: asking today what a cable cost would price
+     * last year's sale at this year's figure. Absent on bills raised before
+     * purchases were recorded, and on custom lines that were never stock.
+     */
+    cost: { type: Number, min: 0 },
   },
   { _id: false }
 )
