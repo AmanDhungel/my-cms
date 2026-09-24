@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSession } from "next-auth/react"
 import { cn } from "cn"
 
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
@@ -112,8 +113,14 @@ export function PartyPicker({
  * had touched it. The parent resolves the same way at submit — `chosen ||
  * fallback` — so what is shown and what is saved cannot disagree.
  */
+/** Whether this viewer may see the accounts at all. Owners only. */
+function useCanSeeAccounts() {
+  const { data } = useSession()
+  return data?.user?.role === "owner"
+}
+
 export function useDefaultAccountId() {
-  const query = useAccounts()
+  const query = useAccounts(useCanSeeAccounts())
   return (
     (query.data?.accounts ?? []).find((one) => !one.archived && one.isDefault)
       ?.id ?? ""
@@ -132,9 +139,21 @@ export function AccountPicker({
   error?: string
   label?: string
 }) {
-  const query = useAccounts()
+  /*
+   * Somebody who may not see the accounts is not asked to choose one, and is
+   * not made to ask for them either.
+   *
+   * A supervisor records stock purchases but has no view of what the business
+   * holds. Gating the query on the role rather than letting it 403 is what
+   * keeps a refused request out of their console — the answer was knowable
+   * before asking.
+   */
+  const allowed = useCanSeeAccounts()
+  const query = useAccounts(allowed)
   const accounts = (query.data?.accounts ?? []).filter((one) => !one.archived)
   const fallback = accounts.find((one) => one.isDefault)
+
+  if (!allowed || query.isError) return null
 
   return (
     <div className="flex flex-col gap-[7px]">

@@ -96,6 +96,7 @@ function Body({
 
     const parsed = customerSchema.safeParse({
       name: form.name,
+      kind: form.kind,
       company: form.company || undefined,
       phone: form.phone || undefined,
       email: form.email || undefined,
@@ -145,6 +146,38 @@ function Body({
             />
             <FieldError message={errors.name} />
           </label>
+
+          <div className="flex flex-col gap-[7px]">
+            <FieldLabel>Which are they</FieldLabel>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ["customer", "Customer"],
+                  ["vendor", "Supplier"],
+                  ["both", "Both"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => set("kind", value)}
+                  aria-pressed={form.kind === value}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-[12.5px] transition-colors",
+                    form.kind === value
+                      ? "bg-p-100 border-p-400 text-p-700 font-semibold"
+                      : "border-n-200 text-n-600 hover:bg-n-100 bg-white font-medium"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="text-n-500 text-[11.5px]">
+              Decides where they can be picked — on a bill, on an expense, or
+              on both.
+            </span>
+          </div>
 
           <label className="flex flex-col gap-[7px]">
             <FieldLabel>Company</FieldLabel>
@@ -247,6 +280,7 @@ function Body({
 function blank(customer?: CustomerDTO) {
   return {
     name: customer?.name ?? "",
+    kind: customer?.kind ?? "customer",
     company: customer?.company ?? "",
     phone: customer?.phone ?? "",
     email: customer?.email ?? "",

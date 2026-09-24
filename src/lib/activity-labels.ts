@@ -38,6 +38,9 @@ export const ACTION_VERBS: Record<ActivityAction, string> = {
   maintenance_updated: "updated",
   maintenance_status: "moved",
   maintenance_deleted: "removed",
+  quote_shared: "sent for review",
+  quote_reviewed: "heard back on",
+  quote_revoked: "withdrew the review link for",
 }
 
 /**
@@ -83,6 +86,9 @@ export const ACTION_TONE: Record<ActivityAction, string> = {
   maintenance_updated: "bg-s-progress",
   maintenance_status: "bg-s-time",
   maintenance_deleted: "bg-s-overdue",
+  quote_shared: "bg-p-500",
+  quote_reviewed: "bg-s-time",
+  quote_revoked: "bg-n-400",
 }
 
 /** "in progress" — statuses are stored snake_case but never shown that way. */
