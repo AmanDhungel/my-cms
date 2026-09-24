@@ -1,5 +1,6 @@
 "use client"
 
+import { QuoteReviewPanel } from "@/components/dashboard/sales/quote-review-panel"
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -518,6 +519,11 @@ export function BillView({
           router.refresh()
         }}
       />
+
+      {/* Only a quotation is up for discussion; a bill is a charge. */}
+      {bill.payment === "quotation" && bill.status === "issued" ? (
+        <QuoteReviewPanel bill={bill} />
+      ) : null}
     </DashboardMain>
   )
 }

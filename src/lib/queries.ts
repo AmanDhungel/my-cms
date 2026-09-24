@@ -799,6 +799,12 @@ export function useAccounts(enabled = true) {
     queryKey: keys.accounts(),
     queryFn: () => apiFetch<{ accounts: AccountDTO[] }>("/api/accounts"),
     enabled,
+    /*
+     * Owner-only, so a supervisor gets a 403 — which is the right answer, not
+     * a failure. Retrying it would make three requests to be told the same
+     * thing, and the picker hides itself instead.
+     */
+    retry: false,
   })
 }
 

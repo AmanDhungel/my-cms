@@ -40,6 +40,7 @@ export async function POST(request: Request) {
     const customer = await Customer.create({
       business: viewer.businessId,
       name: values.name,
+      kind: values.kind,
       company: values.company,
       phone: values.phone,
       email: values.email || undefined,

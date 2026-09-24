@@ -16,6 +16,7 @@ import {
   type BillSource,
   type BillStatus,
 } from "@/lib/work-constants"
+import { REVIEW_STATUSES, type ReviewStatus } from "@/lib/work-constants"
 
 export {
   BILL_PAYMENTS,
@@ -70,6 +71,26 @@ const customerSchema = new Schema(
   { _id: false }
 )
 
+/**
+ * One thing the client said.
+ *
+ * A remark can point at a line — "this cable price isn't justified" — or at
+ * the quotation as a whole. Both sides can write, so the thread reads as a
+ * conversation rather than a one-way complaint.
+ */
+const remarkSchema = new Schema(
+  {
+    /** Which line it is about. Null means the quotation generally. */
+    lineIndex: { type: Number, min: 0 },
+    text: { type: String, required: true, trim: true, maxlength: 1500 },
+    /** "client" or the name of whoever answered from this side. */
+    author: { type: String, required: true, trim: true, maxlength: 140 },
+    fromClient: { type: Boolean, required: true, default: true },
+    at: { type: Date, required: true },
+  },
+  { _id: false }
+)
+
 const billSchema = new Schema(
   {
     business: { type: Schema.Types.ObjectId, ref: "Business", required: true },
@@ -111,6 +132,32 @@ const billSchema = new Schema(
     /** Only kept while the bill is on cheque, for reconciling it later. */
     chequeNo: { type: String, trim: true, maxlength: 40 },
     note: { type: String, trim: true, maxlength: 500 },
+    /**
+     * The client's own view of this quotation.
+     *
+     * Present only once it has been shared. The token is the whole of the
+     * client's credential — long, random and revocable — because asking
+     * somebody to make an account to look at one price list is how a
+     * quotation goes unanswered.
+     */
+    review: {
+      token: { type: String, trim: true, maxlength: 64 },
+      /** The email address or phone number it was sent to. */
+      invitedTo: { type: String, trim: true, maxlength: 160 },
+      invitedAt: { type: Date },
+      expiresAt: { type: Date },
+      revokedAt: { type: Date },
+      status: {
+        type: String,
+        enum: REVIEW_STATUSES,
+        default: "pending",
+      },
+      decidedAt: { type: Date },
+      /** Who they said they were when they answered. */
+      clientName: { type: String, trim: true, maxlength: 140 },
+      remarks: { type: [remarkSchema], default: [] },
+    },
+
     status: {
       type: String,
       required: true,
@@ -124,6 +171,8 @@ const billSchema = new Schema(
   { timestamps: true }
 )
 
+// The token is the only way a client's request finds its quotation.
+billSchema.index({ "review.token": 1 }, { sparse: true })
 billSchema.index({ business: 1, number: 1 }, { unique: true })
 billSchema.index({ business: 1, createdAt: -1 })
 
@@ -147,7 +196,27 @@ export type BillLineDTO = {
   net: number
 }
 
+export type BillReviewDTO = {
+  status: ReviewStatus
+  invitedTo: string | null
+  invitedAt: string | null
+  expiresAt: string | null
+  revoked: boolean
+  decidedAt: string | null
+  clientName: string | null
+  remarks: {
+    lineIndex: number | null
+    text: string
+    author: string
+    fromClient: boolean
+    at: string
+  }[]
+  /** Never leaves the workspace: the owner needs it to build the link. */
+  token: string | null
+}
+
 export type BillDTO = {
+  review: BillReviewDTO | null
   id: string
   number: string
   source: BillSource
@@ -185,6 +254,7 @@ export function toBillDTO(
   paid = 0
 ): BillDTO {
   return {
+    review: toReviewDTO(bill),
     id: String(bill._id),
     number: bill.number,
     source: bill.source as BillSource,
@@ -237,5 +307,41 @@ export function toBillDTO(
     issuedBy: String(bill.issuedBy),
     createdAt: (bill.createdAt as Date).toISOString(),
     voidedAt: bill.voidedAt ? bill.voidedAt.toISOString() : null,
+  }
+}
+
+/**
+ * The review thread, or null when the quotation has never been shared.
+ *
+ * A revoked link reads as revoked rather than disappearing: the remarks are
+ * still worth having, and "we withdrew this" is different from "we never
+ * sent it".
+ */
+function toReviewDTO(
+  bill: HydratedDocument<BillDocument>
+): BillReviewDTO | null {
+  const review = bill.review
+  if (!review?.invitedAt) return null
+
+  return {
+    status: (review.status ?? "pending") as ReviewStatus,
+    invitedTo: review.invitedTo ?? null,
+    invitedAt: (review.invitedAt as Date).toISOString(),
+    expiresAt: review.expiresAt
+      ? (review.expiresAt as Date).toISOString()
+      : null,
+    revoked: Boolean(review.revokedAt),
+    decidedAt: review.decidedAt
+      ? (review.decidedAt as Date).toISOString()
+      : null,
+    clientName: review.clientName ?? null,
+    remarks: (review.remarks ?? []).map((one) => ({
+      lineIndex: one.lineIndex ?? null,
+      text: one.text,
+      author: one.author,
+      fromClient: one.fromClient,
+      at: (one.at as Date).toISOString(),
+    })),
+    token: review.token ?? null,
   }
 }

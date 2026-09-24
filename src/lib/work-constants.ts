@@ -125,6 +125,20 @@ export const PAYMENT_METHODS = ["cash", "cheque", "bank", "online"] as const
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
 /**
+ * What a client has said about a quotation.
+ *
+ * "changes_requested" is not a rejection: it is the normal middle of a
+ * negotiation, and treating it as a no would end conversations that were
+ * about to become orders.
+ */
+export const REVIEW_STATUSES = [
+  "pending",
+  "approved",
+  "changes_requested",
+] as const
+export type ReviewStatus = (typeof REVIEW_STATUSES)[number]
+
+/**
  * Where a repair has got to.
  *
  * "awaiting_parts" earns its place beside "repairing": an item stuck waiting
@@ -275,6 +289,9 @@ export const ACTIVITY_ACTIONS = [
   "maintenance_updated",
   "maintenance_status",
   "maintenance_deleted",
+  "quote_shared",
+  "quote_reviewed",
+  "quote_revoked",
 ] as const
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number]
 
@@ -289,6 +306,7 @@ export const ACTIVITY_TARGETS = [
   "expense",
   "site",
   "maintenance",
+  "quote",
 ] as const
 export type ActivityTarget = (typeof ACTIVITY_TARGETS)[number]
 

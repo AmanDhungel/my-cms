@@ -161,6 +161,10 @@ export function ImagePickerList({
   const [busy, setBusy] = React.useState(false)
   const inputRef = React.useRef<HTMLInputElement>(null)
 
+  const chosen = values.filter((one) => one.file)
+  const waiting = chosen.length
+  const waitingBytes = chosen.reduce((sum, one) => sum + (one.file?.size ?? 0), 0)
+
   async function add(files: FileList) {
     if (busy) return
     setBusy(true)
@@ -198,6 +202,12 @@ export function ImagePickerList({
       </div>
       {hint ? (
         <span className="text-n-500 text-[12px] leading-snug">{hint}</span>
+      ) : null}
+
+      {waiting > 0 ? (
+        <span className="text-n-500 font-mono text-[11px]">
+          {waiting} new · {readableSize(waitingBytes)} · uploads when you save
+        </span>
       ) : null}
 
       <div className="flex flex-wrap gap-2">

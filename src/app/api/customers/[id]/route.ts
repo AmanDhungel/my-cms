@@ -34,6 +34,7 @@ export async function PATCH(
     if (clash) throw new HttpError(409, `${clash.name} is already a customer`)
 
     customer.name = values.name
+    customer.kind = values.kind
     customer.company = values.company
     customer.phone = values.phone
     customer.email = values.email || undefined
