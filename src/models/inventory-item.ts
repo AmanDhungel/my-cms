@@ -26,6 +26,14 @@ const inventoryItemSchema = new Schema(
     unit: { type: String, required: true, enum: ITEM_UNITS, default: "pcs" },
     /** Per unit, in the workspace's currency — no conversion is attempted. */
     price: { type: Number, required: true, min: 0, default: 0 },
+    /**
+     * What a unit costs us, averaged across every purchase recorded against
+     * this item. Never typed by hand: it is recomputed from the purchase
+     * ledger whenever one is recorded, edited or deleted, so it always agrees
+     * with what is on record and a deleted purchase leaves no residue. Zero
+     * means nothing has been bought through the expenses ledger yet.
+     */
+    costPrice: { type: Number, required: true, min: 0, default: 0 },
     stock: { type: Number, required: true, min: 0, default: 0 },
     /** At or below this, the item is flagged as running out. */
     lowStockAt: { type: Number, required: true, min: 0, default: 0 },
@@ -57,6 +65,8 @@ export type ItemDTO = {
   description: string | null
   unit: ItemUnit
   price: number
+  /** Averaged over every recorded purchase; 0 when none has been. */
+  costPrice: number
   stock: number
   lowStockAt: number
   location: string | null
@@ -89,6 +99,7 @@ export function toItemDTO(
     description: item.description ?? null,
     unit: item.unit as ItemUnit,
     price: item.price,
+    costPrice: item.costPrice ?? 0,
     stock: item.stock,
     lowStockAt: item.lowStockAt,
     location: item.location ?? null,

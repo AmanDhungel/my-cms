@@ -12,6 +12,7 @@ import {
   CalendarIcon,
   ChartIcon,
   CoinsIcon,
+  OutgoingIcon,
   ClockIcon,
   ContactIcon,
   DashboardIcon,
@@ -59,6 +60,7 @@ export function OwnerShell({
     sales: number;
     customers: number;
     payments: number;
+    expenses: number;
     approvals: number;
     unread: number;
   };
@@ -147,9 +149,17 @@ export function OwnerShell({
       icon: ContactIcon,
       count: counts.customers,
     },
-    // What the business pays out is the owner's business alone.
+    // What the business pays out is the owner's business alone. Both of
+    // these sit behind that rule; a supervisor records stock purchases from
+    // the Inventory page instead.
     ...(viewer.role === "owner"
       ? [
+          {
+            href: "/dashboard/expenses",
+            label: "Expenses",
+            icon: OutgoingIcon,
+            count: counts.expenses,
+          },
           {
             href: "/dashboard/payments",
             label: "Payments",

@@ -125,6 +125,39 @@ export const PAYMENT_METHODS = ["cash", "cheque", "bank", "online"] as const
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 
 /**
+ * What the money was spent on.
+ *
+ * "stock" is the odd one out and deliberately first: buying goods from a
+ * vendor is not a cost of running the month, it is stock you now hold, so it
+ * raises the shelf and only becomes a cost once the goods are sold. Every
+ * other kind is spent the moment it is paid.
+ */
+export const EXPENSE_KINDS = [
+  "stock",
+  "salary",
+  "commission",
+  "contractor",
+  "rent",
+  "utilities",
+  "fuel",
+  "vehicle",
+  "tools",
+  "repairs",
+  "office",
+  "marketing",
+  "travel",
+  "food",
+  "training",
+  "professional",
+  "insurance",
+  "tax",
+  "bank",
+  "software",
+  "other",
+] as const
+export type ExpenseKind = (typeof EXPENSE_KINDS)[number]
+
+/**
  * How far from the office a shift may be opened without explanation.
  * A city GPS fix is easily tens of metres out, so there are two rings: inside
  * the first you are at the office, inside the second you are near enough that
@@ -178,6 +211,11 @@ export const ACTIVITY_ACTIONS = [
   "operation_deleted",
   "schedule_set",
   "schedule_cleared",
+  "expense_recorded",
+  "expense_updated",
+  "expense_deleted",
+  "site_published",
+  "site_unpublished",
 ] as const
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number]
 
@@ -189,6 +227,8 @@ export const ACTIVITY_TARGETS = [
   "member",
   "operation",
   "schedule",
+  "expense",
+  "site",
 ] as const
 export type ActivityTarget = (typeof ACTIVITY_TARGETS)[number]
 

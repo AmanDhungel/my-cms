@@ -29,6 +29,11 @@ export const ACTION_VERBS: Record<ActivityAction, string> = {
   operation_deleted: "deleted",
   schedule_set: "rostered",
   schedule_cleared: "cleared the roster for",
+  expense_recorded: "recorded",
+  expense_updated: "corrected",
+  expense_deleted: "deleted",
+  site_published: "put the website live at",
+  site_unpublished: "took the website down at",
 }
 
 /**
@@ -65,6 +70,11 @@ export const ACTION_TONE: Record<ActivityAction, string> = {
   operation_deleted: "bg-s-overdue",
   schedule_set: "bg-s-progress",
   schedule_cleared: "bg-n-400",
+  expense_recorded: "bg-a-400",
+  expense_updated: "bg-s-progress",
+  expense_deleted: "bg-s-overdue",
+  site_published: "bg-s-done",
+  site_unpublished: "bg-n-400",
 }
 
 /** "in progress" — statuses are stored snake_case but never shown that way. */

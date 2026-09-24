@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMutation } from "@tanstack/react-query"
 import { useForm, useWatch } from "react-hook-form"
@@ -126,6 +127,10 @@ export function SettingsView({
           actions={
             canEdit ? (
               <>
+                {/* Its own page, so it sits outside the save/discard pair. */}
+                <Link href="/dashboard/site" className={secondaryButtonClass}>
+                  Build your site
+                </Link>
                 <button
                   type="button"
                   onClick={() => reset()}

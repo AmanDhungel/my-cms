@@ -246,6 +246,18 @@ export function CoinsIcon({ className }: IconProps) {
   )
 }
 
+/** A banknote with the arrow leaving it: money on its way out. */
+export function OutgoingIcon({ className }: IconProps) {
+  return (
+    <svg {...stroke} className={className} aria-hidden>
+      <rect x="2.5" y="6" width="14" height="9" rx="1.6" />
+      <circle cx="9.5" cy="10.5" r="1.8" />
+      <path d="M20 12v7" />
+      <path d="M17.2 16.2 20 19l2.8-2.8" />
+    </svg>
+  )
+}
+
 export function BadgeIcon({ className }: IconProps) {
   return (
     <svg {...stroke} className={className} aria-hidden>

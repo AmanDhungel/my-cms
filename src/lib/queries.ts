@@ -18,6 +18,8 @@ import type { WorkspaceInviteDTO } from "@/models/workspace-invite"
 import type { BillDTO } from "@/models/bill"
 import type { CustomerDTO } from "@/models/customer"
 import type { ItemDTO } from "@/models/inventory-item"
+import type { ExpenseDTO } from "@/models/expense"
+import type { SiteDTO } from "@/models/site"
 import type { PaymentDTO } from "@/models/payment"
 import type { ActivityDTO } from "@/models/activity"
 import type { ReportColumn, ReportChartData } from "@/lib/reports"
@@ -68,6 +70,8 @@ export const keys = {
   inventoryCategories: () => ["inventory", "categories"] as const,
   bills: () => ["bills"] as const,
   payments: () => ["payments"] as const,
+  expenses: () => ["expenses"] as const,
+  site: () => ["site"] as const,
   customers: () => ["customers"] as const,
   adminOverview: () => ["admin", "overview"] as const,
 }
@@ -650,6 +654,103 @@ export function useDeletePayment(id: string) {
 function invalidateMoney(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["payments"] })
   void client.invalidateQueries({ queryKey: ["bills"] })
+}
+
+/* ----------------------------------------------------------------- expenses */
+
+export function useExpenses() {
+  return useQuery({
+    queryKey: keys.expenses(),
+    queryFn: () => apiFetch<{ expenses: ExpenseDTO[] }>("/api/expenses"),
+  })
+}
+
+export function useCreateExpense() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ expense: ExpenseDTO }>("/api/expenses", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateSpend(client),
+  })
+}
+
+export function useUpdateExpense(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ expense: ExpenseDTO }>(`/api/expenses/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateSpend(client),
+  })
+}
+
+export function useDeleteExpense(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ id: string }>(`/api/expenses/${id}`, { method: "DELETE" }),
+    onSuccess: () => invalidateSpend(client),
+  })
+}
+
+/**
+ * A stock purchase raises the shelf and mirrors itself onto the cash ledger,
+ * so recording one moves the inventory and the payments lists as well as its
+ * own.
+ */
+function invalidateSpend(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: ["expenses"] })
+  void client.invalidateQueries({ queryKey: ["payments"] })
+  void client.invalidateQueries({ queryKey: ["inventory"] })
+}
+
+/* --------------------------------------------------------------------- site */
+
+export function useSite() {
+  return useQuery({
+    queryKey: keys.site(),
+    queryFn: () =>
+      apiFetch<{ site: SiteDTO; uploads: boolean }>("/api/site"),
+  })
+}
+
+export function useSaveSite() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ site: SiteDTO }>("/api/site", {
+        method: "PUT",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.site() })
+    },
+  })
+}
+
+/** Publishing is one flag — the subdomain serves it the moment it is set. */
+export function usePublishSite() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (published: boolean) =>
+      apiFetch<{ site: SiteDTO }>("/api/site", {
+        method: "POST",
+        body: JSON.stringify({ published }),
+      }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: keys.site() })
+    },
+  })
 }
 
 /* -------------------------------------------------------------- super admin */

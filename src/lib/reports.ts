@@ -199,7 +199,7 @@ export const REPORTS: ReportDef[] = [
     slug: "expenses",
     group: "finance",
     title: "Expenses",
-    subtitle: "Money paid out, by who it went to and how.",
+    subtitle: "What the business spent, by what it was spent on.",
     filters: [],
     status: "ready",
   },
@@ -207,15 +207,9 @@ export const REPORTS: ReportDef[] = [
     slug: "profit",
     group: "finance",
     title: "Profit",
-    subtitle: "What is left after what it cost you.",
+    subtitle: "Revenue, less what the goods cost, less what the month cost.",
     filters: [],
-    status: "blocked",
-    missing:
-      "Profit needs to know what stock cost you, and items only carry a selling price. Revenue minus recorded payments-out would be a cash figure, not profit, and showing it under this heading would be misleading.",
-    unlock: [
-      "A cost price on each inventory item",
-      "Purchase records, so cost of goods sold can be worked out",
-    ],
+    status: "ready",
   },
   {
     slug: "receivables",

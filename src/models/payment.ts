@@ -50,6 +50,13 @@ const paymentSchema = new Schema(
     paidOn: { type: Date, required: true },
     /** Set when the payment was recorded against a bill. */
     bill: { type: Schema.Types.ObjectId, ref: "Bill" },
+    /**
+     * Set when this row is the cash side of an expense rather than something
+     * entered here by hand. It is what lets a report count the money once:
+     * the expense ledger already knows about these, so an expense report adds
+     * only the payments-out that have no expense behind them.
+     */
+    expense: { type: Schema.Types.ObjectId, ref: "Expense" },
     recordedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }

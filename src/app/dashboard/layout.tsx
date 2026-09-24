@@ -10,6 +10,7 @@ import { Customer } from "@/models/customer";
 import { InventoryItem } from "@/models/inventory-item";
 import { Invite } from "@/models/invite";
 import { Notification } from "@/models/notification";
+import { Expense } from "@/models/expense";
 import { Payment } from "@/models/payment";
 import { Project } from "@/models/project";
 import { WorkRequest } from "@/models/request";
@@ -59,6 +60,7 @@ export default async function DashboardLayout({
     sales,
     customers,
     payments,
+    expenses,
     approvals,
     unread,
   ] = await Promise.all([
@@ -76,6 +78,7 @@ export default async function DashboardLayout({
     Bill.countDocuments({ business: business._id, status: "issued" }),
     Customer.countDocuments({ business: business._id }),
     Payment.countDocuments({ business: business._id }),
+    Expense.countDocuments({ business: business._id }),
     WorkRequest.countDocuments({
       business: business._id,
       status: "pending",
@@ -98,6 +101,7 @@ export default async function DashboardLayout({
         sales,
         customers,
         payments,
+        expenses,
         approvals,
         unread,
       }}>
