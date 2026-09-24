@@ -4,7 +4,7 @@ import * as React from "react"
 import { cn } from "cn"
 
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
-import { ImageField } from "@/components/dashboard/site/image-field"
+import { ImagePicker } from "@/components/dashboard/image-picker"
 import { PlusIcon } from "@/components/dashboard/nav-icons"
 import {
   LIMITS,
@@ -12,7 +12,8 @@ import {
   SECTION_LABELS,
   type SectionKey,
 } from "@/lib/site-templates"
-import type { SiteContent } from "@/models/site"
+import type { SiteDraft } from "@/components/dashboard/site/site-draft"
+import { emptyImage } from "@/lib/upload-client"
 
 /**
  * The form.
@@ -32,16 +33,16 @@ export function ContentEditor({
   errors,
   onChange,
 }: {
-  content: SiteContent
+  content: SiteDraft
   sections: SectionKey[]
   uploads: boolean
   errors: Record<string, string>
-  onChange: (next: SiteContent) => void
+  onChange: (next: SiteDraft) => void
 }) {
   const shows = (key: SectionKey) => sections.includes(key)
 
   /** A shallow update of one top-level part. */
-  function set<K extends keyof SiteContent>(key: K, value: SiteContent[K]) {
+  function set<K extends keyof SiteDraft>(key: K, value: SiteDraft[K]) {
     onChange({ ...content, [key]: value })
   }
 
@@ -115,12 +116,12 @@ export function ContentEditor({
               placeholder="tel:+977…"
             />
           </div>
-          <ImageField
+          <ImagePicker
             label="Opening picture"
             hint="Wide works best here."
             enabled={uploads}
             value={content.hero.image}
-            onChange={(url) => set("hero", { ...content.hero, image: url })}
+            onChange={(image) => set("hero", { ...content.hero, image })}
           />
         </Block>
       ) : null}
@@ -142,12 +143,12 @@ export function ContentEditor({
             onChange={(value) => set("about", { ...content.about, body: value })}
             rows={6}
           />
-          <ImageField
+          <ImagePicker
             label="Picture"
             enabled={uploads}
             ratio="4/3"
             value={content.about.image}
-            onChange={(url) => set("about", { ...content.about, image: url })}
+            onChange={(image) => set("about", { ...content.about, image })}
           />
         </Block>
       ) : null}
@@ -196,7 +197,7 @@ export function ContentEditor({
             rows={content.products}
             limit={LIMITS.products}
             addLabel="Add a product"
-            blank={{ name: "", blurb: null, price: null, image: null }}
+            blank={{ name: "", blurb: null, price: null, image: emptyImage() }}
             onChange={(rows) => set("products", rows)}
             render={(row, update, index) => (
               <>
@@ -224,12 +225,12 @@ export function ContentEditor({
                   onChange={(value) => update({ ...row, blurb: value })}
                   rows={2}
                 />
-                <ImageField
+                <ImagePicker
                   label="Picture"
                   enabled={uploads}
                   ratio="4/3"
                   value={row.image}
-                  onChange={(url) => update({ ...row, image: url })}
+                  onChange={(image) => update({ ...row, image })}
                 />
               </>
             )}
@@ -247,16 +248,16 @@ export function ContentEditor({
             rows={content.gallery}
             limit={LIMITS.gallery}
             addLabel="Add a picture"
-            blank={{ url: "", caption: null }}
+            blank={{ url: emptyImage(), caption: null }}
             onChange={(rows) => set("gallery", rows)}
             render={(row, update) => (
               <>
-                <ImageField
+                <ImagePicker
                   label="Picture"
                   enabled={uploads}
                   ratio="1/1"
-                  value={row.url || null}
-                  onChange={(url) => update({ ...row, url: url ?? "" })}
+                  value={row.url}
+                  onChange={(image) => update({ ...row, url: image })}
                 />
                 <Text
                   label="Caption"

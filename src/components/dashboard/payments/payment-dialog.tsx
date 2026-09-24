@@ -17,6 +17,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
+import {
+  AccountPicker,
+  PartyPicker,
+  useDefaultAccountId,
+} from "@/components/dashboard/money-pickers"
 import { money } from "@/lib/billing"
 import { reportMutationError, useBills, useCreatePayment } from "@/lib/queries"
 import { paymentSchema } from "@/lib/validations/payments"
@@ -39,14 +44,11 @@ export function PaymentDialog({
   open,
   onClose,
   today,
-  parties,
 }: {
   open: boolean
   onClose: () => void
   /** The workspace's today, so the date starts on its calendar not the browser's. */
   today: string
-  /** Names already used, offered as you type. */
-  parties: string[]
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
@@ -67,7 +69,7 @@ export function PaymentDialog({
         </DialogHeader>
         {/* Mounted only while open, so each entry starts from a clean sheet. */}
         {open ? (
-          <Body onClose={onClose} today={today} parties={parties} />
+          <Body onClose={onClose} today={today} />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -77,14 +79,14 @@ export function PaymentDialog({
 function Body({
   onClose,
   today,
-  parties,
 }: {
   onClose: () => void
   today: string
-  parties: string[]
 }) {
   const [direction, setDirection] = React.useState<PaymentDirection>("in")
   const [party, setParty] = React.useState("")
+  const [partyId, setPartyId] = React.useState("")
+  const [accountId, setAccountId] = React.useState("")
   const [amount, setAmount] = React.useState("")
   const [method, setMethod] = React.useState<PaymentMethod>("cash")
   const [reference, setReference] = React.useState("")
@@ -95,6 +97,7 @@ function Body({
 
   const bills = useBills()
   const create = useCreatePayment()
+  const fallbackAccount = useDefaultAccountId()
 
   // Anything still owed on, whether nothing has been paid yet or half has.
   const settleable = (bills.data?.bills ?? []).filter(
@@ -117,6 +120,8 @@ function Body({
     const parsed = paymentSchema.safeParse({
       direction,
       party,
+      partyId: partyId || undefined,
+      accountId: accountId || fallbackAccount || undefined,
       amount: amount || 0,
       method,
       reference: reference || undefined,
@@ -172,27 +177,18 @@ function Body({
         </div>
 
         <div className="grid gap-3.5 sm:grid-cols-2">
-          <label className="flex flex-col gap-[7px]">
-            <FieldLabel>{direction === "in" ? "Paid by" : "Paid to"}</FieldLabel>
-            <input
-              value={party}
-              onChange={(event) => {
-                setParty(event.target.value)
-                setErrors((prev) => ({ ...prev, party: undefined }))
-              }}
-              list="ems-parties"
-              placeholder="Company or person"
-              aria-invalid={Boolean(errors.party)}
-              className={inputClass}
-            />
-            {/* Names already in the ledger, so the same one isn't spelled two ways. */}
-            <datalist id="ems-parties">
-              {parties.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-            <FieldError message={errors.party} />
-          </label>
+          <PartyPicker
+            label={direction === "in" ? "Paid by" : "Paid to"}
+            side={direction === "in" ? "customer" : "vendor"}
+            name={party}
+            partyId={partyId}
+            onName={(value) => {
+              setParty(value)
+              setErrors((prev) => ({ ...prev, party: undefined }))
+            }}
+            onParty={setPartyId}
+            error={errors.party}
+          />
 
           <label className="flex flex-col gap-[7px]">
             <FieldLabel>Amount</FieldLabel>
@@ -214,7 +210,7 @@ function Body({
           </label>
         </div>
 
-        <div className="grid gap-3.5 sm:grid-cols-3">
+        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
           <label className="flex flex-col gap-[7px]">
             <FieldLabel>Date</FieldLabel>
             <input
@@ -246,6 +242,12 @@ function Body({
               ))}
             </select>
           </label>
+
+          <AccountPicker
+            value={accountId}
+            onChange={setAccountId}
+            error={errors.accountId}
+          />
 
           <label className="flex flex-col gap-[7px]">
             <FieldLabel>

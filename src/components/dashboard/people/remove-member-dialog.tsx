@@ -36,10 +36,10 @@ export function RemoveMemberDialog({
   function remove() {
     if (mutation.isPending) return
     mutation.mutate(undefined, {
-      onSuccess: ({ cancelledTasks }) => {
+      onSuccess: ({ cancelledTickets }) => {
         toast.success(
-          cancelledTasks > 0
-            ? `${member.name} removed · ${cancelledTasks} unstarted task${cancelledTasks === 1 ? "" : "s"} cancelled`
+          cancelledTickets > 0
+            ? `${member.name} removed · ${cancelledTickets} unstarted ticket${cancelledTickets === 1 ? "" : "s"} cancelled`
             : `${member.name} removed`
         )
         onClose()
@@ -69,7 +69,7 @@ export function RemoveMemberDialog({
             until a workspace invites them.
           </Point>
           <Point tone="bad">
-            Tasks they hadn&rsquo;t started are cancelled.
+            Tickets they hadn&rsquo;t started are cancelled.
           </Point>
           <Point tone="good">
             Their finished work, check-ins and attendance stay exactly as they

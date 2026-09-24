@@ -123,7 +123,7 @@ function offsetMsAt(instant: Date, zone: string) {
 
 /**
  * Start and end instants of a "YYYY-MM-DD" key, as seen in `zone`.
- * Used to scope "today's tasks" queries to the workspace's calendar day.
+ * Used to scope "today's tickets" queries to the workspace's calendar day.
  */
 export function dayRangeInZone(dayKey: string, zone: string) {
   const [year, month, day] = dayKey.split("-").map(Number)

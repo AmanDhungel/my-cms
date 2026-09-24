@@ -139,7 +139,7 @@ export function AttendanceView() {
           </div>
 
           {data.days.length === 0 ? (
-            <PhoneEmpty message="No days recorded this month. A day opens when you start your shift or check in to a task." />
+            <PhoneEmpty message="No days recorded this month. A day opens when you start your shift or check in to a ticket." />
           ) : (
             <div className="border-n-200 overflow-hidden rounded-[14px] border bg-white">
               {data.days

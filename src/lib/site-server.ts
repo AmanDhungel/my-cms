@@ -2,7 +2,7 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { DEFAULT_TEMPLATE } from "@/lib/site-templates"
 import { isValidSlug, slugify } from "@/lib/tenancy"
 import { Business } from "@/models/business"
-import { Site, type SiteDocument } from "@/models/site"
+import { Site, type SiteContent, type SiteDocument } from "@/models/site"
 import type { HydratedDocument } from "mongoose"
 
 /**
@@ -97,4 +97,19 @@ export async function slugIsFree(slug: string, forBusinessId: string) {
   await connectToDatabase()
   const holder = await Site.findOne({ slug }).select("business")
   return !holder || String(holder.business) === String(forBusinessId)
+}
+
+/**
+ * Every picture a site points at.
+ *
+ * Used either side of a save to work out which files are no longer referenced
+ * and can be removed from storage.
+ */
+export function picturesIn(content: SiteContent): string[] {
+  return [
+    content.hero.image,
+    content.about.image,
+    ...content.products.map((one) => one.image),
+    ...content.gallery.map((one) => one.url),
+  ].filter((url): url is string => Boolean(url))
 }

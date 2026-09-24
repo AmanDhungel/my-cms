@@ -252,7 +252,7 @@ export function SignupForm({
             className="accent-p-500 mt-0.5 size-[15px]"
             {...register("terms")}
           />
-          I agree to the terms and to location data being recorded at task
+          I agree to the terms and to location data being recorded at ticket
           check-in.
         </label>
         <FieldError message={errors.terms?.message} />

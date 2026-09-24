@@ -12,7 +12,7 @@ export const runtime = "nodejs"
 type Named = { _id: unknown; name?: string; title?: string; site?: string }
 
 /**
- * Task attendance for one day: every arrival at and departure from a job,
+ * Ticket attendance for one day: every arrival at and departure from a job,
  * with who, where, and how far from the marker they were standing.
  *
  * This is the other half of the attendance page. The crew tab answers "was
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       .sort({ at: -1 })
       .limit(500)
       .populate<{ user: Named }>("user", "name")
-      .populate<{ task: Named }>("task", "title site radiusM")
+      .populate<{ ticket: Named }>("ticket", "title site radiusM")
 
     const visits = entries.map((entry) => ({
       id: String(entry._id),
@@ -46,10 +46,10 @@ export async function GET(request: NextRequest) {
         id: String(entry.user?._id ?? ""),
         name: entry.user?.name ?? "Someone",
       },
-      task: {
-        id: String(entry.task?._id ?? ""),
-        title: entry.task?.title ?? "A task that was deleted",
-        site: entry.task?.site ?? "",
+      ticket: {
+        id: String(entry.ticket?._id ?? ""),
+        title: entry.ticket?.title ?? "A ticket that was deleted",
+        site: entry.ticket?.site ?? "",
       },
       lat: entry.lat,
       lng: entry.lng,

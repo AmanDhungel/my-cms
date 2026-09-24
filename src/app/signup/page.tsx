@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic"
 export const metadata: Metadata = {
   title: "Create a workspace · EMS",
   description:
-    "Set up your EMS workspace, then invite your crew and assign the first located task.",
+    "Set up your EMS workspace, then invite your crew and assign the first located ticket.",
 }
 
 export default async function SignupPage({
@@ -65,7 +65,7 @@ export default async function SignupPage({
                   className="bg-p-300 mt-[7px] size-2 shrink-0 rounded-full"
                 />
                 <p className="text-p-100 text-[15px] leading-[1.6]">
-                  Located tasks with deadlines and a geofence radius you set per
+                  Located tickets with deadlines and a geofence radius you set per
                   job.
                 </p>
               </li>

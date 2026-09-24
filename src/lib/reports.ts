@@ -294,7 +294,7 @@ export const REPORTS: ReportDef[] = [
     slug: "employee-activity",
     group: "employee",
     title: "Employee performance",
-    subtitle: "Tasks finished, sites visited, bills raised.",
+    subtitle: "Tickets finished, sites visited, bills raised.",
     filters: ["employee"],
     status: "ready",
   },

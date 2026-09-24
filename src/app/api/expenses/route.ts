@@ -15,6 +15,7 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { dayRangeInZone } from "@/lib/time"
 import { expenseSchema } from "@/lib/validations/expenses"
 import { getWorkspace } from "@/lib/workspace"
+import { ownAccount, ownParty } from "@/lib/money-refs"
 import { Expense, toExpenseDTO } from "@/models/expense"
 import { Payment } from "@/models/payment"
 import { User } from "@/models/user"
@@ -102,6 +103,9 @@ export async function POST(request: Request) {
       employeeId = String(member._id)
     }
 
+    const partyRef = await ownParty(viewer.businessId, values.partyId)
+    const account = await ownAccount(viewer.businessId, values.accountId)
+
     const lines = await priceLines(viewer.businessId, values.lines)
     const amount =
       values.kind === "stock" ? linesTotal(lines) : (values.amount ?? 0)
@@ -120,6 +124,8 @@ export async function POST(request: Request) {
               business: viewer.businessId,
               kind: values.kind,
               payee: values.payee,
+              partyRef,
+              account,
               employee: employeeId,
               amount,
               method: values.method,
@@ -142,6 +148,10 @@ export async function POST(request: Request) {
               business: viewer.businessId,
               direction: "out",
               party: values.payee,
+              // The mirrored cash row lands on the same ledger and the same
+              // account, or the two views of one payment disagree.
+              partyRef,
+              account,
               amount,
               method: values.method,
               reference: values.reference,

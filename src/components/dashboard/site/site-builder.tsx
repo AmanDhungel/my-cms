@@ -25,7 +25,14 @@ import {
 import { sectionsOf, templateById } from "@/lib/site-templates"
 import { siteUrlFor } from "@/lib/tenancy"
 import { siteSchema } from "@/lib/validations/site"
-import type { SiteContent, SiteDTO } from "@/models/site"
+import {
+  commitDraft,
+  draftFingerprint,
+  previewContent,
+  toDraft,
+  type SiteDraft,
+} from "@/components/dashboard/site/site-draft"
+import type { SiteDTO } from "@/models/site"
 
 type Tab = "template" | "content" | "preview"
 
@@ -93,25 +100,55 @@ function Editor({
   const [tab, setTab] = React.useState<Tab>("content")
   const [slug, setSlug] = React.useState(saved.slug)
   const [template, setTemplate] = React.useState(saved.template)
-  const [content, setContent] = React.useState<SiteContent>(saved.content)
+  const [content, setContent] = React.useState<SiteDraft>(() =>
+    toDraft(saved.content)
+  )
   const [errors, setErrors] = React.useState<Record<string, string>>({})
 
   const save = useSaveSite()
   const publish = usePublishSite()
 
+  // Compared through the fingerprint, so a picture chosen but not yet
+  // uploaded still counts as an unsaved change.
+  const savedPrint = React.useMemo(
+    () => draftFingerprint(toDraft(saved.content)),
+    [saved.content]
+  )
   const dirty =
     slug !== saved.slug ||
     template !== saved.template ||
-    JSON.stringify(content) !== JSON.stringify(saved.content)
+    draftFingerprint(content) !== savedPrint
 
   const url = siteUrlFor(slug, port)
   const sections = sectionsOf(template)
   const chosen = templateById(template)
 
-  function submit() {
-    if (save.isPending) return
+  const [uploading, setUploading] = React.useState(false)
 
-    const parsed = siteSchema.safeParse({ slug, template, content })
+  /**
+   * Save.
+   *
+   * Pictures are uploaded here and nowhere else: whatever was chosen goes to
+   * storage first, and only the addresses that come back are sent on to be
+   * stored. A form abandoned before this point leaves nothing behind.
+   */
+  async function submit() {
+    if (save.isPending || uploading) return
+
+    let ready
+    setUploading(true)
+    try {
+      ready = await commitDraft(content)
+    } catch (error) {
+      setUploading(false)
+      toast.error(
+        error instanceof Error ? error.message : "A picture didn't upload"
+      )
+      return
+    }
+    setUploading(false)
+
+    const parsed = siteSchema.safeParse({ slug, template, content: ready })
 
     if (!parsed.success) {
       const next: Record<string, string> = {}
@@ -176,11 +213,15 @@ function Editor({
             </button>
             <button
               type="button"
-              onClick={submit}
-              disabled={!dirty || save.isPending}
+              onClick={() => void submit()}
+              disabled={!dirty || save.isPending || uploading}
               className={primaryButtonClass}
             >
-              {save.isPending ? "Saving…" : "Save changes"}
+              {uploading
+                ? "Uploading pictures…"
+                : save.isPending
+                  ? "Saving…"
+                  : "Save changes"}
             </button>
           </>
         }
@@ -296,7 +337,10 @@ function Editor({
             data-site-preview
             className="border-n-200 overflow-hidden rounded-[14px] border bg-white"
           >
-            <SiteRenderer template={template} content={content} />
+            <SiteRenderer
+              template={template}
+              content={previewContent(content)}
+            />
           </div>
         </div>
       )}

@@ -2,10 +2,10 @@ import { logActivity } from "@/lib/activity"
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
-import { uploadsConfigured } from "@/lib/s3"
-import { loadOrStartSite, slugIsFree } from "@/lib/site-server"
+import { reconcileUploads, uploadsConfigured } from "@/lib/s3"
+import { loadOrStartSite, picturesIn, slugIsFree } from "@/lib/site-server"
 import { siteSchema } from "@/lib/validations/site"
-import { toSiteDTO } from "@/models/site"
+import { toSiteContent, toSiteDTO } from "@/models/site"
 
 export const runtime = "nodejs"
 
@@ -56,11 +56,23 @@ export async function PUT(request: Request) {
       }
     }
 
+    // What it pointed at before, so whatever is dropped can be cleared out
+    // of the bucket afterwards.
+    const before = picturesIn(toSiteContent(site.content))
+
     site.slug = values.slug
     site.template = values.template
     site.set("content", values.content)
     site.updatedBy = viewer.id as never
     await site.save()
+
+    /*
+     * Tidying happens here rather than in the browser because a closed tab
+     * would otherwise leave an orphan in the bucket for ever. It is not
+     * awaited: a bucket that refuses a delete must not fail a save the person
+     * has already made.
+     */
+    void reconcileUploads(before, picturesIn(toSiteContent(site.content)))
 
     return ok({ site: toSiteDTO(site) })
   } catch (error) {

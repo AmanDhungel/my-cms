@@ -122,8 +122,6 @@ export function ExpensesPanel({
     (a, b) => tally(expenses, b) - tally(expenses, a)
   )
 
-  // Names already used, so one vendor isn't spelled two ways.
-  const payees = [...new Set(all.map((one) => one.payee))].sort()
 
   function record() {
     setEditing(null)
@@ -374,7 +372,6 @@ export function ExpensesPanel({
         kinds={kinds}
         initialKind={stockOnly ? "stock" : undefined}
         editing={editing}
-        payees={payees}
       />
 
       {deleting ? (

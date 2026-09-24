@@ -31,8 +31,16 @@ const paymentSchema = new Schema(
   {
     business: { type: Schema.Types.ObjectId, ref: "Business", required: true },
     direction: { type: String, required: true, enum: PAYMENT_DIRECTIONS },
-    /** The company or person on the other side, as typed. */
+    /**
+     * The company or person on the other side, as typed.
+     *
+     * Kept as text alongside the reference, and snapshotted the same way a
+     * bill snapshots its customer: a party renamed or removed next year must
+     * not rewrite what a receipt said at the time.
+     */
     party: { type: String, required: true, trim: true, maxlength: 140 },
+    /** The party's own record, when one was chosen. This is what a ledger reads. */
+    partyRef: { type: Schema.Types.ObjectId, ref: "Customer" },
     amount: { type: Number, required: true, min: 0 },
     method: {
       type: String,
@@ -48,6 +56,14 @@ const paymentSchema = new Schema(
      * workspace's zone so it reads back as the same date it was entered as.
      */
     paidOn: { type: Date, required: true },
+    /**
+     * Which bank, wallet or drawer it moved through.
+     *
+     * Optional, because the ledger predates accounts and those rows are still
+     * true — they simply cannot be attributed to one. Everything entered from
+     * now on names one.
+     */
+    account: { type: Schema.Types.ObjectId, ref: "Account" },
     /** Set when the payment was recorded against a bill. */
     bill: { type: Schema.Types.ObjectId, ref: "Bill" },
     /**
@@ -64,6 +80,10 @@ const paymentSchema = new Schema(
 
 paymentSchema.index({ business: 1, paidOn: -1 })
 paymentSchema.index({ business: 1, party: 1 })
+// The ledger's own query: everything one party has ever paid or been paid.
+paymentSchema.index({ business: 1, partyRef: 1, paidOn: -1 })
+// What a bank or wallet has seen, for its running balance.
+paymentSchema.index({ business: 1, account: 1 })
 
 export type PaymentDocument = InferSchemaType<typeof paymentSchema>
 
@@ -75,6 +95,8 @@ export type PaymentDTO = {
   id: string
   direction: PaymentDirection
   party: string
+  partyId: string | null
+  accountId: string | null
   amount: number
   method: PaymentMethod
   reference: string | null
@@ -108,6 +130,8 @@ export function toPaymentDTO(
     id: String(payment._id),
     direction: payment.direction as PaymentDirection,
     party: payment.party,
+    partyId: payment.partyRef ? String(payment.partyRef) : null,
+    accountId: payment.account ? String(payment.account) : null,
     amount: payment.amount,
     method: payment.method as PaymentMethod,
     reference: payment.reference ?? null,

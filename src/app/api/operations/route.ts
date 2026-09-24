@@ -11,7 +11,7 @@ import {
   scopedCustomer,
   scopedProject,
 } from "@/lib/operations-server"
-import { loadCrew } from "@/lib/tasks"
+import { loadCrew } from "@/lib/tickets"
 import { operationSchema } from "@/lib/validations/operations"
 import { Operation, toOperationDTO } from "@/models/operation"
 import {

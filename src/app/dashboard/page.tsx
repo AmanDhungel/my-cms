@@ -3,9 +3,9 @@ import Link from "next/link"
 
 import { auth } from "@/auth"
 import { EmployeeHome } from "@/components/dashboard/employee/employee-home"
-import { TaskStatusBadge } from "@/components/dashboard/task-status-badge"
+import { TicketStatusBadge } from "@/components/dashboard/ticket-status-badge"
 import { DashboardCharts } from "@/components/dashboard/reports/dashboard-charts"
-import { NewTaskButton } from "@/components/dashboard/tasks/new-task-button"
+import { NewTicketButton } from "@/components/dashboard/tickets/new-ticket-button"
 import {
   DashboardMain,
   Dot,
@@ -20,7 +20,7 @@ import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
 import { getWorkspace } from "@/lib/workspace"
 import { toBusinessDTO } from "@/models/business"
 import { WorkRequest, toRequestDTO } from "@/models/request"
-import { Task, toTaskDTO } from "@/models/task"
+import { Ticket, toTicketDTO } from "@/models/ticket"
 import { User } from "@/models/user"
 
 export const metadata: Metadata = { title: "Dashboard · EMS" }
@@ -50,9 +50,9 @@ export default async function DashboardPage() {
     business.timeZone
   )
 
-  const [crew, todayTasks, checkedIn, pendingRequests] = await Promise.all([
+  const [crew, todayTickets, checkedIn, pendingRequests] = await Promise.all([
     User.countDocuments({ business: business._id }),
-    Task.find({
+    Ticket.find({
       business: business._id,
       startAt: { $gte: start, $lt: end },
       status: { $ne: "cancelled" },
@@ -60,9 +60,9 @@ export default async function DashboardPage() {
       .sort({ startAt: 1 })
       .limit(6)
       .populate("assignees", "name"),
-    // One task can have several people standing on it, so this counts
-    // people on site rather than tasks with somebody on them.
-    Task.aggregate<{ total: number }>([
+    // One ticket can have several people standing on it, so this counts
+    // people on site rather than tickets with somebody on them.
+    Ticket.aggregate<{ total: number }>([
       { $match: { business: business._id } },
       { $project: { n: { $size: { $ifNull: ["$openCheckIns", []] } } } },
       { $group: { _id: null, total: { $sum: "$n" } } },
@@ -73,7 +73,7 @@ export default async function DashboardPage() {
       .populate("user", "name"),
   ])
 
-  const tasks = todayTasks.map((task) => toTaskDTO(task))
+  const tickets = todayTickets.map((ticket) => toTicketDTO(ticket))
   const onSite = checkedIn[0]?.total ?? 0
   const requests = pendingRequests.map(toRequestDTO)
 
@@ -82,9 +82,9 @@ export default async function DashboardPage() {
       <PageHeading
         eyebrow={longDate(business.timeZone)}
         title={`${greeting(business.timeZone)}, ${firstName(user.name)}`}
-        subtitle={`${tasks.length} task${tasks.length === 1 ? "" : "s"} scheduled today · ${requests.length} waiting on you.`}
+        subtitle={`${tickets.length} ticket${tickets.length === 1 ? "" : "s"} scheduled today · ${requests.length} waiting on you.`}
         actions={
-          <NewTaskButton />
+          <NewTicketButton />
         }
       />
 
@@ -100,8 +100,8 @@ export default async function DashboardPage() {
           }
         />
         <StatCard
-          label="TASKS TODAY"
-          value={tasks.length}
+          label="TICKETS TODAY"
+          value={tickets.length}
           hint={
             <>
               <Dot className="bg-s-progress" />
@@ -130,45 +130,45 @@ export default async function DashboardPage() {
       <div className="grid items-start gap-5 xl:grid-cols-[1.55fr_1fr]">
         <Panel className="overflow-hidden">
           <PanelHeader
-            title="Today's tasks"
+            title="Today's tickets"
             aside={
               <Link
-                href="/dashboard/tasks"
+                href="/dashboard/tickets"
                 className="text-p-600 text-[13.5px] font-semibold"
               >
-                Open all tasks →
+                Open all tickets →
               </Link>
             }
           />
-          {tasks.length === 0 ? (
+          {tickets.length === 0 ? (
             <div className="p-[18px]">
               <EmptyState
-                message="Nothing scheduled today. Assign a task with a site and a check-in area and it shows up here."
-                action={<NewTaskButton />}
+                message="Nothing scheduled today. Assign a ticket with a site and a check-in area and it shows up here."
+                action={<NewTicketButton />}
               />
             </div>
           ) : (
-            tasks.map((task) => (
+            tickets.map((ticket) => (
               <div
-                key={task.id}
+                key={ticket.id}
                 className="border-n-200/70 flex flex-wrap items-center justify-between gap-3 border-b px-[18px] py-3.5 last:border-b-0"
               >
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <span className="text-[14.5px] font-semibold">
-                    {task.title}
+                    {ticket.title}
                   </span>
                   <span className="text-n-500 text-[12.5px]">
-                    {task.site} ·{" "}
-                    {task.assignees.map((member) => member.name).join(", ") ||
+                    {ticket.site} ·{" "}
+                    {ticket.assignees.map((member) => member.name).join(", ") ||
                       "Unassigned"}{" "}
                     ·{" "}
                     <span className="font-mono text-[11px]">
-                      {clock(task.startAt, business.timeZone)}–
-                      {clock(task.endAt, business.timeZone)}
+                      {clock(ticket.startAt, business.timeZone)}–
+                      {clock(ticket.endAt, business.timeZone)}
                     </span>
                   </span>
                 </div>
-                <TaskStatusBadge status={task.status} />
+                <TicketStatusBadge status={ticket.status} />
               </div>
             ))
           )}

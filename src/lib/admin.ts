@@ -11,7 +11,7 @@ export type AdminBusiness = {
   blockedAt: string | null
   createdAt: string
   owner: { name: string; email: string } | null
-  counts: { users: number; projects: number; tasks: number; bills: number; items: number }
+  counts: { users: number; projects: number; tickets: number; bills: number; items: number }
 }
 
 export type AdminUser = {
@@ -34,5 +34,5 @@ export type AdminProject = {
   status: string
   createdAt: string
   business: { id: string; name: string } | null
-  tasks: number
+  tickets: number
 }

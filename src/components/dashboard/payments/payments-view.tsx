@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { AccountsPanel } from "@/components/dashboard/payments/accounts-panel"
 import { PlusIcon } from "@/components/dashboard/nav-icons"
 import { Pagination, paginate } from "@/components/dashboard/pagination"
 import { PaymentDialog } from "@/components/dashboard/payments/payment-dialog"
@@ -51,7 +52,7 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
   online: "Online",
 }
 
-type Tab = "ledger" | "parties"
+type Tab = "ledger" | "parties" | "accounts"
 
 /**
  * Money that has changed hands: what you paid out to companies and people,
@@ -102,14 +103,17 @@ export function PaymentsView({ today }: { today: string }) {
         title="Payments"
         subtitle="What you have paid out, and what other people have paid you."
         actions={
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className={primaryButtonClass}
-          >
-            <PlusIcon className="size-3.5" />
-            Record payment
-          </button>
+          // The accounts tab carries its own button, beside its own list.
+          tab !== "accounts" ? (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className={primaryButtonClass}
+            >
+              <PlusIcon className="size-3.5" />
+              Record payment
+            </button>
+          ) : null
         }
       />
 
@@ -136,6 +140,7 @@ export function PaymentsView({ today }: { today: string }) {
           [
             ["ledger", "Payments"],
             ["parties", "Parties"],
+            ["accounts", "Accounts"],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -186,6 +191,8 @@ export function PaymentsView({ today }: { today: string }) {
             </button>
           }
         />
+      ) : tab === "accounts" ? (
+        <AccountsPanel today={today} />
       ) : tab === "ledger" ? (
         <Panel className="overflow-hidden">
           <div className="border-n-200 flex flex-wrap items-center justify-between gap-3 border-b px-[18px] py-3.5">
@@ -387,7 +394,6 @@ export function PaymentsView({ today }: { today: string }) {
         open={open}
         onClose={() => setOpen(false)}
         today={today}
-        parties={parties.map((party) => party.name)}
       />
 
       {deleting ? (

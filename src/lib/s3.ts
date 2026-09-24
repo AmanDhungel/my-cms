@@ -1,18 +1,25 @@
 import { randomUUID } from "node:crypto"
 
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import {
+  DeleteObjectsCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 
 import { HttpError } from "@/lib/api-response"
 
 /**
- * Uploading site pictures.
+ * Every file the app stores, in one place.
  *
- * The file never passes through this server. The browser asks for a signed
- * URL, PUTs the bytes straight to S3, and tells us the address afterwards —
- * which keeps a 5 MB photo off the request path and the AWS keys off the
- * client. The signature is narrow on purpose: one key, one content type, and
- * five minutes.
+ * Two operations, used by every feature that holds a picture: sign an upload,
+ * and delete one. They live here rather than beside each feature so there is a
+ * single answer to where an object goes, how it is named, and what it costs to
+ * remove — and so a new feature that holds images inherits all of it.
+ *
+ * The bytes never pass through this server. The browser asks for a signed
+ * URL, PUTs straight to S3 and reports the address back, which keeps a photo
+ * off the request path and the AWS keys off the client.
  */
 
 const REGION = process.env.AWS_REGION
@@ -34,7 +41,7 @@ function s3() {
   if (!REGION || !BUCKET || !id || !secret) {
     throw new HttpError(
       503,
-      "Picture uploads aren't configured on this server yet."
+      "File storage isn't configured on this server yet."
     )
   }
 
@@ -45,13 +52,30 @@ function s3() {
   return client
 }
 
-/** Whether uploads can work at all, so the UI can say so rather than fail. */
+/** Whether storage can work at all, so the UI can say so rather than fail. */
 export function uploadsConfigured() {
   return Boolean(
     REGION &&
       BUCKET &&
       process.env.AWS_ACCESS_KEY_ID &&
       process.env.AWS_SECRET_ACCESS_KEY
+  )
+}
+
+/**
+ * What an upload is for.
+ *
+ * It only decides the folder, but the folder is what makes a bucket
+ * readable a year later — and what lets a lifecycle rule treat one kind of
+ * file differently from another.
+ */
+export const UPLOAD_PURPOSES = ["site", "maintenance", "ticket"] as const
+export type UploadPurpose = (typeof UPLOAD_PURPOSES)[number]
+
+export function isUploadPurpose(value: unknown): value is UploadPurpose {
+  return (
+    typeof value === "string" &&
+    (UPLOAD_PURPOSES as readonly string[]).includes(value)
   )
 }
 
@@ -65,14 +89,18 @@ const EXTENSIONS: Record<string, string> = {
 /**
  * Where the object goes.
  *
- * Filed under the workspace so one business's pictures are never mixed with
+ * Filed under the workspace so one business's files are never mixed with
  * another's, and named with a fresh id rather than whatever the file was
- * called — two people uploading `logo.png` must not overwrite each other, and
- * an original filename is one more thing a stranger could guess.
+ * called — two people uploading `photo.jpg` must not overwrite each other,
+ * and an original filename is one more thing a stranger could guess.
  */
-function keyFor(businessId: string, contentType: string) {
+function keyFor(
+  businessId: string,
+  purpose: UploadPurpose,
+  contentType: string
+) {
   const ext = EXTENSIONS[contentType] ?? "bin"
-  return `sites/${businessId}/${randomUUID()}.${ext}`
+  return `${purpose}/${businessId}/${randomUUID()}.${ext}`
 }
 
 export type SignedUpload = {
@@ -85,10 +113,11 @@ export type SignedUpload = {
 
 export async function signUpload(
   businessId: string,
+  purpose: UploadPurpose,
   contentType: string,
   size: number
 ): Promise<SignedUpload> {
-  const key = keyFor(businessId, contentType)
+  const key = keyFor(businessId, purpose, contentType)
 
   const uploadUrl = await getSignedUrl(
     s3(),
@@ -106,10 +135,10 @@ export async function signUpload(
 }
 
 /**
- * The address a browser will read the picture from.
+ * The address a browser will read the file from.
  *
  * The plain bucket URL, unless a CDN or custom domain is configured — in
- * which case that wins, because an image served from the bucket directly is
+ * which case that wins, because serving an image from the bucket directly is
  * the slowest way to serve it.
  */
 export function publicUrlFor(key: string) {
@@ -118,9 +147,84 @@ export function publicUrlFor(key: string) {
   return `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`
 }
 
-/** Whether a stored URL is one of ours, so a site can't link to anywhere. */
+/** The object key behind one of our URLs, or null if it isn't one of ours. */
+export function keyFromUrl(url: string): string | null {
+  const bases = [
+    process.env.AWS_PUBLIC_BASE_URL?.replace(/\/+$/, ""),
+    `https://${BUCKET}.s3.${REGION}.amazonaws.com`,
+  ].filter(Boolean) as string[]
+
+  for (const base of bases) {
+    if (url.startsWith(`${base}/`)) {
+      const key = url.slice(base.length + 1)
+      // A key from outside the workspace folders is not ours to touch.
+      return decodeURIComponent(key.split("?")[0]) || null
+    }
+  }
+  return null
+}
+
 export function isOwnUpload(url: string) {
-  const base = process.env.AWS_PUBLIC_BASE_URL?.replace(/\/+$/, "")
-  if (base && url.startsWith(`${base}/`)) return true
-  return url.startsWith(`https://${BUCKET}.s3.${REGION}.amazonaws.com/`)
+  return keyFromUrl(url) !== null
+}
+
+/**
+ * Remove files we no longer reference.
+ *
+ * Returns what happened rather than throwing: an image that has already been
+ * replaced in the database is gone from the product either way, and failing
+ * the whole save because the bucket refused a tidy-up would lose the edit the
+ * person actually made. The caller logs it; nothing waits on it.
+ *
+ * Deletes are batched because S3 charges a request either way, and a form
+ * with a dozen pictures otherwise costs a dozen round trips.
+ */
+export async function deleteUploads(urls: string[]): Promise<{
+  deleted: number
+  failed: string[]
+}> {
+  const keys = [...new Set(urls.map(keyFromUrl).filter(Boolean))] as string[]
+  if (keys.length === 0 || !uploadsConfigured()) {
+    return { deleted: 0, failed: [] }
+  }
+
+  const failed: string[] = []
+  let deleted = 0
+
+  // S3 takes a thousand keys per call; the chunking is here so a caller never
+  // has to know that.
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000)
+    try {
+      const result = await s3().send(
+        new DeleteObjectsCommand({
+          Bucket: BUCKET,
+          Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+        })
+      )
+      deleted += batch.length - (result.Errors?.length ?? 0)
+      for (const error of result.Errors ?? []) {
+        if (error.Key) failed.push(error.Key)
+      }
+    } catch {
+      failed.push(...batch)
+    }
+  }
+
+  return { deleted, failed }
+}
+
+/**
+ * The files a record used to hold and no longer does.
+ *
+ * Called after a save with the URLs from before and after: whatever was
+ * dropped gets removed from the bucket. Doing it server-side rather than in
+ * the browser is what stops a closed tab from leaving an orphan behind for
+ * ever.
+ */
+export async function reconcileUploads(before: string[], after: string[]) {
+  const kept = new Set(after)
+  const orphans = before.filter((url) => url && !kept.has(url))
+  if (orphans.length === 0) return { deleted: 0, failed: [] }
+  return deleteUploads(orphans)
 }

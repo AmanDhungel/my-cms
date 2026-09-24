@@ -28,7 +28,7 @@ const notificationSchema = new Schema(
 
     /** The person the event is about, when that isn't the recipient. */
     actor: { type: Schema.Types.ObjectId, ref: "User" },
-    task: { type: Schema.Types.ObjectId, ref: "Task" },
+    ticket: { type: Schema.Types.ObjectId, ref: "Ticket" },
 
     readAt: { type: Date },
   },

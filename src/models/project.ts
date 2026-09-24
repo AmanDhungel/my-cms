@@ -16,7 +16,7 @@ const projectSchema = new Schema(
     business: { type: Schema.Types.ObjectId, ref: "Business", required: true },
     name: { type: String, required: true, trim: true, maxlength: 140 },
     description: { type: String, trim: true, maxlength: 2000 },
-    /** The default site for tasks in this project; each task can override it. */
+    /** The default site for tickets in this project; each ticket can override it. */
     site: { type: String, trim: true, maxlength: 160 },
     status: {
       type: String,

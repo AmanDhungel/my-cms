@@ -123,7 +123,7 @@ export function SettingsView({
         <PageHeading
           eyebrow="Account"
           title="Organization settings"
-          subtitle="Applies to every project unless a task overrides it."
+          subtitle="Applies to every project unless a ticket overrides it."
           actions={
             canEdit ? (
               <>

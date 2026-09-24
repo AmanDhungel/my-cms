@@ -32,7 +32,7 @@ export default function LoginPage() {
 
           <div className="relative flex max-w-[420px] flex-col gap-[18px]">
             <h2 className="font-heading text-p-50 text-[36px] leading-[1.18] font-semibold tracking-[-0.015em]">
-              Welcome back. Three tasks checked in while you were away.
+              Welcome back. Three tickets checked in while you were away.
             </h2>
             <p className="text-p-100 text-[15.5px] leading-[1.7]">
               Your dashboard picks up where the crew left off — arrivals,

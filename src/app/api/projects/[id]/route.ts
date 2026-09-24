@@ -4,13 +4,13 @@ import { logActivity } from "@/lib/activity"
 import { connectToDatabase } from "@/lib/mongodb"
 import { projectUpdateSchema } from "@/lib/validations/work"
 import { Project, toProjectDTO } from "@/models/project"
-import { Task } from "@/models/task"
+import { Ticket } from "@/models/ticket"
 
 export const runtime = "nodejs"
 
 /**
  * Edit a project, or archive and reopen it. Projects are never deleted —
- * tasks reference them, and deleting one would orphan its history.
+ * tickets reference them, and deleting one would orphan its history.
  */
 export async function PATCH(
   request: Request,
@@ -41,7 +41,7 @@ export async function PATCH(
       // Archiving cancels the work nobody has started; anything in progress is
       // left alone so a check-in already under way isn't torn out from under it.
       if (values.status === "archived") {
-        await Task.updateMany(
+        await Ticket.updateMany(
           { project: project._id, status: "pending" },
           { $set: { status: "cancelled" } }
         )
@@ -56,7 +56,7 @@ export async function PATCH(
         subject: project.name,
         detail:
           values.status === "archived"
-            ? "Tasks nobody had started were cancelled"
+            ? "Tickets nobody had started were cancelled"
             : undefined,
         targetKind: "project",
         targetId: project._id,

@@ -24,7 +24,7 @@ type Mark = {
   timeZone: string
   /**
    * Where the day was opened from, when the workspace has an office to
-   * measure against. Only ever sent by Start shift; a task check-in that
+   * measure against. Only ever sent by Start shift; a ticket check-in that
    * opens the day carries none of it.
    */
   place?: {
@@ -40,7 +40,7 @@ type Mark = {
 
 /**
  * Attendance is reconciled from two inputs: the employee pressing Start/End
- * shift ("manual") and their task check-ins ("derived"). Manual always wins;
+ * shift ("manual") and their ticket check-ins ("derived"). Manual always wins;
  * between derived events the earliest arrival and the latest departure win.
  *
  * Every write is guarded by the same condition it depends on, so two check-ins

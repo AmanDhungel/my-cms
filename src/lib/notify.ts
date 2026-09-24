@@ -13,7 +13,7 @@ type Event = {
   body?: string
   href?: string
   actor?: Id
-  task?: Id
+  ticket?: Id
 }
 
 /**
@@ -57,6 +57,6 @@ function row(userId: Id, event: Event) {
     body: event.body,
     href: event.href,
     actor: event.actor,
-    task: event.task,
+    ticket: event.ticket,
   }
 }

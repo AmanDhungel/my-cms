@@ -121,25 +121,3 @@ export const siteSchema = z.object({
 })
 
 export type SiteValues = z.infer<typeof siteSchema>
-
-/** What the upload endpoint will sign for, and nothing else. */
-export const UPLOAD_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/avif",
-] as const
-
-export const uploadSchema = z.object({
-  contentType: z.enum(UPLOAD_TYPES, {
-    message: "Images only — JPEG, PNG, WebP or AVIF",
-  }),
-  /** Bytes. Checked here so a signature is never handed out for a huge file. */
-  size: z
-    .number()
-    .int()
-    .positive()
-    .max(5 * 1024 * 1024, "Images have to be under 5 MB"),
-})
-
-export type UploadValues = z.infer<typeof uploadSchema>

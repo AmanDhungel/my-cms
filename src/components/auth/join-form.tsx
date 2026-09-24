@@ -128,7 +128,7 @@ export function JoinForm({
             {...register("terms")}
           />
           I agree to the terms and to my location being recorded when I check in
-          to a task.
+          to a ticket.
         </label>
         <FieldError message={errors.terms?.message} />
 

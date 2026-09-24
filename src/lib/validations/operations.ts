@@ -4,7 +4,7 @@ import {
   OPERATION_KINDS,
   OPERATION_STATUSES,
   SCHEDULE_KINDS,
-  TASK_PRIORITIES,
+  TICKET_PRIORITIES,
 } from "@/lib/work-constants"
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, "That isn't a valid id")
@@ -30,7 +30,7 @@ export const operationSchema = z
     allDay: z.boolean(),
 
     status: z.enum(OPERATION_STATUSES),
-    priority: z.enum(TASK_PRIORITIES),
+    priority: z.enum(TICKET_PRIORITIES),
 
     assigneeIds: z.array(objectId).max(20),
     customerId: z.union([z.literal(""), objectId]).optional(),

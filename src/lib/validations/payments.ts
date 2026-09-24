@@ -4,6 +4,13 @@ import { PAYMENT_DIRECTIONS, PAYMENT_METHODS } from "@/lib/work-constants"
 
 const dayKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date")
 
+/** An optional reference to something else in the workspace. */
+const objectId = z
+  .string()
+  .regex(/^[0-9a-fA-F]{24}$/, "Pick one from the list")
+  .nullish()
+  .transform((value) => value || undefined)
+
 export const paymentSchema = z
   .object({
     direction: z.enum(PAYMENT_DIRECTIONS),
@@ -16,6 +23,10 @@ export const paymentSchema = z
       .number<number>()
       .gt(0, "An amount has to be more than zero")
       .max(100_000_000, "That amount looks wrong"),
+    /** The party's own record, so this lands on their ledger. */
+    partyId: objectId,
+    /** Which bank, wallet or drawer it moved through. */
+    accountId: objectId,
     method: z.enum(PAYMENT_METHODS),
     reference: z.string().trim().max(60, "That reference is very long").optional(),
     note: z.string().trim().max(500).optional(),

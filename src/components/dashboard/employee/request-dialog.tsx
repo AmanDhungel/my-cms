@@ -17,7 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
-import { reportMutationError, useCreateRequest, useTasks } from "@/lib/queries"
+import { reportMutationError, useCreateRequest, useTickets } from "@/lib/queries"
 import { requestSchemaChecked } from "@/lib/validations/work"
 import type { RequestKind } from "@/lib/work-constants"
 
@@ -63,12 +63,12 @@ function Body({ onClose }: { onClose: () => void }) {
   const [startDate, setStartDate] = React.useState("")
   const [endDate, setEndDate] = React.useState("")
   const [amount, setAmount] = React.useState("")
-  const [taskId, setTaskId] = React.useState("")
+  const [ticketId, setTicketId] = React.useState("")
   const [errors, setErrors] = React.useState<Errors>({})
 
   const mutation = useCreateRequest()
   // Only fetched once the material tab is actually opened.
-  const tasks = useTasks("today")
+  const tickets = useTickets("today")
 
   function submit() {
     if (mutation.isPending) return
@@ -78,7 +78,7 @@ function Body({ onClose }: { onClose: () => void }) {
         ? { kind, message, startDate, endDate }
         : kind === "advance"
           ? { kind, message, amount }
-          : { kind, message, taskId: taskId || undefined }
+          : { kind, message, ticketId: ticketId || undefined }
 
     const parsed = requestSchemaChecked.safeParse(payload)
 
@@ -175,25 +175,25 @@ function Body({ onClose }: { onClose: () => void }) {
 
         {kind === "material" ? (
           <label className="flex flex-col gap-[7px]">
-            <FieldLabel>For which task?</FieldLabel>
+            <FieldLabel>For which ticket?</FieldLabel>
             <select
-              value={taskId}
-              onChange={(event) => setTaskId(event.target.value)}
+              value={ticketId}
+              onChange={(event) => setTicketId(event.target.value)}
               className={cn(inputClass, "cursor-pointer")}
             >
-              <option value="">Not task specific</option>
-              {(tasks.data?.tasks ?? []).map((task) => (
-                <option key={task.id} value={task.id}>
-                  {task.title} · {task.site}
+              <option value="">Not ticket specific</option>
+              {(tickets.data?.tickets ?? []).map((ticket) => (
+                <option key={ticket.id} value={ticket.id}>
+                  {ticket.title} · {ticket.site}
                 </option>
               ))}
             </select>
-            {tasks.isPending ? (
+            {tickets.isPending ? (
               <span className="text-n-400 text-[12px]">
-                Loading today&rsquo;s tasks…
+                Loading today&rsquo;s tickets…
               </span>
             ) : null}
-            <FieldError message={errors.taskId} />
+            <FieldError message={errors.ticketId} />
           </label>
         ) : null}
 

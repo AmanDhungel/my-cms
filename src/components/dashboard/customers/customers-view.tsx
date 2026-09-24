@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import * as React from "react"
 import { toast } from "sonner"
 import { cn } from "cn"
@@ -87,8 +88,8 @@ export function CustomersView() {
     <DashboardMain className="gap-5">
       <PageHeading
         eyebrow="Sales & stock"
-        title="Customers"
-        subtitle="Save them once, then pick them when a bill is raised."
+        title="Parties"
+        subtitle="Customers and suppliers. Save them once, pick them on a bill or a payment, and each one keeps a running account."
         actions={
           <button
             type="button"
@@ -223,6 +224,12 @@ export function CustomersView() {
                 </span>
 
                 <div className="flex gap-2 lg:justify-end">
+                  <Link
+                    href={`/dashboard/customers/${customer.id}`}
+                    className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold"
+                  >
+                    Ledger
+                  </Link>
                   <button
                     type="button"
                     onClick={() => setEditing(customer)}
@@ -256,7 +263,7 @@ export function CustomersView() {
             from={shown.from}
             to={shown.to}
             total={visible.length}
-            noun="customers"
+            noun="parties"
             onPage={setPage}
           />
         </Panel>

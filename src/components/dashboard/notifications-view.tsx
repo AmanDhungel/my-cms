@@ -25,10 +25,10 @@ import type { NotificationDTO } from "@/models/notification"
 const DOT: Record<NotificationKind, string> = {
   check_in: "bg-s-done",
   check_out: "bg-s-pending",
-  task_blocked: "bg-s-material",
-  task_in_review: "bg-s-time",
-  task_done: "bg-s-done",
-  task_assigned: "bg-s-progress",
+  ticket_blocked: "bg-s-material",
+  ticket_in_review: "bg-s-time",
+  ticket_done: "bg-s-done",
+  ticket_assigned: "bg-s-progress",
   request_raised: "bg-a-400",
   request_decided: "bg-s-time",
   member_joined: "bg-p-500",
@@ -152,7 +152,7 @@ export function NotificationsView({
           message={
             unreadOnly
               ? "Nothing unread."
-              : "Nothing yet. Check-ins, blocked tasks and decisions all land here."
+              : "Nothing yet. Check-ins, blocked tickets and decisions all land here."
           }
         />
       ) : (

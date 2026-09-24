@@ -14,7 +14,7 @@ type NominatimHit = {
 }
 
 /**
- * Place search for the task map, proxied rather than called from the browser.
+ * Place search for the ticket map, proxied rather than called from the browser.
  *
  * Nominatim's usage policy asks for an identifying User-Agent, which a browser
  * won't let us set, and going through the server also keeps the lookup on the
@@ -22,7 +22,7 @@ type NominatimHit = {
  */
 export async function GET(request: NextRequest) {
   try {
-    // Only people who can create tasks need this, so it isn't an open proxy.
+    // Only people who can create tickets need this, so it isn't an open proxy.
     await requireRole("owner", "supervisor")
 
     const query = (request.nextUrl.searchParams.get("q") ?? "").trim()
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     const response = await fetch(url, {
       headers: {
-        "User-Agent": "EMS field task management (self-hosted)",
+        "User-Agent": "EMS field ticket management (self-hosted)",
         "Accept-Language": "en",
       },
       next: { revalidate: 86_400 },

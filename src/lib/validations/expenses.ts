@@ -24,6 +24,10 @@ export const expenseSchema = z
     payee: z.string().trim().min(2, "Who was it paid to?").max(140),
     /** Salary and commission name a person on the payroll. */
     employeeId: objectId.optional(),
+    /** The supplier's own record, so this lands on their ledger. */
+    partyId: objectId.optional(),
+    /** Which bank, wallet or drawer it came out of. */
+    accountId: objectId.optional(),
     /**
      * Ignored for a stock purchase, whose amount is the sum of its lines —
      * the server works that out so the two can never disagree.

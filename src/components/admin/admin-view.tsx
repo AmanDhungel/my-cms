@@ -316,7 +316,7 @@ function BusinessTable({
           </span>
 
           <span className="text-n-500 text-xs">
-            {business.counts.projects} projects · {business.counts.tasks} tasks
+            {business.counts.projects} projects · {business.counts.tickets} tickets
             <br />
             {business.counts.bills} bills · {business.counts.items} items
           </span>
@@ -472,7 +472,7 @@ function ProjectTable({
   return (
     <Panel className="overflow-hidden">
       <Head
-        columns={["PROJECT", "WORKSPACE", "STATUS", "TASKS", "CREATED"]}
+        columns={["PROJECT", "WORKSPACE", "STATUS", "TICKETS", "CREATED"]}
         grid="lg:grid-cols-[1.5fr_1.2fr_110px_90px_120px]"
       />
 
@@ -500,7 +500,7 @@ function ProjectTable({
           </span>
 
           <span className="text-n-700 font-mono text-[12.5px]">
-            {project.tasks}
+            {project.tickets}
           </span>
 
           <span className="text-n-600 text-[12.5px]">

@@ -365,7 +365,7 @@ function Row({
   )
 }
 
-/** Unlike a task, one of these really is deleted — nothing points at it. */
+/** Unlike a ticket, one of these really is deleted — nothing points at it. */
 function DeleteOperationDialog({
   entry,
   kind,

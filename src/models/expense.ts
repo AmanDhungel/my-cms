@@ -52,6 +52,8 @@ const expenseSchema = new Schema(
 
     /** Who it went to, as typed: a vendor, a landlord, a utility, a person. */
     payee: { type: String, required: true, trim: true, maxlength: 140 },
+    /** The party's own record, when one was chosen. This is what a ledger reads. */
+    partyRef: { type: Schema.Types.ObjectId, ref: "Customer" },
     /** Set for salary and commission, so the person's own record can be found. */
     employee: { type: Schema.Types.ObjectId, ref: "User" },
 
@@ -81,6 +83,14 @@ const expenseSchema = new Schema(
     lines: { type: [purchaseLineSchema], default: [] },
 
     /**
+     * Which bank, wallet or drawer it moved through.
+     *
+     * Optional, because the ledger predates accounts and those rows are still
+     * true — they simply cannot be attributed to one. Everything entered from
+     * now on names one.
+     */
+    account: { type: Schema.Types.ObjectId, ref: "Account" },
+    /**
      * The mirrored row on the Payments ledger, so an edit or a delete here
      * moves that one too rather than leaving the two to drift apart.
      */
@@ -93,6 +103,8 @@ const expenseSchema = new Schema(
 
 expenseSchema.index({ business: 1, spentOn: -1 })
 expenseSchema.index({ business: 1, kind: 1, spentOn: -1 })
+// Everything one supplier has been paid, which is the ledger's question.
+expenseSchema.index({ business: 1, partyRef: 1, spentOn: -1 })
 // The profit report walks purchases per item to work out what stock cost.
 expenseSchema.index({ business: 1, "lines.item": 1 })
 
@@ -116,6 +128,8 @@ export type ExpenseDTO = {
   id: string
   kind: ExpenseKind
   payee: string
+  partyId: string | null
+  accountId: string | null
   employee: { id: string; name: string } | null
   amount: number
   method: PaymentMethod
@@ -151,6 +165,8 @@ export function toExpenseDTO(
     id: String(expense._id),
     kind: expense.kind as ExpenseKind,
     payee: expense.payee,
+    partyId: expense.partyRef ? String(expense.partyRef) : null,
+    accountId: expense.account ? String(expense.account) : null,
     employee: named(expense.employee as MaybePopulated),
     amount: expense.amount,
     method: expense.method as PaymentMethod,

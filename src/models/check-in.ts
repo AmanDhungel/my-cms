@@ -14,7 +14,7 @@ export { CHECK_IN_TYPES, type CheckInType }
 const checkInSchema = new Schema(
   {
     business: { type: Schema.Types.ObjectId, ref: "Business", required: true },
-    task: { type: Schema.Types.ObjectId, ref: "Task", required: true },
+    ticket: { type: Schema.Types.ObjectId, ref: "Ticket", required: true },
     user: { type: Schema.Types.ObjectId, ref: "User", required: true },
     type: { type: String, required: true, enum: CHECK_IN_TYPES },
 
@@ -37,7 +37,7 @@ const checkInSchema = new Schema(
   { timestamps: true }
 )
 
-checkInSchema.index({ task: 1, at: -1 })
+checkInSchema.index({ ticket: 1, at: -1 })
 checkInSchema.index({ user: 1, at: -1 })
 
 export type CheckInDocument = InferSchemaType<typeof checkInSchema>
@@ -48,7 +48,7 @@ export const CheckIn: Model<CheckInDocument> =
 
 export type CheckInDTO = {
   id: string
-  taskId: string
+  ticketId: string
   type: CheckInType
   at: string
   distanceM: number
@@ -61,7 +61,7 @@ export function toCheckInDTO(
 ): CheckInDTO {
   return {
     id: String(entry._id),
-    taskId: String(entry.task),
+    ticketId: String(entry.ticket),
     type: entry.type,
     at: entry.at.toISOString(),
     distanceM: entry.distanceM,

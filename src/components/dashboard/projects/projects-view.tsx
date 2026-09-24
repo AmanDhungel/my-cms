@@ -41,8 +41,8 @@ export function ProjectsView({ canManage }: { canManage: boolean }) {
   const totals = all.reduce(
     (sum, project) => ({
       active: sum.active + (project.status === "active" ? 1 : 0),
-      open: sum.open + project.tasks.open,
-      blocked: sum.blocked + project.tasks.blocked,
+      open: sum.open + project.tickets.open,
+      blocked: sum.blocked + project.tickets.blocked,
     }),
     { active: 0, open: 0, blocked: 0 }
   )
@@ -52,7 +52,7 @@ export function ProjectsView({ canManage }: { canManage: boolean }) {
       <PageHeading
         eyebrow="Workspace"
         title="Projects"
-        subtitle="A project groups located tasks under one job. Every task belongs to one."
+        subtitle="A project groups located tickets under one job. Every ticket belongs to one."
         actions={
           canManage ? (
             <button
@@ -73,7 +73,7 @@ export function ProjectsView({ canManage }: { canManage: boolean }) {
         <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard label="PROJECTS" value={all.length} />
           <StatCard label="ACTIVE" value={totals.active} />
-          <StatCard label="OPEN TASKS" value={totals.open} />
+          <StatCard label="OPEN TICKETS" value={totals.open} />
           <StatCard
             label="BLOCKED"
             value={totals.blocked}
@@ -120,7 +120,7 @@ export function ProjectsView({ canManage }: { canManage: boolean }) {
         <EmptyState
           message={
             all.length === 0
-              ? "No projects yet. Create one and you can start assigning tasks to it."
+              ? "No projects yet. Create one and you can start assigning tickets to it."
               : "Nothing in that state."
           }
           action={
@@ -151,7 +151,7 @@ export function ProjectsView({ canManage }: { canManage: boolean }) {
         <ProjectDialog
           open={dialogOpen}
           onClose={() => setDialogOpen(false)}
-          onCreated={() => toast.success("Project ready for tasks")}
+          onCreated={() => toast.success("Project ready for tickets")}
         />
       ) : null}
     </DashboardMain>
@@ -216,13 +216,13 @@ function ProjectCard({
       ) : null}
 
       <div className="border-n-200 grid grid-cols-3 gap-2 border-t pt-3">
-        <Count label="OPEN" value={project.tasks.open} />
+        <Count label="OPEN" value={project.tickets.open} />
         <Count
           label="BLOCKED"
-          value={project.tasks.blocked}
-          tone={project.tasks.blocked > 0 ? "warn" : "plain"}
+          value={project.tickets.blocked}
+          tone={project.tickets.blocked > 0 ? "warn" : "plain"}
         />
-        <Count label="DONE" value={project.tasks.done} />
+        <Count label="DONE" value={project.tickets.done} />
       </div>
 
       <Link
@@ -263,7 +263,7 @@ function ProjectCard({
 
       {!archived ? null : (
         <span className="text-n-500 text-[12px]">
-          Archived projects take no new tasks; unstarted ones were cancelled.
+          Archived projects take no new tickets; unstarted ones were cancelled.
         </span>
       )}
     </Panel>

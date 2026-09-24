@@ -27,7 +27,7 @@ export function ProjectsIcon({ className }: IconProps) {
   )
 }
 
-export function TasksIcon({ className }: IconProps) {
+export function TicketsIcon({ className }: IconProps) {
   return (
     <svg {...stroke} className={className} aria-hidden>
       <path d="M4 6h16M4 12h16M4 18h10" />

@@ -16,7 +16,7 @@ import { CheckIn } from "@/models/check-in"
 import { InventoryItem } from "@/models/inventory-item"
 import { Payment } from "@/models/payment"
 import { WorkRequest } from "@/models/request"
-import { Task } from "@/models/task"
+import { Ticket } from "@/models/ticket"
 import { User } from "@/models/user"
 
 /**
@@ -1367,8 +1367,8 @@ async function employeeActivity(s: Scope): Promise<ReportPayload> {
   }
   const hasWindow = Object.keys(window).length > 0
 
-  const [tasks, visits, bills] = await Promise.all([
-    Task.find({
+  const [tickets, visits, bills] = await Promise.all([
+    Ticket.find({
       business: s.businessId,
       assignees: { $in: ids },
       ...(hasWindow ? { startAt: window } : {}),
@@ -1390,7 +1390,7 @@ async function employeeActivity(s: Scope): Promise<ReportPayload> {
 
   const rows = crew.map((member) => {
     const id = String(member._id)
-    const mine = tasks.filter((t) =>
+    const mine = tickets.filter((t) =>
       (t.assignees ?? []).some((a) => String(a) === id)
     )
     const myVisits = visits.filter((v) => String(v.user) === id)
@@ -1399,7 +1399,7 @@ async function employeeActivity(s: Scope): Promise<ReportPayload> {
     return {
       person: member.name,
       role: member.role,
-      tasks: mine.length,
+      tickets: mine.length,
       done: mine.filter((t) => t.status === "done").length,
       checkIns: myVisits.length,
       outside: myVisits.filter((v) => !v.insideFence).length,
@@ -1413,7 +1413,7 @@ async function employeeActivity(s: Scope): Promise<ReportPayload> {
     columns: [
       { key: "person", label: "Person" },
       { key: "role", label: "Role" },
-      { key: "tasks", label: "Tasks", align: "right", format: "number" },
+      { key: "tickets", label: "Tickets", align: "right", format: "number" },
       { key: "done", label: "Finished", align: "right", format: "number" },
       { key: "checkIns", label: "Check-ins", align: "right", format: "number" },
       { key: "outside", label: "Outside fence", align: "right", format: "number" },
@@ -1423,12 +1423,12 @@ async function employeeActivity(s: Scope): Promise<ReportPayload> {
     rows,
     stats: [
       { label: "CREW", value: String(rows.length) },
-      { label: "TASKS FINISHED", value: String(rows.reduce((n, r) => n + r.done, 0)) },
+      { label: "TICKETS FINISHED", value: String(rows.reduce((n, r) => n + r.done, 0)) },
       { label: "CHECK-INS", value: String(rows.reduce((n, r) => n + r.checkIns, 0)) },
       { label: "BILLED", value: money(rows.reduce((n, r) => n + r.billed, 0)) },
     ],
     totals: [{ label: "Billed", value: money(rows.reduce((n, r) => n + r.billed, 0)) }],
-    chart: rankChart(rows, "person", "done", "Tasks finished", "number", 12),
+    chart: rankChart(rows, "person", "done", "Tickets finished", "number", 12),
   }
 }
 

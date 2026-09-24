@@ -35,7 +35,7 @@ const requestSchema = new Schema(
     /** advance, in the workspace's currency — no conversion is attempted. */
     amount: { type: Number, min: 0 },
     /** material */
-    task: { type: Schema.Types.ObjectId, ref: "Task" },
+    ticket: { type: Schema.Types.ObjectId, ref: "Ticket" },
 
     status: {
       type: String,
@@ -66,7 +66,7 @@ export type RequestDTO = {
   startDate: string | null
   endDate: string | null
   amount: number | null
-  taskId: string | null
+  ticketId: string | null
   status: RequestStatus
   decisionNote: string | null
   decidedAt: string | null
@@ -92,7 +92,7 @@ export function toRequestDTO(
     startDate: request.startDate ?? null,
     endDate: request.endDate ?? null,
     amount: request.amount ?? null,
-    taskId: request.task ? String(request.task) : null,
+    ticketId: request.ticket ? String(request.ticket) : null,
     status: request.status,
     decisionNote: request.decisionNote ?? null,
     decidedAt: request.decidedAt ? request.decidedAt.toISOString() : null,

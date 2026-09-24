@@ -72,7 +72,7 @@ const userSchema = new Schema(
      */
     week: weekField,
     /**
-     * "removed" keeps the row (tasks, check-ins and attendance all point at
+     * "removed" keeps the row (tickets, check-ins and attendance all point at
      * it) while revoking every way in. Accepting another workspace's invite
      * with the same email moves the account there and makes it active again.
      */

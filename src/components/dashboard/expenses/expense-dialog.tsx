@@ -17,6 +17,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
+import {
+  AccountPicker,
+  PartyPicker,
+  useDefaultAccountId,
+} from "@/components/dashboard/money-pickers"
 import { money, quantity } from "@/lib/billing"
 import {
   EXPENSE_KIND_GROUPS,
@@ -72,7 +77,6 @@ export function ExpenseDialog({
   kinds,
   initialKind,
   editing,
-  payees,
 }: {
   open: boolean
   onClose: () => void
@@ -84,8 +88,6 @@ export function ExpenseDialog({
   initialKind?: ExpenseKind
   /** Present when correcting one already recorded. */
   editing?: ExpenseDTO | null
-  /** Names already used, offered as you type. */
-  payees: string[]
 }) {
   const correcting = Boolean(editing)
 
@@ -111,7 +113,6 @@ export function ExpenseDialog({
             initialKind={initialKind}
             editing={editing ?? null}
             correcting={correcting}
-            payees={payees}
           />
         ) : null}
       </DialogContent>
@@ -126,7 +127,6 @@ function Body({
   initialKind,
   editing,
   correcting,
-  payees,
 }: {
   onClose: () => void
   today: string
@@ -134,12 +134,13 @@ function Body({
   initialKind?: ExpenseKind
   editing: ExpenseDTO | null
   correcting: boolean
-  payees: string[]
 }) {
   const [kind, setKind] = React.useState<ExpenseKind>(
     editing?.kind ?? initialKind ?? kinds[0] ?? "other"
   )
   const [payee, setPayee] = React.useState(editing?.payee ?? "")
+  const [partyId, setPartyId] = React.useState(editing?.partyId ?? "")
+  const [accountId, setAccountId] = React.useState(editing?.accountId ?? "")
   const [employeeId, setEmployeeId] = React.useState(
     editing?.employee?.id ?? ""
   )
@@ -172,6 +173,7 @@ function Body({
   const people = usePeople()
   const create = useCreateExpense()
   const update = useUpdateExpense(editing?.id ?? "")
+  const fallbackAccount = useDefaultAccountId()
   const mutation = editing ? update : create
 
   const available = stock.data?.items ?? []
@@ -235,6 +237,8 @@ function Body({
     const parsed = expenseSchema.safeParse({
       kind,
       payee,
+      partyId: partyId || undefined,
+      accountId: accountId || fallbackAccount || undefined,
       employeeId: payroll && employeeId ? employeeId : undefined,
       amount: buying ? undefined : amount || 0,
       method,
@@ -355,27 +359,19 @@ function Body({
               <FieldError message={errors.payee ?? errors.employeeId} />
             </label>
           ) : (
-            <label className="flex flex-col gap-[7px]">
-              <FieldLabel>{payeeLabel(kind)}</FieldLabel>
-              <input
-                value={payee}
-                onChange={(event) => {
-                  setPayee(event.target.value)
-                  setErrors((prev) => ({ ...prev, payee: undefined }))
-                }}
-                list="ems-payees"
-                placeholder={buying ? "Who you bought from" : "Company or person"}
-                aria-invalid={Boolean(errors.payee)}
-                className={inputClass}
-              />
-              {/* Names already in the ledger, so one vendor isn't spelled two ways. */}
-              <datalist id="ems-payees">
-                {payees.map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
-              <FieldError message={errors.payee} />
-            </label>
+            <PartyPicker
+              label={payeeLabel(kind)}
+              side="vendor"
+              name={payee}
+              partyId={partyId}
+              onName={(value) => {
+                setPayee(value)
+                setErrors((prev) => ({ ...prev, payee: undefined }))
+              }}
+              onParty={setPartyId}
+              error={errors.payee}
+              placeholder={buying ? "Who you bought from" : "Company or person"}
+            />
           )}
         </div>
 
@@ -398,7 +394,7 @@ function Body({
         <div
           className={cn(
             "grid gap-3.5",
-            buying ? "sm:grid-cols-2" : "sm:grid-cols-3"
+            buying ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-4"
           )}
         >
           {buying ? null : (
@@ -436,6 +432,12 @@ function Body({
             />
             <FieldError message={errors.spentOn} />
           </label>
+
+          <AccountPicker
+            value={accountId}
+            onChange={setAccountId}
+            error={errors.accountId}
+          />
 
           <label className="flex flex-col gap-[7px]">
             <FieldLabel>Method</FieldLabel>

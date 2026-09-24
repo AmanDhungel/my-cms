@@ -13,7 +13,7 @@ import { Bill } from "@/models/bill"
 import { Business } from "@/models/business"
 import { InventoryItem } from "@/models/inventory-item"
 import { Project } from "@/models/project"
-import { Task } from "@/models/task"
+import { Ticket } from "@/models/ticket"
 import { User } from "@/models/user"
 import {
   WorkspaceInvite,
@@ -40,14 +40,14 @@ export async function GET() {
     ])
 
     // One grouped query per collection rather than a count per row.
-    const [byUser, byProject, byTask, byBill, byItem, byProjectTask] =
+    const [byUser, byProject, byTicket, byBill, byItem, byProjectTicket] =
       await Promise.all([
         User.aggregate<Counted>(groupBy("business")).then(asMap),
         Project.aggregate<Counted>(groupBy("business")).then(asMap),
-        Task.aggregate<Counted>(groupBy("business")).then(asMap),
+        Ticket.aggregate<Counted>(groupBy("business")).then(asMap),
         Bill.aggregate<Counted>(groupBy("business")).then(asMap),
         InventoryItem.aggregate<Counted>(groupBy("business")).then(asMap),
-        Task.aggregate<Counted>(groupBy("project")).then(asMap),
+        Ticket.aggregate<Counted>(groupBy("project")).then(asMap),
       ])
 
     const owners = new Map(
@@ -78,7 +78,7 @@ export async function GET() {
           counts: {
             users: byUser.get(key) ?? 0,
             projects: byProject.get(key) ?? 0,
-            tasks: byTask.get(key) ?? 0,
+            tickets: byTicket.get(key) ?? 0,
             bills: byBill.get(key) ?? 0,
             items: byItem.get(key) ?? 0,
           },
@@ -113,7 +113,7 @@ export async function GET() {
           business: workspace
             ? { id: workspace.id, name: workspace.name }
             : null,
-          tasks: byProjectTask.get(String(project._id)) ?? 0,
+          tickets: byProjectTicket.get(String(project._id)) ?? 0,
         }
       }),
 
