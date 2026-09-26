@@ -223,7 +223,7 @@ export default async function DashboardPage() {
 
       {/* The crew never reach this page — they are returned an EmployeeHome
           above — so these need no guard of their own. */}
-      <DashboardCharts />
+      <DashboardCharts finance={user.role === "owner"} />
     </DashboardMain>
   )
 }

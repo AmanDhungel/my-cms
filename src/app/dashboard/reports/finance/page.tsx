@@ -7,6 +7,7 @@ import { GROUP_COPY } from "@/lib/reports"
 export const metadata: Metadata = { title: `${GROUP_COPY.finance.title} · EMS` }
 
 export default async function Page() {
-  await requirePageRole("owner", "supervisor")
+  // Payments and accounts are the owner's alone (lib/reports.ts).
+  await requirePageRole("owner")
   return <ReportHub group="finance" />
 }

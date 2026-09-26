@@ -1348,10 +1348,15 @@ type ReportGroupResponse = { group: string; reports: GroupReportCard[] }
  * per report would be eight round trips and eight chances for the cards to
  * disagree about the window they cover.
  */
-export function useReportGroup(group: string, filters: ReportFilters) {
+export function useReportGroup(
+  group: string,
+  filters: ReportFilters,
+  enabled = true
+) {
   const query = buildQueryString(filters)
 
   return useQuery({
+    enabled,
     queryKey: ["report-group", group, query],
     queryFn: () =>
       apiFetch<ReportGroupResponse>(`/api/report-groups/${group}${query}`),

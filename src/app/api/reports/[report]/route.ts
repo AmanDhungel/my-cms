@@ -4,7 +4,7 @@ import { handleApiError, HttpError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { buildReport, scopeFrom } from "@/lib/report-runner"
-import { REPORT_BY_SLUG } from "@/lib/reports"
+import { canReadReportGroup, REPORT_BY_SLUG } from "@/lib/reports"
 import { getWorkspace } from "@/lib/workspace"
 
 export const runtime = "nodejs"
@@ -24,6 +24,9 @@ export async function GET(
 
     const def = REPORT_BY_SLUG.get(slug)
     if (!def) throw new HttpError(404, "There's no such report")
+    if (!canReadReportGroup(def.group, viewer.role)) {
+      throw new HttpError(403, "You don't have access to that")
+    }
 
     if (def.status === "blocked") {
       // Nothing to run. The page explains itself from the registry.

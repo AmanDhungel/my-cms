@@ -302,6 +302,15 @@ export const REPORTS: ReportDef[] = [
 
 export const REPORT_BY_SLUG = new Map(REPORTS.map((one) => [one.slug, one]))
 
+/**
+ * Finance reports show payments, accounts and cash flow, which only the
+ * owner can see anywhere else in the app; the other groups are for owners
+ * and supervisors alike.
+ */
+export function canReadReportGroup(group: string, role: string) {
+  return group === "finance" ? role === "owner" : role === "owner" || role === "supervisor"
+}
+
 export function reportsIn(group: ReportGroup) {
   return REPORTS.filter((one) => one.group === group)
 }
