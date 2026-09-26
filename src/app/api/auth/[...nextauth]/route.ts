@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server"
+import { NextRequest } from "next/server"
 
 import { handlers } from "@/auth";
 import { logActivity } from "@/lib/activity";
@@ -36,7 +36,11 @@ export async function POST(request: NextRequest) {
     return handlers.POST(request);
   }
 
-  const body = await readCredentials(request.clone());
+  // The body is read once, here, and Auth.js gets a fresh request carrying
+  // the same text: reading a clone and then the original proved unreliable
+  // ("Body is unusable" on some sign-ins).
+  const text = await request.text().catch(() => "");
+  const body = parseCredentials(text, request.headers.get("content-type") ?? "");
   const origin = request.nextUrl.origin;
   // The Auth.js client parses `url` from the body, so every refusal carries one.
   const refuse = (status: number, error: string, code: string, headers?: Record<string, string>) =>
@@ -62,7 +66,9 @@ export async function POST(request: NextRequest) {
     return refuse(429, tooManyMessage(retryAfter), "RateLimited", { "Retry-After": String(retryAfter) });
   }
 
-  const response = await handlers.POST(request);
+  const response = await handlers.POST(
+    new NextRequest(request.url, { method: "POST", headers: request.headers, body: text })
+  );
   if (account) {
     // A session cookie in the answer is the only sign of a successful sign-in.
     const signedIn = response.headers
@@ -73,10 +79,8 @@ export async function POST(request: NextRequest) {
   return response;
 }
 
-async function readCredentials(request: Request): Promise<Record<string, unknown> | null> {
+function parseCredentials(text: string, type: string): Record<string, unknown> | null {
   try {
-    const type = request.headers.get("content-type") ?? "";
-    const text = await request.text();
     if (text.length > 16_384) return null;
     if (type.includes("application/json")) {
       const parsed = JSON.parse(text);
