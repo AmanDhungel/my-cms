@@ -42,6 +42,7 @@ import {
 } from "@/lib/queries"
 import type { OperationKind, OperationStatus } from "@/lib/work-constants"
 import type { OperationDTO } from "@/models/operation"
+import { useViewer } from "@/lib/use-viewer"
 
 const PER_PAGE = 12
 
@@ -247,6 +248,7 @@ function Row({
   onEdit: () => void
   onDelete: () => void
 }) {
+  const { isOwner } = useViewer()
   const copy = KIND_COPY[kind]
   const status = useUpdateOperation(entry.id)
   const late = isOverdue(entry)
@@ -352,14 +354,16 @@ function Row({
         >
           Edit
         </button>
-        <button
-          type="button"
-          aria-label={`Delete ${entry.title}`}
-          onClick={onDelete}
-          className="border-n-300 text-n-500 hover:text-s-overdue hover:bg-n-100 rounded-md border bg-white px-2 py-1.5 text-[12.5px] font-semibold"
-        >
-          ✕
-        </button>
+        {isOwner ? (
+          <button
+            type="button"
+            aria-label={`Delete ${entry.title}`}
+            onClick={onDelete}
+            className="border-n-300 text-n-500 hover:text-s-overdue hover:bg-n-100 rounded-md border bg-white px-2 py-1.5 text-[12.5px] font-semibold"
+          >
+            ✕
+          </button>
+        ) : null}
       </div>
     </div>
   )
