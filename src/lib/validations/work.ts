@@ -110,6 +110,15 @@ export const ticketStatusSchema = z
       )
       .max(15, "That is a lot of shortages")
       .optional(),
+    /**
+     * The sender's own completion photos on this ticket, the whole list in
+     * order: kept ones by their URL, new ones as just uploaded. Only the
+     * crew sends it; the server checks every one belongs to this workspace.
+     */
+    photos: z
+      .array(z.object({ url: z.string().trim().url().max(600) }))
+      .max(5, "Five photos is the most you can add to a ticket")
+      .optional(),
   })
   .refine(
     (values) =>

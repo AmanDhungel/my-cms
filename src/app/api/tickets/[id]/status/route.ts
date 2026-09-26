@@ -14,7 +14,12 @@ import {
   type TicketStatusValues,
 } from "@/lib/validations/work"
 import { getWorkspace } from "@/lib/workspace"
-import { toTicketDTO, type TicketStatus } from "@/models/ticket"
+import {
+  MAX_TICKET_PHOTOS_EACH,
+  toTicketDTO,
+  type TicketStatus,
+} from "@/models/ticket"
+import { deleteUploads, isBusinessKeyIn, keyFromUrl } from "@/lib/s3"
 import { User } from "@/models/user"
 
 export const runtime = "nodejs"
@@ -78,6 +83,53 @@ export async function PATCH(
       throw new HttpError(409, `That ticket is already ${label(values.status)}`)
     }
 
+    /*
+     * Completion photos. The crew sends its own whole list with the change:
+     * kept photos by URL, new ones as just uploaded. Sending a ticket for
+     * review needs at least one. Each new one must be this workspace's
+     * ticket picture; nobody can adopt someone else's photo on the ticket
+     * (dropping it later would delete theirs). Removed ones are deleted from
+     * storage only after the save has landed.
+     */
+    let removedPhotos: string[] = []
+    if (!isReviewer && (values.photos !== undefined || values.status === "in_review")) {
+      const all = ticket.photos ?? []
+      const mine = all.filter((photo) => String(photo.uploadedBy) === viewer.id)
+      const othersUrls = new Set(
+        all.filter((photo) => String(photo.uploadedBy) !== viewer.id).map((photo) => photo.url)
+      )
+      const wanted = [
+        ...new Set((values.photos ?? mine.map((photo) => ({ url: photo.url }))).map((one) => one.url)),
+      ]
+      const refuse = (message: string) =>
+        new HttpError(422, "Validation failed", { photos: [message] })
+
+      if (wanted.length > MAX_TICKET_PHOTOS_EACH) {
+        throw refuse(`Five photos is the most you can add to a ticket`)
+      }
+      const keptUrls = new Set(mine.map((photo) => photo.url))
+      const added: { key: string; url: string; uploadedBy: string; uploadedAt: Date }[] = []
+      for (const url of wanted) {
+        if (othersUrls.has(url)) throw refuse("That photo was added by someone else")
+        if (keptUrls.has(url)) continue
+        const key = keyFromUrl(url)
+        if (!key || !isBusinessKeyIn(key, viewer.businessId, "ticket")) {
+          throw refuse("That picture isn't one of ours")
+        }
+        added.push({ key, url, uploadedBy: viewer.id, uploadedAt: new Date() })
+      }
+      if (values.status === "in_review" && wanted.length === 0) {
+        throw refuse("Add at least one photo of the finished work")
+      }
+      const keep = new Set(wanted)
+      removedPhotos = mine.filter((photo) => !keep.has(photo.url)).map((photo) => photo.url)
+      // Everything already there stays where it was; new ones go on the end.
+      ticket.set("photos", [
+        ...all.filter((photo) => !removedPhotos.includes(photo.url)),
+        ...added,
+      ])
+    }
+
     const cameFrom = ticket.status
 
     ticket.status = values.status
@@ -135,6 +187,8 @@ export async function PATCH(
     }
 
     await ticket.save()
+    // Only now that the ticket no longer points at them.
+    if (removedPhotos.length > 0) void deleteUploads(removedPhotos, viewer.businessId)
     await ticket.populate([
       { path: "assignees", select: "name" },
       { path: "project", select: "name" },

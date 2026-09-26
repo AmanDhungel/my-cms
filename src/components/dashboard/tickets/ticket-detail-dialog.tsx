@@ -47,12 +47,21 @@ export function TicketDetailDialog({
   showHistory?: boolean
 }) {
   const [materialsOpen, setMaterialsOpen] = React.useState(false)
+  // The completion photo open in the lightbox, by position.
+  const [viewing, setViewing] = React.useState<number | null>(null)
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
       <DialogContent
         overlayClassName={emsDialogOverlay}
         className={cn(emsDialogContent, "sm:max-w-[560px] p-5 sm:p-6")}
+        // Escape closes an open photo first, then the dialog.
+        onEscapeKeyDown={(event) => {
+          if (viewing !== null) {
+            event.preventDefault()
+            setViewing(null)
+          }
+        }}
       >
         <DialogHeader>
           <DialogTitle className="font-heading text-[19px] font-semibold">
@@ -65,7 +74,22 @@ export function TicketDetailDialog({
         </DialogHeader>
 
         {open ? (
-          <Body ticket={ticket} timeZone={timeZone} showHistory={showHistory} />
+          <Body
+            ticket={ticket}
+            timeZone={timeZone}
+            showHistory={showHistory}
+            onView={setViewing}
+          />
+        ) : null}
+
+        {open && viewing !== null && ticket.photos[viewing] ? (
+          <Lightbox
+            photos={ticket.photos}
+            index={viewing}
+            timeZone={timeZone}
+            onIndex={setViewing}
+            onClose={() => setViewing(null)}
+          />
         ) : null}
 
         <DialogFooter className="gap-2 sm:gap-2.5">
@@ -116,10 +140,12 @@ function Body({
   ticket,
   timeZone,
   showHistory,
+  onView,
 }: {
   ticket: TicketDTO
   timeZone: string
   showHistory: boolean
+  onView: (index: number) => void
 }) {
   return (
     <div className="flex max-h-[62vh] flex-col gap-3.5 overflow-auto pr-0.5">
@@ -267,6 +293,26 @@ function Body({
         </div>
       </div>
 
+      {ticket.photos.length > 0 ? (
+        <div className="flex flex-col gap-1.5" data-ticket-photos>
+          <Label>Completion photos · {ticket.photos.length}</Label>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {ticket.photos.map((photo, index) => (
+              <button
+                key={photo.url}
+                type="button"
+                onClick={() => onView(index)}
+                aria-label={`Open photo ${index + 1}${photo.uploadedByName ? ` by ${photo.uploadedByName}` : ""}`}
+                className="border-n-200 hover:border-p-400 focus-visible:outline-p-500 aspect-square overflow-hidden rounded-md border bg-white focus-visible:outline-2"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.url} alt="" loading="lazy" className="size-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {showHistory ? <History ticketId={ticket.id} timeZone={timeZone} /> : null}
 
       <div className="flex flex-col gap-1.5">
@@ -277,6 +323,69 @@ function Body({
           radiusM={ticket.radiusM}
           onChange={() => {}}
         />
+      </div>
+    </div>
+  )
+}
+
+/** One completion photo, large, with the ones either side a click away. */
+function Lightbox({
+  photos,
+  index,
+  timeZone,
+  onIndex,
+  onClose,
+}: {
+  photos: TicketDTO["photos"]
+  index: number
+  timeZone: string
+  onIndex: (index: number) => void
+  onClose: () => void
+}) {
+  const photo = photos[index]
+  const step = (delta: number) => onIndex((index + delta + photos.length) % photos.length)
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Photo ${index + 1} of ${photos.length}`}
+      data-photo-lightbox
+      onKeyDown={(event) => {
+        if (event.key === "ArrowRight") step(1)
+        if (event.key === "ArrowLeft") step(-1)
+      }}
+      className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-black/85 p-4"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photo.url}
+        alt={`Completion photo ${index + 1}`}
+        className="max-h-[78vh] max-w-full rounded-md object-contain"
+      />
+      <div className="flex flex-wrap items-center justify-center gap-2 text-[13px] text-white">
+        <span className="font-mono text-[12px] opacity-80">
+          {index + 1} / {photos.length}
+          {photo.uploadedByName ? ` · ${photo.uploadedByName}` : ""} · {clock(photo.uploadedAt, timeZone)}{" "}
+          {dateLabel(photo.uploadedAt, timeZone)}
+        </span>
+        {photos.length > 1 ? (
+          <>
+            <button type="button" onClick={() => step(-1)} className="rounded-md bg-white/15 px-3 py-1.5 font-semibold hover:bg-white/25">
+              Previous
+            </button>
+            <button type="button" onClick={() => step(1)} className="rounded-md bg-white/15 px-3 py-1.5 font-semibold hover:bg-white/25">
+              Next
+            </button>
+          </>
+        ) : null}
+        <button
+          type="button"
+          onClick={onClose}
+          autoFocus
+          className="rounded-md bg-white px-3 py-1.5 font-semibold text-black"
+        >
+          Close
+        </button>
       </div>
     </div>
   )

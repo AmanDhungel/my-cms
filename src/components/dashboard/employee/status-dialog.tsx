@@ -17,7 +17,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { inputClass } from "@/components/auth/field"
+import { ImagePickerList } from "@/components/dashboard/image-picker"
 import { reportMutationError, useTicketStatus } from "@/lib/queries"
+import { commitImage, emptyImage, type ImageDraft } from "@/lib/upload-client"
+import { useRevokeOnUnmount, useUnsavedGuard } from "@/lib/use-unsaved-guard"
 import { BLOCKER_SHORT } from "@/lib/tickets-client"
 import { BLOCKER_REASONS, type BlockerReason } from "@/lib/work-constants"
 import type { TicketDTO } from "@/models/ticket"
@@ -88,16 +91,67 @@ function Body({ ticket, onClose }: { ticket: TicketDTO; onClose: () => void }) {
   )
   const mutation = useTicketStatus(ticket.id)
 
-  function submit() {
-    if (mutation.isPending) return
+  // Completion photos: the ones already on the ticket from me, plus any
+  // picked now. Picked ones are compressed and previewed locally, and only
+  // uploaded when the change is saved (the same deferred pattern as every
+  // other picture in the app).
+  const [photos, setPhotos] = React.useState<ImageDraft[]>(() =>
+    ticket.photos.filter((photo) => photo.byMe).map((photo) => emptyImage(photo.url))
+  )
+  const [photoError, setPhotoError] = React.useState<string | null>(null)
+  const [uploading, setUploading] = React.useState(false)
+  const picked = photos.some((photo) => photo.file)
+  useUnsavedGuard(picked)
+  useRevokeOnUnmount(() => photos.map((photo) => photo.preview))
+
+  function removeOrphans(fresh: string[]) {
+    if (fresh.length === 0) return
+    void fetch("/api/uploads", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ urls: fresh }),
+    })
+  }
+
+  async function submit() {
+    if (mutation.isPending || uploading) return
 
     if (choice === "blocked" && reason.trim().length < 3) {
       setReasonError("Say what you're blocked on")
       return
     }
+    if (choice === "in_review" && photos.length === 0) {
+      setPhotoError("Add at least one photo of the finished work")
+      return
+    }
+
+    // Upload what was picked, keeping the order; remember exactly what this
+    // attempt uploaded so a refused change can take it back out again.
+    const fresh: string[] = []
+    let sendPhotos: { url: string }[] | undefined
+    if (choice === "in_review") {
+      setUploading(true)
+      try {
+        const urls: string[] = []
+        for (const draft of photos) {
+          const url = await commitImage(draft, "ticket")
+          if (!url) continue
+          urls.push(url)
+          if (draft.file) fresh.push(url)
+        }
+        sendPhotos = urls.map((url) => ({ url }))
+      } catch (error) {
+        removeOrphans(fresh)
+        toast.error(error instanceof Error ? error.message : "A photo didn't upload")
+        return
+      } finally {
+        setUploading(false)
+      }
+    }
 
     mutation.mutate(
       {
+        photos: sendPhotos,
         status: choice,
         blockedReason: choice === "blocked" ? reason.trim() : undefined,
         blockerReason: choice === "blocked" ? cause : undefined,
@@ -119,10 +173,13 @@ function Body({ ticket, onClose }: { ticket: TicketDTO; onClose: () => void }) {
           toast.success("Status updated")
           onClose()
         },
-        onError: (error) =>
+        onError: (error) => {
+          removeOrphans(fresh)
           reportMutationError(error, (path, message) => {
             if (path === "blockedReason") setReasonError(message)
-          }),
+            if (path === "photos") setPhotoError(message)
+          })
+        },
       },
     )
   }
@@ -284,6 +341,25 @@ function Body({ ticket, onClose }: { ticket: TicketDTO; onClose: () => void }) {
           </label>
         ) : null}
 
+        {choice === "in_review" ? (
+          <div className="mt-1 flex flex-col gap-1.5" data-completion-photos>
+            <ImagePickerList
+              label="Photos of the finished work"
+              hint="At least one, up to five. They upload when you save."
+              values={photos}
+              onChange={(next) => {
+                setPhotos(next.slice(0, 5))
+                setPhotoError(null)
+              }}
+              limit={5}
+              compact
+            />
+            {photoError ? (
+              <span className="text-s-overdue text-[12.5px]">{photoError}</span>
+            ) : null}
+          </div>
+        ) : null}
+
         {choice === "in_review" && ticket.myCheckedInAt ? (
           <p className="text-n-500 m-0 text-[12.5px] leading-relaxed">
             You&rsquo;re still checked in — handing it over will check you out
@@ -302,11 +378,11 @@ function Body({ ticket, onClose }: { ticket: TicketDTO; onClose: () => void }) {
         </button>
         <button
           type="button"
-          onClick={submit}
-          disabled={mutation.isPending}
+          onClick={() => void submit()}
+          disabled={mutation.isPending || uploading}
           className="bg-p-500 rounded-md px-[18px] py-2.5 text-sm font-semibold text-white hover:brightness-[1.06] disabled:opacity-60"
         >
-          {mutation.isPending ? "Saving…" : "Save"}
+          {uploading ? "Uploading photos…" : mutation.isPending ? "Saving…" : "Save"}
         </button>
       </DialogFooter>
     </>

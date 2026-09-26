@@ -205,6 +205,8 @@ export function useTicketStatus(ticketId: string) {
       blockerReason?: string
       /** What the job is short of, when the cause is material. */
       needs?: { name: string; qty?: number; unit?: string }[]
+      /** The sender's own completion photos, the whole list in order. */
+      photos?: { url: string }[]
     }) =>
       apiFetch<{ ticket: TicketDTO }>(`/api/tickets/${ticketId}/status`, {
         method: "PATCH",
