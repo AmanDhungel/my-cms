@@ -47,6 +47,7 @@ export type TicketScope =
   | "upcoming"
   | "done"
   | "all"
+  | "mine"
 
 /** One place for every key, so invalidation can't drift from the fetches. */
 export const keys = {

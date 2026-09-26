@@ -22,19 +22,29 @@ import { formatDistance } from "@/lib/geo"
 import { MaterialsDialog } from "@/components/dashboard/tickets/materials-dialog"
 import { money, quantity } from "@/lib/billing"
 import { BLOCKER_LABELS } from "@/lib/tickets-client"
+import { useTicket } from "@/lib/queries"
 import type { TicketDTO } from "@/models/ticket"
 
-/** Read-only view of everything the ticket already carries. Fetches nothing. */
+/**
+ * Read-only view of everything the ticket already carries. Fetches nothing,
+ * unless `showHistory` asks for the check-in history as well.
+ */
 export function TicketDetailDialog({
   ticket,
   timeZone,
   open,
   onClose,
+  readOnly = false,
+  showHistory = false,
 }: {
   ticket: TicketDTO
   timeZone: string
   open: boolean
   onClose: () => void
+  /** A past ticket for the crew: nothing on it can be changed. */
+  readOnly?: boolean
+  /** Also list who checked in and out, and when. */
+  showHistory?: boolean
 }) {
   const [materialsOpen, setMaterialsOpen] = React.useState(false)
 
@@ -54,16 +64,27 @@ export function TicketDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {open ? <Body ticket={ticket} timeZone={timeZone} /> : null}
+        {open ? (
+          <Body ticket={ticket} timeZone={timeZone} showHistory={showHistory} />
+        ) : null}
 
         <DialogFooter className="gap-2 sm:gap-2.5">
-          <button
-            type="button"
-            onClick={() => setMaterialsOpen(true)}
-            className="border-n-300 text-n-700 hover:bg-n-100 mr-auto rounded-md border bg-white px-4 py-2.5 text-sm font-semibold"
-          >
-            {ticket.materials.length > 0 ? "Edit materials" : "Materials used"}
-          </button>
+          {readOnly ? (
+            <span
+              data-view-only
+              className="text-n-500 mr-auto self-center font-mono text-[11px] tracking-[0.06em]"
+            >
+              VIEW ONLY
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setMaterialsOpen(true)}
+              className="border-n-300 text-n-700 hover:bg-n-100 mr-auto rounded-md border bg-white px-4 py-2.5 text-sm font-semibold"
+            >
+              {ticket.materials.length > 0 ? "Edit materials" : "Materials used"}
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -91,7 +112,15 @@ export function TicketDetailDialog({
   )
 }
 
-function Body({ ticket, timeZone }: { ticket: TicketDTO; timeZone: string }) {
+function Body({
+  ticket,
+  timeZone,
+  showHistory,
+}: {
+  ticket: TicketDTO
+  timeZone: string
+  showHistory: boolean
+}) {
   return (
     <div className="flex max-h-[62vh] flex-col gap-3.5 overflow-auto pr-0.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -185,8 +214,19 @@ function Body({ ticket, timeZone }: { ticket: TicketDTO; timeZone: string }) {
 
       <div className="grid gap-2 sm:grid-cols-2">
         <Fact label="Window">
-          {clock(ticket.startAt, timeZone)}–{clock(ticket.endAt, timeZone)} ·{" "}
-          {dateLabel(ticket.startAt, timeZone)}
+          {dateLabel(ticket.startAt, timeZone) === dateLabel(ticket.endAt, timeZone) ? (
+            <>
+              {clock(ticket.startAt, timeZone)}–{clock(ticket.endAt, timeZone)} ·{" "}
+              {dateLabel(ticket.startAt, timeZone)}
+            </>
+          ) : (
+            // A job over several days says so, rather than showing only
+            // the day it started.
+            <>
+              {clock(ticket.startAt, timeZone)} {dateLabel(ticket.startAt, timeZone)} →{" "}
+              {clock(ticket.endAt, timeZone)} {dateLabel(ticket.endAt, timeZone)}
+            </>
+          )}
         </Fact>
         <Fact label="Check-in area">{formatDistance(ticket.radiusM)}</Fact>
       </div>
@@ -227,6 +267,8 @@ function Body({ ticket, timeZone }: { ticket: TicketDTO; timeZone: string }) {
         </div>
       </div>
 
+      {showHistory ? <History ticketId={ticket.id} timeZone={timeZone} /> : null}
+
       <div className="flex flex-col gap-1.5">
         <Label>Where</Label>
         <MapPicker
@@ -236,6 +278,36 @@ function Body({ ticket, timeZone }: { ticket: TicketDTO; timeZone: string }) {
           onChange={() => {}}
         />
       </div>
+    </div>
+  )
+}
+
+/** Who checked in and out, newest first. */
+function History({ ticketId, timeZone }: { ticketId: string; timeZone: string }) {
+  const query = useTicket(ticketId)
+  const history = query.data?.history ?? []
+  return (
+    <div className="flex flex-col gap-1.5" data-ticket-history>
+      <Label>History</Label>
+      {query.isPending ? (
+        <span className="text-n-400 text-[13px]">Loading…</span>
+      ) : history.length === 0 ? (
+        <span className="text-n-400 text-[13px]">Nobody checked in to this one.</span>
+      ) : (
+        <ul className="border-n-200 m-0 flex list-none flex-col divide-y rounded-md border bg-white p-0">
+          {history.map((entry) => (
+            <li key={entry.id} className="flex items-baseline justify-between gap-3 px-3 py-2 text-[12.5px]">
+              <span>
+                {entry.type === "in" ? "Checked in" : "Checked out"}
+                {entry.insideFence ? "" : ` · ${formatDistance(entry.distanceM)} away`}
+              </span>
+              <span className="text-n-500 font-mono text-[11.5px] tabular-nums">
+                {clock(entry.at, timeZone)} · {dateLabel(entry.at, timeZone)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

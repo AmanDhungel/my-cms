@@ -8,6 +8,7 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone } from "@/lib/time"
 import { shiftOn } from "@/lib/week-server"
 import { loadTicketForViewer } from "@/lib/tickets"
+import { PAST_TICKET_MESSAGE, isPastTicket } from "@/lib/ticket-window"
 import {
   ticketStatusSchema,
   type TicketStatusValues,
@@ -52,6 +53,15 @@ export async function PATCH(
     }
 
     const isReviewer = viewer.role !== "employee"
+
+    // Past tickets are view-only for the crew. Owners and supervisors keep
+    // every move they had, including reopening one.
+    if (!isReviewer) {
+      const business = await getWorkspace(viewer.businessId)
+      if (isPastTicket(ticket, new Date(), business.timeZone)) {
+        throw new HttpError(403, PAST_TICKET_MESSAGE)
+      }
+    }
 
     // Permission is settled before position: "you can't move it there" is a
     // truer answer than "it's already there" when both would apply.

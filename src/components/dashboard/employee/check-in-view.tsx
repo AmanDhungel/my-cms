@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useLocationFix } from "@/components/dashboard/employee/use-location"
 import { distanceInMetres, formatDistance } from "@/lib/geo"
 import { useAttendance, useTickets } from "@/lib/queries"
+import { FINISHED_STATUSES } from "@/lib/ticket-window"
 
 /**
  * A single screen for the one thing the crew does most. It reads a position
@@ -25,8 +26,10 @@ export function CheckInView() {
   const { fix, error, locating, retry } = useLocationFix()
 
   const timeZone = attendance.data?.timeZone ?? "UTC"
+  // Only what can still be worked on; a finished ticket (sent for review,
+  // signed off or cancelled) is view-only and lives under My tickets.
   const open = (tickets.data?.tickets ?? []).filter(
-    (ticket) => ticket.status !== "done" && ticket.status !== "cancelled"
+    (ticket) => !FINISHED_STATUSES.includes(ticket.status)
   )
 
   const ordered = fix

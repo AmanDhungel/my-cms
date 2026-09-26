@@ -11,6 +11,7 @@ import { notifySupervisors } from "@/lib/notify"
 import { connectToDatabase } from "@/lib/mongodb"
 import { shiftOn } from "@/lib/week-server"
 import { loadTicketForViewer } from "@/lib/tickets"
+import { PAST_TICKET_MESSAGE, isPastTicket } from "@/lib/ticket-window"
 import { checkInSchema } from "@/lib/validations/work"
 import { getWorkspace } from "@/lib/workspace"
 import { CheckIn, toCheckInDTO } from "@/models/check-in"
@@ -38,6 +39,15 @@ export async function POST(
 
     const ticket = await loadTicketForViewer(id, viewer)
     const business = await getWorkspace(viewer.businessId)
+
+    // A past ticket is view-only for the crew — the same rule the app uses
+    // to hide the button, decided here with the server's own clock.
+    if (
+      viewer.role === "employee" &&
+      isPastTicket(ticket, new Date(), business.timeZone)
+    ) {
+      throw new HttpError(403, PAST_TICKET_MESSAGE)
+    }
 
     if (ticket.status === "done" || ticket.status === "cancelled") {
       throw new HttpError(409, "That ticket is already closed")
