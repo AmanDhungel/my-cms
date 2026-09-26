@@ -114,15 +114,37 @@ export function draftPreviews(draft: SiteDraft): string[] {
  * it is missing.
  */
 export function pruneDraft(draft: SiteDraft): SiteDraft {
-  const blank = (value: string | null | undefined) => !value?.trim()
   return {
     ...draft,
-    services: draft.services.filter((one) => !(blank(one.title) && blank(one.body))),
-    products: draft.products.filter(
-      (one) =>
-        !(blank(one.name) && blank(one.blurb) && blank(one.price) && !hasImage(one.image))
-    ),
-    faq: draft.faq.filter((one) => !(blank(one.question) && blank(one.answer))),
+    services: draft.services.filter((one) => !isBlankRow("services", one)),
+    products: draft.products.filter((one) => !isBlankRow("products", one)),
+    faq: draft.faq.filter((one) => !isBlankRow("faq", one)),
+  }
+}
+
+/**
+ * Whether a list row is still completely empty. Gallery rows are never
+ * called blank here: one without a picture is dropped at upload instead.
+ */
+export function isBlankRow(
+  list: "services" | "products" | "gallery" | "faq",
+  row: Record<string, unknown>
+) {
+  const blank = (value: unknown) => typeof value !== "string" || !value.trim()
+  switch (list) {
+    case "services":
+      return blank(row.title) && blank(row.body)
+    case "products":
+      return (
+        blank(row.name) &&
+        blank(row.blurb) &&
+        blank(row.price) &&
+        !hasImage(row.image as ImageDraft)
+      )
+    case "faq":
+      return blank(row.question) && blank(row.answer)
+    case "gallery":
+      return false
   }
 }
 

@@ -140,6 +140,13 @@ export const siteSchema = z.object({
 
   /** Optional so a client that doesn't know about it changes nothing. */
   extraSlots: extraSlots.optional(),
+
+  /**
+   * The version (updatedAt) this save was made from. When sent, a save made
+   * from an older version than the one stored is refused with 409, rather
+   * than silently overwriting a change made in another tab.
+   */
+  updatedAt: z.string().max(40).optional(),
 })
 
 export type SiteValues = z.infer<typeof siteSchema>

@@ -1,3 +1,6 @@
+import { NextResponse } from "next/server"
+import { Error as MongooseError } from "mongoose"
+
 import { logActivity } from "@/lib/activity"
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
@@ -9,7 +12,7 @@ import {
 } from "@/lib/s3"
 import { loadOrStartSite, picturesIn, slugIsFree } from "@/lib/site-server"
 import { siteSchema } from "@/lib/validations/site"
-import { toSiteContent, toSiteDTO } from "@/models/site"
+import { Site, toSiteContent, toSiteDTO } from "@/models/site"
 
 export const runtime = "nodejs"
 
@@ -43,6 +46,18 @@ export async function GET() {
  * entire site in its form state, and half-applied content is how a page ends
  * up with a heading from one draft and a body from another.
  */
+/** The answer to a save made from a version that is no longer current. */
+function stale(updatedAt: Date | undefined) {
+  return NextResponse.json(
+    {
+      error: "This site was changed in another tab.",
+      code: "stale",
+      updatedAt: updatedAt ? updatedAt.toISOString() : null,
+    },
+    { status: 409 }
+  )
+}
+
 export async function PUT(request: Request) {
   try {
     const viewer = await requireRole("owner")
@@ -67,6 +82,11 @@ export async function PUT(request: Request) {
 
     await connectToDatabase()
     const site = await loadOrStartSite(viewer.businessId)
+    const loadedAt = site.updatedAt as Date | undefined
+
+    if (values.updatedAt && loadedAt && loadedAt.toISOString() !== values.updatedAt) {
+      return stale(loadedAt)
+    }
 
     if (values.slug !== site.slug) {
       if (!(await slugIsFree(values.slug, viewer.businessId))) {
@@ -91,7 +111,18 @@ export async function PUT(request: Request) {
       )
     }
     site.updatedBy = viewer.id as never
-    await site.save()
+    // The check above and this write must not be split by another save:
+    // the write only matches the version that was checked.
+    if (values.updatedAt && loadedAt) site.$where = { updatedAt: loadedAt }
+    try {
+      await site.save()
+    } catch (error) {
+      if (error instanceof MongooseError.DocumentNotFoundError) {
+        const current = await Site.findById(site._id).select("updatedAt").lean()
+        return stale(current?.updatedAt as Date | undefined)
+      }
+      throw error
+    }
 
     /*
      * Tidying happens here rather than in the browser because a closed tab

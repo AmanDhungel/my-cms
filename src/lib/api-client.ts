@@ -3,12 +3,20 @@ import type { ApiError } from "@/lib/api-response"
 export class ApiRequestError extends Error {
   readonly status: number
   readonly fieldErrors?: Record<string, string[]>
+  /** The whole JSON error body, for the few callers that need more than a message. */
+  readonly body?: Record<string, unknown>
 
-  constructor(message: string, status: number, fieldErrors?: Record<string, string[]>) {
+  constructor(
+    message: string,
+    status: number,
+    fieldErrors?: Record<string, string[]>,
+    body?: Record<string, unknown>
+  ) {
     super(message)
     this.name = "ApiRequestError"
     this.status = status
     this.fieldErrors = fieldErrors
+    this.body = body
   }
 }
 
@@ -39,7 +47,8 @@ export async function apiFetch<TResponse>(
     throw new ApiRequestError(
       error.error ?? response.statusText ?? "Request failed",
       response.status,
-      error.fieldErrors
+      error.fieldErrors,
+      (body ?? undefined) as Record<string, unknown> | undefined
     )
   }
 

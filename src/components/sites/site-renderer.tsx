@@ -40,6 +40,7 @@ export function SiteRenderer({
   className,
   mode = "published",
   extraSlots,
+  savedContent,
 }: {
   template: string
   content: SiteContent
@@ -47,6 +48,12 @@ export function SiteRenderer({
   mode?: SiteMode
   /** Template-only wording, such as reworded section headings. */
   extraSlots?: Record<string, string>
+  /**
+   * What is actually saved, when `content` holds more than that — the
+   * editor passes its sample rows in `content` and blanks here, so a slot
+   * can tell sample words from the owner's. Defaults to `content`.
+   */
+  savedContent?: SiteContent
 }) {
   const { layout, theme } = templateById(template)
   const Layout = LAYOUT_COMPONENTS[layout.id] ?? LAYOUT_COMPONENTS.spotlight
@@ -54,7 +61,10 @@ export function SiteRenderer({
   const view = React.useMemo(
     () =>
       showsSamples(mode)
-        ? withSamples(content, { pictures: mode === "thumbnail" })
+        ? withSamples(content, {
+            pictures: mode === "thumbnail",
+            lists: mode !== "editor",
+          })
         : content,
     [content, mode]
   )
@@ -63,7 +73,7 @@ export function SiteRenderer({
 
   return (
     <SiteModeContext.Provider value={mode}>
-      <RawContentContext.Provider value={content}>
+      <RawContentContext.Provider value={savedContent ?? content}>
         <ExtraSlotsContext.Provider value={extraSlots ?? NO_EXTRAS}>
           <div
             style={theme.vars as React.CSSProperties}
@@ -73,7 +83,13 @@ export function SiteRenderer({
             // can be focused, read out or clicked.
             inert={thumbnail || undefined}
             aria-hidden={thumbnail || undefined}
-            className={`isolate bg-[var(--site-bg)] font-[family-name:var(--site-body)] text-[var(--site-fg)] ${thumbnail ? "pointer-events-none select-none" : ""} ${className ?? ""}`}
+            // The layouts respond to this box, not to the viewport
+            // (@min-[40rem]: / @min-[64rem]: and cqw, at the widths the old
+            // sm:/lg: and vw used). On the live site the box is the page, so
+            // nothing changes there; a thumbnail's 1200px frame gets the
+            // desktop design on any screen, and the editor's canvas gets the
+            // design for the width it actually has.
+            className={`@container isolate bg-[var(--site-bg)] font-[family-name:var(--site-body)] text-[var(--site-fg)] ${thumbnail ? "pointer-events-none select-none" : ""} ${className ?? ""}`}
           >
             <Layout content={view} sections={layout.sections} />
           </div>

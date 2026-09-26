@@ -872,6 +872,10 @@ export function useSite() {
     queryKey: keys.site(),
     queryFn: () =>
       apiFetch<{ site: SiteDTO; uploads: boolean }>("/api/site"),
+    // Coming back to the tab re-reads the site, so a save made in another
+    // tab is noticed (the builder decides what to do about it).
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   })
 }
 

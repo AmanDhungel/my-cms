@@ -169,7 +169,11 @@ export function mockList<K extends ListSlotId>(id: K): SiteContent[K] {
  */
 export function withSamples(
   content: SiteContent,
-  options: { pictures: boolean }
+  /**
+   * `lists: false` leaves an empty list empty: the inline editor draws its
+   * own sample rows (see sample-rows.ts), which the owner can dismiss.
+   */
+  options: { pictures: boolean; lists?: boolean }
 ): SiteContent {
   const text = (value: string | null, id: string) => value ?? mockText(id)
   const picture = (value: string | null, sample: string | null) =>
@@ -179,6 +183,7 @@ export function withSamples(
     const items = content[id] as unknown[]
     const sample = mockList(id) as unknown[]
     const sampled = items.length === 0
+    if (sampled && options.lists === false) return [] as unknown as SiteContent[K]
     const source = sampled ? sample : items
     return source.map((raw, index) => {
       const item = raw as Record<string, unknown>
