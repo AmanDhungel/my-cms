@@ -1,7 +1,7 @@
 import { Types } from "mongoose"
 
 import { hashPassword } from "@/lib/auth/password"
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { isSuperAdmin } from "@/lib/auth/super-admin"
 import { connectToDatabase } from "@/lib/mongodb"
 import { signupSchema } from "@/lib/validations/auth"
@@ -9,6 +9,8 @@ import { Business, toBusinessDTO } from "@/models/business"
 import { hashInviteToken } from "@/models/invite"
 import { User, toUserDTO } from "@/models/user"
 import { WorkspaceInvite } from "@/models/workspace-invite"
+import { enforceLimit } from "@/lib/security/rate-limit"
+import { clientIp } from "@/lib/security/client-ip"
 
 export const runtime = "nodejs"
 
@@ -22,8 +24,10 @@ export const runtime = "nodejs"
  */
 export async function POST(request: Request) {
   try {
+    // Opening workspaces is limited per IP (lib/security/limits.ts).
+    await enforceLimit("register", clientIp(request.headers))
     // Validate before touching the database so bad payloads cost nothing.
-    const values = signupSchema.parse(await request.json())
+    const values = signupSchema.parse(await readJson(request))
 
     const connection = await connectToDatabase()
     const email = values.email.toLowerCase()

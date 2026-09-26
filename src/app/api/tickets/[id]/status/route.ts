@@ -1,4 +1,4 @@
-import { HttpError, fail, handleApiError, ok } from "@/lib/api-response"
+import { fail, handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
 import { logActivity } from "@/lib/activity"
 import { prettyState } from "@/lib/activity-labels"
@@ -49,7 +49,7 @@ export async function PATCH(
   try {
     const viewer = await requireUser()
     const { id } = await ctx.params
-    const values = ticketStatusSchema.parse(await request.json())
+    const values = ticketStatusSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

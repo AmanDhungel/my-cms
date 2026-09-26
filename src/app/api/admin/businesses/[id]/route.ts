@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { Business, toBusinessDTO } from "@/models/business"
@@ -21,7 +21,7 @@ export async function PATCH(
   try {
     await requireSuperAdmin()
     const { id } = await ctx.params
-    const { blocked } = blockSchema.parse(await request.json())
+    const { blocked } = blockSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

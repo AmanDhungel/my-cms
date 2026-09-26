@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server"
 
 import { logActivity } from "@/lib/activity"
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
 import { money } from "@/lib/billing"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -33,7 +33,7 @@ export async function PUT(
   try {
     const viewer = await requireUser()
     const { id } = await ctx.params
-    const values = ticketMaterialsSchema.parse(await request.json())
+    const values = ticketMaterialsSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

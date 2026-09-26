@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server"
 
 import { logActivity } from "@/lib/activity"
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { ownParty } from "@/lib/money-refs"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -27,7 +27,7 @@ export async function PATCH(
   try {
     const viewer = await requireRole("owner", "supervisor")
     const { id } = await ctx.params
-    const values = maintenanceSchema.parse(await request.json())
+    const values = maintenanceSchema.parse(await readJson(request))
 
     // A photo in our bucket must be this workspace's own maintenance photo.
     // Once stored, dropping it on a later save would delete it — so another

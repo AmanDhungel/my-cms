@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 
-import { handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, ok, readJson } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { Notification, toNotificationDTO } from "@/models/notification"
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const viewer = await requireUser()
-    const body = (await request.json().catch(() => ({}))) as { id?: string }
+    const body = (await readJson(request).catch(() => ({}))) as { id?: string }
 
     await connectToDatabase()
 

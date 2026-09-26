@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 
-import { fail, handleApiError, ok } from "@/lib/api-response"
+import { fail, handleApiError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { composeShift, inviteSchema } from "@/lib/validations/auth"
@@ -38,7 +38,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const owner = await requireRole("owner")
-    const values = inviteSchema.parse(await request.json())
+    const values = inviteSchema.parse(await readJson(request))
     const email = values.email.toLowerCase()
 
     await connectToDatabase()

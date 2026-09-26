@@ -1,4 +1,4 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { deleteUploads, isBusinessKeyIn, keyFromUrl } from "@/lib/s3"
@@ -12,7 +12,7 @@ export const runtime = "nodejs"
 export async function PATCH(request: Request) {
   try {
     const owner = await requireRole("owner")
-    const values = businessSettingsSchema.parse(await request.json())
+    const values = businessSettingsSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

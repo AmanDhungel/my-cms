@@ -1,4 +1,4 @@
-import { HttpError, fail, handleApiError, ok } from "@/lib/api-response"
+import { fail, handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import {
   MAX_UPLOAD_BYTES,
@@ -12,6 +12,8 @@ import {
 import { assertMultipartLength } from "@/lib/storage/http"
 import { isTenantRequest } from "@/lib/tenancy"
 import { deleteUploadSchema } from "@/lib/validations/uploads"
+import { enforceLimit } from "@/lib/security/rate-limit"
+import { CROSS_ORIGIN_MESSAGE, isSameOrigin } from "@/lib/security/same-origin"
 
 export const runtime = "nodejs"
 
@@ -33,8 +35,11 @@ export const runtime = "nodejs"
  */
 export async function POST(request: Request) {
   if (isTenantRequest(request)) return fail("Not found", 404)
+  // The proxy is kept off this route, so it checks the origin itself (CSRF).
+  if (!isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
   try {
     const viewer = await requireRole("owner", "supervisor", "employee")
+    await enforceLimit("uploads", viewer.id)
 
     // Media types are case-insensitive; a client may well send
     // "Multipart/Form-Data" and still mean this branch.
@@ -108,9 +113,10 @@ export async function POST(request: Request) {
  */
 export async function DELETE(request: Request) {
   if (isTenantRequest(request)) return fail("Not found", 404)
+  if (!isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
   try {
     const viewer = await requireRole("owner", "supervisor", "employee")
-    const { urls } = deleteUploadSchema.parse(await request.json())
+    const { urls } = deleteUploadSchema.parse(await readJson(request))
 
     // Scoped on the parsed key, not the URL text: a query string is dropped
     // when the key is resolved, so matching the raw URL would let a

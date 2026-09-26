@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server"
 import { Types } from "mongoose"
 
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole, requireUser } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("owner", "supervisor")
-    const values = ticketSchema.parse(await request.json())
+    const values = ticketSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

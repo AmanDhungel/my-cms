@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { Error as MongooseError } from "mongoose"
 
 import { logActivity } from "@/lib/activity"
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import {
@@ -61,7 +61,7 @@ function stale(updatedAt: Date | undefined) {
 export async function PUT(request: Request) {
   try {
     const viewer = await requireRole("owner")
-    const values = siteSchema.parse(await request.json())
+    const values = siteSchema.parse(await readJson(request))
 
     /*
      * A picture in our bucket has to be this workspace's own site picture.
@@ -153,7 +153,7 @@ export async function PUT(request: Request) {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("owner")
-    const body = (await request.json()) as { published?: unknown }
+    const body = (await readJson(request)) as { published?: unknown }
 
     if (typeof body.published !== "boolean") {
       throw new HttpError(400, "Say whether to publish or unpublish")

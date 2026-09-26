@@ -1,4 +1,4 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole, requireUser } from "@/lib/auth/guards"
 import { logActivity } from "@/lib/activity"
 import { notifyUser } from "@/lib/notify"
@@ -50,7 +50,7 @@ export async function PATCH(
   try {
     const viewer = await requireRole("owner", "supervisor")
     const { id } = await ctx.params
-    const values = ticketSchema.parse(await request.json())
+    const values = ticketSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

@@ -1,4 +1,4 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { assertItemIsNew, itemImagesFrom } from "@/lib/inventory"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -39,7 +39,7 @@ export async function PATCH(
   try {
     const viewer = await requireRole("owner", "supervisor")
     const { id } = await ctx.params
-    const values = itemSchema.parse(await request.json())
+    const values = itemSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

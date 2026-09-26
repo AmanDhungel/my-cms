@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server"
 import { Types } from "mongoose"
 
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
 import { logActivity } from "@/lib/activity"
 import {
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const viewer = await requireUser()
-    const values = attendanceActionSchema.parse(await request.json())
+    const values = attendanceActionSchema.parse(await readJson(request))
     const { action } = values
 
     await connectToDatabase()

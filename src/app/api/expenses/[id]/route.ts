@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server"
 import mongoose from "mongoose"
 
 import { logActivity } from "@/lib/activity"
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { money } from "@/lib/billing"
 import { SUPERVISOR_KINDS, kindLabel, linesTotal } from "@/lib/expenses"
@@ -53,7 +53,7 @@ export async function PATCH(
   try {
     const viewer = await requireRole("owner", "supervisor")
     const { id } = await ctx.params
-    const values = expenseSchema.parse(await request.json())
+    const values = expenseSchema.parse(await readJson(request))
 
     if (viewer.role !== "owner" && !SUPERVISOR_KINDS.includes(values.kind)) {
       throw new HttpError(

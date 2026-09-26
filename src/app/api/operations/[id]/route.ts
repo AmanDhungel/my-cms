@@ -1,4 +1,4 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { logActivity } from "@/lib/activity"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -26,7 +26,9 @@ export async function PATCH(
   try {
     const viewer = await requireRole("owner", "supervisor")
     const { id } = await ctx.params
-    const body = await request.json()
+    const raw = await readJson(request)
+    // Must be a plain object; anything else fails the schemas below.
+    const body = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>
 
     await connectToDatabase()
 

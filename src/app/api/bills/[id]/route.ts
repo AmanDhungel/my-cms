@@ -1,6 +1,6 @@
 import mongoose from "mongoose"
 
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { holdsStock } from "@/lib/billing"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -26,7 +26,7 @@ export async function PATCH(
   try {
     const viewer = await requireRole("owner", "supervisor")
     const { id } = await ctx.params
-    const values = billUpdateSchema.parse(await request.json())
+    const values = billUpdateSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

@@ -1,6 +1,6 @@
 import { Types } from "mongoose"
 
-import { HttpError, fail, handleApiError, ok } from "@/lib/api-response"
+import { fail, handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { logActivity } from "@/lib/activity"
 import { markArrival } from "@/lib/attendance"
@@ -19,6 +19,7 @@ import { CheckIn, toCheckInDTO } from "@/models/check-in"
 import { toAttendanceDTO } from "@/models/attendance"
 import { toTicketDTO } from "@/models/ticket"
 import { User } from "@/models/user"
+import { enforceLimit } from "@/lib/security/rate-limit"
 
 export const runtime = "nodejs"
 
@@ -33,8 +34,9 @@ export async function POST(
 ) {
   try {
     const viewer = await requireRole("employee", "supervisor")
+    await enforceLimit("checkIn", viewer.id)
     const { id } = await ctx.params
-    const values = checkInSchema.parse(await request.json())
+    const values = checkInSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

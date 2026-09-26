@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server"
 import { z } from "zod"
 
-import { handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, ok, readJson } from "@/lib/api-response"
 import { requireSuperAdmin } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { createInviteToken } from "@/models/invite"
@@ -30,7 +30,7 @@ const workspaceInviteSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const admin = await requireSuperAdmin()
-    const values = workspaceInviteSchema.parse(await request.json())
+    const values = workspaceInviteSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

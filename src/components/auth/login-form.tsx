@@ -31,7 +31,11 @@ export function LoginForm() {
 
     if (!result || result.error) {
       // Deliberately vague: never confirm whether the address is registered.
-      const message = "Email or password is incorrect"
+      // Too many attempts is the one other answer, with the wait it carries.
+      const message =
+        result?.error === "RateLimited" && result.code
+          ? result.code
+          : "Email or password is incorrect"
       setError("password", { message })
       toast.error(message)
       return

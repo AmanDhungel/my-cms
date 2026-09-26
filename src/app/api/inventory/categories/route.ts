@@ -1,4 +1,4 @@
-import { handleApiError, ok, HttpError } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { sameText } from "@/lib/inventory"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -48,7 +48,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("owner", "supervisor")
-    const values = categorySchema.parse(await request.json())
+    const values = categorySchema.parse(await readJson(request))
 
     await connectToDatabase()
 

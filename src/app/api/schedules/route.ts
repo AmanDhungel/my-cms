@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { logActivity } from "@/lib/activity"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("owner", "supervisor")
-    const values = scheduleSchema.parse(await request.json())
+    const values = scheduleSchema.parse(await readJson(request))
 
     await connectToDatabase()
 
