@@ -11,6 +11,23 @@ import { ITEM_UNITS, type ItemUnit } from "@/lib/work-constants"
 
 export { ITEM_UNITS, type ItemUnit }
 
+/**
+ * One picture of an item. Both halves are kept: the URL is what a page
+ * renders, the key is what the bucket is told to delete — deriving one from
+ * the other later would tie the record to whatever public base was
+ * configured on the day it was saved.
+ */
+const itemImageSchema = new Schema(
+  {
+    key: { type: String, required: true, trim: true },
+    url: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+)
+
+/** The most pictures an item holds. Checked in the form, the schema and here. */
+export const MAX_ITEM_IMAGES = 3
+
 const inventoryItemSchema = new Schema(
   {
     business: { type: Schema.Types.ObjectId, ref: "Business", required: true },
@@ -39,6 +56,19 @@ const inventoryItemSchema = new Schema(
     lowStockAt: { type: Number, required: true, min: 0, default: 0 },
     /** Where it is kept — a store room, a van, a shelf. */
     location: { type: String, trim: true, maxlength: 120 },
+    /**
+     * Up to three pictures, in the order they are shown; the first is the one
+     * the stock list uses. Items saved before pictures existed load with an
+     * empty list, which is the whole of the migration.
+     */
+    images: {
+      type: [itemImageSchema],
+      default: [],
+      validate: {
+        validator: (list: unknown[]) => list.length <= MAX_ITEM_IMAGES,
+        message: "Three pictures is the most an item can hold",
+      },
+    },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }
@@ -70,6 +100,8 @@ export type ItemDTO = {
   stock: number
   lowStockAt: number
   location: string | null
+  /** In display order; empty for an item nobody has photographed. */
+  images: { key: string; url: string }[]
   category: { id: string; name: string } | null
   createdAt: string
 }
@@ -103,6 +135,7 @@ export function toItemDTO(
     stock: item.stock,
     lowStockAt: item.lowStockAt,
     location: item.location ?? null,
+    images: (item.images ?? []).map((one) => ({ key: one.key, url: one.url })),
     category: named(item.category as MaybePopulated),
     createdAt: (item.createdAt as Date).toISOString(),
   }

@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { SettingsView } from "@/components/dashboard/settings/settings-view"
 import { requirePageRole } from "@/lib/auth/page-guards"
 import { connectToDatabase } from "@/lib/mongodb"
+import { uploadsConfigured } from "@/lib/s3"
 import { Business, toBusinessDTO } from "@/models/business"
 import { Invite } from "@/models/invite"
 import { User, toUserDTO } from "@/models/user"
@@ -30,6 +31,8 @@ export default async function SettingsPage() {
       me={toUserDTO(me)}
       canEdit={viewer.role === "owner"}
       stats={{ members, pendingInvites }}
+      // So the logo picker says storage is unavailable rather than failing.
+      uploads={uploadsConfigured()}
     />
   )
 }

@@ -6,6 +6,8 @@ export type Viewer = {
   email: string
   role: UserRole
   businessName: string
+  /** The workspace logo's public URL; the sidebar shows initials without one. */
+  businessLogo: string | null
   /** Only loaded for the crew shell, which shows it in the sidebar. */
   shift?: string | null
   /** Shows the way back to /admin for the account that administers this deployment. */

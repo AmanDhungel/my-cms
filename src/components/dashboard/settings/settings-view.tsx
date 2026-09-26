@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useMutation } from "@tanstack/react-query"
@@ -13,6 +14,7 @@ import {
   OfficePicker,
   type OfficeValue,
 } from "@/components/dashboard/office-picker"
+import { ImagePicker } from "@/components/dashboard/image-picker"
 import { initialsOf } from "@/components/dashboard/viewer"
 import { WeekEditor } from "@/components/dashboard/week-editor"
 import {
@@ -24,6 +26,14 @@ import {
 } from "@/components/dashboard/ui"
 import { ApiRequestError, apiFetch } from "@/lib/api-client"
 import { TIME_ZONES } from "@/lib/time"
+import {
+  clearImage,
+  commitImage,
+  emptyImage,
+  imageSrc,
+  type ImageDraft,
+} from "@/lib/upload-client"
+import { useRevokeOnUnmount, useUnsavedGuard } from "@/lib/use-unsaved-guard"
 import {
   CREW_SIZES,
   businessSettingsSchema,
@@ -37,11 +47,14 @@ export function SettingsView({
   me,
   canEdit,
   stats,
+  uploads = true,
 }: {
   business: BusinessDTO
   me: UserDTO
   canEdit: boolean
   stats: { members: number; pendingInvites: number }
+  /** Whether file storage is configured; the logo picker says so when not. */
+  uploads?: boolean
 }) {
   const router = useRouter()
   const {
@@ -73,6 +86,29 @@ export function SettingsView({
     },
   })
 
+  /*
+   * The logo is held apart from the form, as a draft: picking one previews it
+   * from memory and uploads nothing. It only goes to storage when the form is
+   * saved, and the old one is only deleted once the save has landed — so a
+   * Discard, a reload or a refused save never costs the logo already there.
+   */
+  const [savedLogo, setSavedLogo] = React.useState(business.logo?.url ?? null)
+  const [logo, setLogo] = React.useState<ImageDraft>(() =>
+    emptyImage(business.logo?.url ?? null)
+  )
+  const [uploading, setUploading] = React.useState(false)
+  const logoChanged = Boolean(logo.file) || logo.url !== savedLogo
+  const dirty = isDirty || logoChanged
+
+  useUnsavedGuard(dirty)
+  useRevokeOnUnmount(() => [logo.preview])
+
+  function discard() {
+    clearImage(logo)
+    setLogo(emptyImage(savedLogo))
+    reset()
+  }
+
   const office = useWatch({ control, name: "office" })
   const week = useWatch({ control, name: "week" })
 
@@ -100,6 +136,11 @@ export function SettingsView({
             }
           : null,
       })
+      setSavedLogo(saved.logo?.url ?? null)
+      setLogo((draft) => {
+        clearImage(draft)
+        return emptyImage(saved.logo?.url ?? null)
+      })
       toast.success("Workspace updated")
       router.refresh()
     },
@@ -117,9 +158,52 @@ export function SettingsView({
     },
   })
 
+  /**
+   * Save, in the only order that can't lose a picture: upload the new logo,
+   * write the record, and let the server delete the old object once the
+   * record points elsewhere. If the write is refused after the upload
+   * succeeded, the new object is removed again and the old logo stays.
+   */
+  async function submit(values: BusinessSettingsValues) {
+    if (mutation.isPending || uploading) return
+
+    let uploaded: string | null = null
+    let url: string | null = logo.url
+    if (logoChanged && logo.file) {
+      setUploading(true)
+      try {
+        url = await commitImage(logo, "logo")
+        uploaded = url
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "The logo didn't upload"
+        )
+        return
+      } finally {
+        setUploading(false)
+      }
+    }
+
+    const body: BusinessSettingsValues = logoChanged
+      ? { ...values, logo: url ? { url } : null }
+      : values
+
+    mutation.mutate(body, {
+      onError: () => {
+        if (!uploaded) return
+        // Only the object this save created; the saved logo is untouched.
+        void fetch("/api/uploads", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls: [uploaded] }),
+        })
+      },
+    })
+  }
+
   return (
     <DashboardMain className="max-w-[980px] gap-[22px] pb-16">
-      <form onSubmit={handleSubmit((values) => mutation.mutate(values))}>
+      <form onSubmit={handleSubmit(submit)}>
         <PageHeading
           eyebrow="Account"
           title="Organization settings"
@@ -133,18 +217,22 @@ export function SettingsView({
                 </Link>
                 <button
                   type="button"
-                  onClick={() => reset()}
-                  disabled={!isDirty || mutation.isPending}
+                  onClick={discard}
+                  disabled={!dirty || mutation.isPending || uploading}
                   className={secondaryButtonClass}
                 >
                   Discard
                 </button>
                 <button
                   type="submit"
-                  disabled={!isDirty || mutation.isPending}
+                  disabled={!dirty || mutation.isPending || uploading}
                   className={primaryButtonClass}
                 >
-                  {mutation.isPending ? "Saving…" : "Save changes"}
+                  {uploading
+                    ? "Uploading logo…"
+                    : mutation.isPending
+                      ? "Saving…"
+                      : "Save changes"}
                 </button>
               </>
             ) : null
@@ -163,16 +251,41 @@ export function SettingsView({
 
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-3.5">
+              {imageSrc(logo) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imageSrc(logo) ?? ""}
+                  alt=""
+                  data-settings-logo
+                  className="size-[52px] shrink-0 rounded-xl object-cover"
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="font-heading bg-p-100 text-p-700 flex size-[52px] items-center justify-center rounded-xl text-[17px] font-semibold"
+                >
+                  {initialsOf(business.name)}
+                </span>
+              )}
               <span
-                aria-hidden
-                className="font-heading bg-p-100 text-p-700 flex size-[52px] items-center justify-center rounded-xl text-[17px] font-semibold"
+                data-settings-business-name
+                className="text-n-400 font-mono text-[11px] tracking-[0.05em] uppercase"
               >
-                {initialsOf(business.name)}
-              </span>
-              <span className="text-n-400 font-mono text-[11px] tracking-[0.05em]">
-                INITIALS ARE DERIVED FROM THE NAME
+                {business.name}
               </span>
             </div>
+
+            {canEdit ? (
+              <ImagePicker
+                label="Logo"
+                hint="Shown in the sidebar instead of your initials. Uploaded when you save."
+                value={logo}
+                onChange={setLogo}
+                enabled={uploads}
+                ratio="1/1"
+                className="max-w-[420px]"
+              />
+            ) : null}
 
             <div className="grid gap-3.5 sm:grid-cols-2">
               <label className="flex flex-col gap-[7px]">

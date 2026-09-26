@@ -40,6 +40,7 @@ export default async function DashboardLayout({
     email: me.email,
     role: me.role,
     businessName: business.name,
+    businessLogo: business.logo?.url ?? null,
     superAdmin: isSuperAdmin(me.email),
   };
 

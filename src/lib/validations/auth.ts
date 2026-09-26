@@ -199,6 +199,11 @@ export const businessSettingsSchema = z.object({
   office: officeSchema.nullish(),
   /** The standard week. Null clears it and everyone falls back to `shift`. */
   week: weekPatternSchema.nullish(),
+  /**
+   * Absent leaves the logo alone, null removes it, `{ url }` sets it. Only
+   * the URL travels: the server works out the key and checks it is ours.
+   */
+  logo: z.object({ url: z.string().trim().url() }).nullable().optional(),
 })
 
 export type BusinessSettingsValues = z.infer<typeof businessSettingsSchema>

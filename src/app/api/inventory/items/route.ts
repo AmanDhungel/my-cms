@@ -1,7 +1,8 @@
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
-import { assertItemIsNew } from "@/lib/inventory"
+import { assertItemIsNew, itemImagesFrom } from "@/lib/inventory"
 import { connectToDatabase } from "@/lib/mongodb"
+import { uploadsConfigured } from "@/lib/s3"
 import { itemSchema } from "@/lib/validations/inventory"
 import { InventoryCategory } from "@/models/inventory-category"
 import { InventoryItem, toItemDTO } from "@/models/inventory-item"
@@ -23,7 +24,11 @@ export async function GET() {
       .sort({ name: 1 })
       .limit(500)
 
-    return ok({ items: items.map(toItemDTO) })
+    return ok({
+      items: items.map(toItemDTO),
+      // So the form can say storage is unavailable rather than failing.
+      uploads: uploadsConfigured(),
+    })
   } catch (error) {
     return handleApiError(error)
   }
@@ -46,6 +51,8 @@ export async function POST(request: Request) {
 
     await assertItemIsNew(viewer.businessId, values.name, values.sku)
 
+    const images = itemImagesFrom(values.images ?? [], viewer.businessId)
+
     const item = await InventoryItem.create({
       business: viewer.businessId,
       category: category._id,
@@ -57,6 +64,7 @@ export async function POST(request: Request) {
       stock: values.stock,
       lowStockAt: values.lowStockAt,
       location: values.location,
+      images,
       createdBy: viewer.id,
     })
 

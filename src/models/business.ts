@@ -75,6 +75,20 @@ const weekField = {
   },
 }
 
+/**
+ * The workspace's logo, as stored. Both halves are kept: the URL is what the
+ * sidebar renders, the key is what the bucket is told to delete when it is
+ * replaced — deriving one from the other at delete time would tie the
+ * record to whatever public base was configured on the day it was saved.
+ */
+const logoSchema = new Schema(
+  {
+    key: { type: String, required: true, trim: true },
+    url: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+)
+
 const businessSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 120 },
@@ -85,6 +99,8 @@ const businessSchema = new Schema(
      */
     timeZone: { type: String, required: true, default: "Asia/Kathmandu" },
     office: { type: officeSchema },
+    /** Absent on a workspace that shows its initials instead. */
+    logo: { type: logoSchema },
     /** The standard week everyone follows unless they have their own. */
     week: weekField,
     /** PAN / VAT registration number, printed on tax invoices. */
@@ -132,6 +148,7 @@ export type BusinessDTO = {
   week: WeekPattern | null
   pan: string | null
   vatRate: number
+  logo: { key: string; url: string } | null
   blockedAt: string | null
   ownerId: string
 }
@@ -162,6 +179,9 @@ export function toBusinessDTO(
       : null) as WeekPattern | null,
     pan: business.pan ?? null,
     vatRate: business.vatRate,
+    logo: business.logo
+      ? { key: business.logo.key, url: business.logo.url }
+      : null,
     blockedAt: business.blockedAt ? business.blockedAt.toISOString() : null,
     ownerId: String(business.owner),
   }

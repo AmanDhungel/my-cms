@@ -44,7 +44,7 @@ export function DeleteItemDialog({
       onClose={onClose}
       title={`Delete ${item.name}?`}
       description={item.category?.name ?? "Uncategorised"}
-      body={`This removes the item and the stock count of ${item.stock} ${item.unit} held against it. It can't be undone.`}
+      body={`This removes the item and the stock count of ${item.stock} ${item.unit} held against it${item.images?.length ? `, and its ${item.images.length === 1 ? "picture" : `${item.images.length} pictures`}` : ""}. It can't be undone.`}
       confirmLabel="Delete item"
       pendingLabel="Deleting…"
       pending={mutation.isPending}

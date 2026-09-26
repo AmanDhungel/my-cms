@@ -3,6 +3,7 @@
 import * as React from "react"
 import { cn } from "cn"
 
+import { TemplateThumb } from "@/components/dashboard/site/template-thumb"
 import {
   LAYOUTS,
   TEMPLATES,
@@ -14,11 +15,10 @@ import {
 /**
  * The fifty.
  *
- * Each card draws a wireframe of its layout rather than a shrunken
- * screenshot: at this size a real render is an illegible smudge, whereas the
- * bars below genuinely show what leads the page and what follows. The
- * colours in the wireframe are the theme's own, so the pair reads at a
- * glance, and the full thing is one click away under Preview.
+ * Each card shows the real page — the same renderer the live site uses,
+ * dressed in sample content and scaled down — so what the owner picks is
+ * what they get. Cards draw themselves only as they near the screen, so
+ * fifty of them cost no more up front than the few in view.
  */
 export function TemplateGallery({
   value,
@@ -98,10 +98,7 @@ export function TemplateGallery({
                   : "border-n-200 hover:border-n-300 bg-white"
               )}
             >
-              <Wireframe
-                layout={template.layout}
-                vars={template.theme.vars}
-              />
+              <TemplateThumb template={template} />
 
               <div className="flex flex-col gap-1">
                 <span className="flex items-center justify-between gap-2">
@@ -130,13 +127,14 @@ export function TemplateGallery({
 }
 
 /**
- * The little diagram.
+ * The little diagram — what the cards drew before they showed the real page.
+ * Kept for anywhere a page is too small to draw legibly.
  *
  * One band per section in the order the layout draws them, shaped roughly the
  * way that section looks: a hero is tall, a product grid is a row of squares,
  * a text section is a stack of lines.
  */
-function Wireframe({
+export function Wireframe({
   layout,
   vars,
 }: {
