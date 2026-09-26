@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 
 import { auth } from "@/auth"
+import { isStaleSession } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { User, type UserRole } from "@/models/user"
 
@@ -42,7 +43,7 @@ export async function loadViewer(): Promise<PageViewer> {
 
   // The workspace rides along so a blocked one shuts out everyone in it.
   const member = await User.findById(session.user.id)
-    .select("name email role business status blockedAt")
+    .select("name email role business status blockedAt sessionsValidAfter")
     .populate<{ business: { _id: unknown; blockedAt?: Date } }>(
       "business",
       "blockedAt"
@@ -58,6 +59,10 @@ export async function loadViewer(): Promise<PageViewer> {
 
   if (member.blockedAt || member.business?.blockedAt) {
     redirect("/blocked")
+  }
+
+  if (isStaleSession(session.user.signedInAt, member.sessionsValidAfter)) {
+    redirect("/login")
   }
 
   return {

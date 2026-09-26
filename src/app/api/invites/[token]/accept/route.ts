@@ -79,7 +79,9 @@ export async function POST(
           // Guarded on "removed" so two racing invites can't both adopt them.
           const adopted = await User.updateOne(
             { _id: userId, status: "removed" },
-            { $set: membership, $unset: { removedAt: "" } },
+            // Sessions from before the adoption belong to whoever held the
+            // account then; they stop working now (lib/auth/guards.ts).
+            { $set: { ...membership, sessionsValidAfter: new Date() }, $unset: { removedAt: "" } },
             { session }
           )
 

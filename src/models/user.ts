@@ -88,6 +88,12 @@ const userSchema = new Schema(
      * the account keeps its place but every way in is shut.
      */
     blockedAt: { type: Date },
+    /**
+     * Sessions signed in before this are no longer honoured. Set when a
+     * removed account is adopted by another workspace, so whoever held the
+     * old sessions can't walk into the new one.
+     */
+    sessionsValidAfter: { type: Date },
   },
   { timestamps: true }
 )

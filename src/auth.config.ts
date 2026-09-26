@@ -39,6 +39,7 @@ export const authConfig = {
         token.role = user.role
         token.businessId = user.businessId
         token.superAdmin = user.superAdmin ?? false
+        token.signedInAt = Date.now()
       }
       return token
     },
@@ -47,6 +48,7 @@ export const authConfig = {
       session.user.role = token.role
       session.user.businessId = token.businessId
       session.user.superAdmin = token.superAdmin ?? false
+      session.user.signedInAt = token.signedInAt
       return session
     },
   },
