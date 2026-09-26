@@ -1,5 +1,8 @@
 "use client"
 
+import { compressImageIfNeeded, isAcceptedType } from "@/lib/images/compress"
+import { MAX_UPLOAD_BYTES } from "@/lib/storage/types"
+
 /**
  * Pictures, from the moment someone picks one to the moment it is saved.
  *
@@ -8,20 +11,21 @@
  * nothing behind in the bucket. And nothing over a megabyte is ever sent: a
  * phone camera produces four or five, which is slow to upload, slow to serve
  * and no sharper on a web page.
+ *
+ * The squeeze itself lives in `@/lib/images/compress`; the helpers it grew
+ * are re-exported here so nothing that imported them has to move.
  */
+export {
+  ACCEPTED_TYPES,
+  isAcceptedType,
+  readableSize,
+} from "@/lib/images/compress"
 
-/** A megabyte, which is the ceiling everything here works towards. */
-export const MAX_BYTES = 1024 * 1024
-
-/** Beyond this a picture is only costing bytes, not showing more. */
-const MAX_EDGE = 2000
-
-export const ACCEPTED_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/avif",
-] as const
+/**
+ * The ceiling everything here works towards — the same one the server
+ * enforces.
+ */
+export const MAX_BYTES = MAX_UPLOAD_BYTES
 
 /** What the browser holds before a save: a chosen file, or an existing URL. */
 export type ImageDraft = {
@@ -48,129 +52,33 @@ export function hasImage(draft: ImageDraft) {
   return Boolean(draft.preview || draft.url)
 }
 
-export function isAcceptedType(type: string) {
-  return (ACCEPTED_TYPES as readonly string[]).includes(type)
-}
-
 /**
- * Squeeze a picture under the ceiling.
+ * Squeeze a picture under the ceiling, handing the original back if it
+ * cannot. This function never throws.
  *
- * Two levers, pulled in the order that costs the least: quality first, then
- * size. Re-encoding at lower quality is nearly invisible on a photograph and
- * usually enough on its own; scaling down loses detail that cannot come back,
- * so it is only reached for when quality alone has not done it.
+ * The older entry point, kept only so that callers written against it keep
+ * working. That version never threw: whatever went wrong — a file that was
+ * not a picture, one that could not be squeezed under the limit, one that
+ * could not be decoded, a canvas that would not draw — it handed the
+ * original file back and left the caller to do its own size check. So this
+ * wrapper catches EVERY error from `compressImageIfNeeded` and returns the
+ * original file. Swallowing every failure is deliberate and is the whole
+ * point of this export; do not narrow the catch to particular messages,
+ * because any error escaping here is a behaviour change for code that was
+ * never written to expect one.
  *
- * A file already under the ceiling is returned untouched — re-encoding a
- * small PNG would make it bigger and lose its transparency for nothing.
+ * `prepareImage` below is the throwing path: new code goes through it and
+ * gets told why a picture was refused.
  */
 export async function compressImage(
   file: File,
   maxBytes = MAX_BYTES
 ): Promise<File> {
-  if (file.size <= maxBytes) return file
-  if (!isAcceptedType(file.type)) return file
-
-  const bitmap = await loadBitmap(file)
-
   try {
-    let width = bitmap.width
-    let height = bitmap.height
-
-    // One free win before touching quality: a 6000px photo is pointless on a
-    // page that will never show it wider than about a thousand.
-    const longest = Math.max(width, height)
-    if (longest > MAX_EDGE) {
-      const scale = MAX_EDGE / longest
-      width = Math.round(width * scale)
-      height = Math.round(height * scale)
-    }
-
-    /*
-     * Quality, coming down in steps, then the picture gets smaller and the
-     * ladder is climbed again. Bounded on both axes so a pathological input
-     * cannot spin: eight quality steps, four scalings, and it gives up with
-     * the smallest thing it managed rather than looping.
-     */
-    let best: Blob | null = null
-
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      for (const quality of [0.82, 0.7, 0.6, 0.5, 0.4, 0.32, 0.25, 0.2]) {
-        const blob = await encode(bitmap, width, height, quality)
-        if (!blob) break
-        if (!best || blob.size < best.size) best = blob
-        if (blob.size <= maxBytes) {
-          return named(file, blob)
-        }
-      }
-      width = Math.round(width * 0.75)
-      height = Math.round(height * 0.75)
-      if (width < 320 || height < 320) break
-    }
-
-    // Still over. The smallest we managed beats the original either way.
-    if (best && best.size < file.size) return named(file, best)
+    return await compressImageIfNeeded(file, { maxBytes })
+  } catch {
     return file
-  } finally {
-    bitmap.close?.()
   }
-}
-
-async function loadBitmap(file: File) {
-  // createImageBitmap decodes off the main thread where it exists, which
-  // matters for a 12-megapixel photo.
-  if (typeof createImageBitmap === "function") {
-    return createImageBitmap(file)
-  }
-
-  return new Promise<HTMLImageElement & { close?: () => void }>(
-    (resolve, reject) => {
-      const img = new Image()
-      const url = URL.createObjectURL(file)
-      img.onload = () => {
-        URL.revokeObjectURL(url)
-        resolve(img)
-      }
-      img.onerror = () => {
-        URL.revokeObjectURL(url)
-        reject(new Error("That file could not be read as a picture"))
-      }
-      img.src = url
-    }
-  )
-}
-
-function encode(
-  source: CanvasImageSource,
-  width: number,
-  height: number,
-  quality: number
-): Promise<Blob | null> {
-  const canvas = document.createElement("canvas")
-  canvas.width = width
-  canvas.height = height
-
-  const ctx = canvas.getContext("2d")
-  if (!ctx) return Promise.resolve(null)
-
-  // White underneath: a transparent PNG re-encoded as JPEG would otherwise
-  // come out with black where the transparency was.
-  ctx.fillStyle = "#ffffff"
-  ctx.fillRect(0, 0, width, height)
-  ctx.imageSmoothingQuality = "high"
-  ctx.drawImage(source, 0, 0, width, height)
-
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), "image/jpeg", quality)
-  })
-}
-
-/** Keeps the original stem so a download is still recognisable. */
-function named(original: File, blob: Blob) {
-  const stem = original.name.replace(/\.[^.]+$/, "") || "picture"
-  return new File([blob], `${stem}.jpg`, {
-    type: "image/jpeg",
-    lastModified: Date.now(),
-  })
 }
 
 /**
@@ -189,7 +97,7 @@ export async function prepareImage(
     throw new Error("Images only — JPEG, PNG, WebP or AVIF")
   }
 
-  const compressed = await compressImage(file)
+  const compressed = await compressImageIfNeeded(file, { maxBytes: MAX_BYTES })
   if (compressed.size > MAX_BYTES) {
     throw new Error(
       "That picture is still over 1 MB after compressing. Try a smaller one."
@@ -219,6 +127,10 @@ export function clearImage(previous: ImageDraft): ImageDraft {
  * Called at submit, never before. A draft with no file has nothing to do and
  * gives back whatever URL it already had, which is what makes it safe to run
  * over every picture on a form whether it changed or not.
+ *
+ * One request: the bytes go to our own endpoint as a form, which checks
+ * what they really are before storing them. The browser sets the multipart
+ * boundary itself, so no Content-Type header is given here.
  */
 export async function commitImage(
   draft: ImageDraft,
@@ -226,34 +138,29 @@ export async function commitImage(
 ): Promise<string | null> {
   if (!draft.file) return draft.url
 
-  const signed = await fetch("/api/uploads", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      purpose,
-      contentType: draft.file.type,
-      size: draft.file.size,
-    }),
-  })
+  const body = new FormData()
+  body.set("purpose", purpose)
+  body.set("file", draft.file, draft.file.name)
 
-  const ticket = (await signed.json()) as {
-    uploadUrl?: string
+  const response = await fetch("/api/uploads", { method: "POST", body })
+
+  const stored = (await response.json().catch(() => ({}))) as {
+    key?: string
     url?: string
     error?: string
   }
-  if (!signed.ok || !ticket.uploadUrl || !ticket.url) {
-    throw new Error(ticket.error ?? "The upload couldn't be started")
+  // A refusal without a reason came from something in front of the route —
+  // a proxy, a body limit — so it is reported as never having started. A
+  // success without an address is the stranger case: the request went
+  // through and storage still gave nothing back.
+  if (!response.ok) {
+    throw new Error(stored.error ?? "The upload couldn't be started")
+  }
+  if (!stored.url) {
+    throw new Error(stored.error ?? "The picture didn't reach storage")
   }
 
-  const put = await fetch(ticket.uploadUrl, {
-    method: "PUT",
-    headers: { "Content-Type": draft.file.type },
-    body: draft.file,
-  })
-  // S3 answers the PUT itself; a failure here is the bucket's, not ours.
-  if (!put.ok) throw new Error("The picture didn't reach storage")
-
-  return ticket.url
+  return stored.url
 }
 
 /** The same, for a list — a gallery, or a maintenance item's photographs. */
@@ -267,11 +174,4 @@ export async function commitImages(
     if (url) urls.push(url)
   }
   return urls
-}
-
-/** "820 KB", for the line under a preview. */
-export function readableSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
