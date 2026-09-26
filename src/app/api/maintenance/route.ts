@@ -8,6 +8,7 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { foreignPictures, uploadsConfigured } from "@/lib/s3"
 import { dayRangeInZone } from "@/lib/time"
 import { maintenanceSchema } from "@/lib/validations/maintenance"
+import { nextUploaders } from "@/lib/image-uploaders"
 import { getWorkspace } from "@/lib/workspace"
 import {
   MAINTENANCE_STATUSES,
@@ -85,6 +86,8 @@ export async function POST(request: Request) {
       cost: values.cost,
       assignee: values.assigneeId,
       photos: values.photos,
+      // Every photo on a new entry was added by whoever is saving it.
+      photoUploaders: nextUploaders(values.photos, [], [], viewer.id),
       note: values.note,
       createdBy: viewer.id,
     })

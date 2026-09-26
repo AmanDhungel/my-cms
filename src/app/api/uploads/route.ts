@@ -4,6 +4,7 @@ import {
   MAX_UPLOAD_BYTES,
   deleteUploads,
   isBusinessKey,
+  uploaderOf,
   isUploadPurpose,
   keyFromUrl,
   sniffImageType,
@@ -12,10 +13,22 @@ import {
 import { assertMultipartLength } from "@/lib/storage/http"
 import { isTenantRequest } from "@/lib/tenancy"
 import { deleteUploadSchema } from "@/lib/validations/uploads"
+import { logActivity } from "@/lib/activity"
+import { canDelete } from "@/lib/auth/permissions"
+import { referencesOf } from "@/lib/image-ownership"
+import { getWorkspace } from "@/lib/workspace"
+import type { UserRole } from "@/models/user"
 import { enforceLimit } from "@/lib/security/rate-limit"
 import { CROSS_ORIGIN_MESSAGE, isSameOrigin } from "@/lib/security/same-origin"
 
 export const runtime = "nodejs"
+
+/** Which upload folders each role may write to. */
+const PURPOSES_BY_ROLE: Record<UserRole, readonly string[]> = {
+  owner: ["site", "maintenance", "ticket", "products", "logo"],
+  supervisor: ["maintenance", "ticket", "products"],
+  employee: ["ticket"],
+}
 
 /**
  * Uploading, for whatever holds pictures.
@@ -58,6 +71,12 @@ export async function POST(request: Request) {
       if (!isUploadPurpose(purpose)) {
         throw new HttpError(400, "That isn't something pictures are kept for")
       }
+      // Each role uploads only for what it can save a picture on: the crew
+      // for ticket photos, supervisors also for stock and the repair bench,
+      // the owner for everything (logo and site included).
+      if (!PURPOSES_BY_ROLE[viewer.role].includes(purpose)) {
+        throw new HttpError(403, "You can't add pictures there")
+      }
       if (!(file instanceof File)) {
         throw new HttpError(400, "No file was sent")
       }
@@ -86,6 +105,8 @@ export async function POST(request: Request) {
       const stored = await uploadFile(bytes, {
         businessId: viewer.businessId,
         folder: purpose,
+        // Recorded on the object, from the session.
+        uploadedBy: viewer.id,
         contentType: sniffed,
         fileName: file.name,
       })
@@ -123,11 +144,57 @@ export async function DELETE(request: Request) {
     // `?/<own-id>/` tail vouch for an object under someone else's prefix.
     // The fence is storage's own definition of the workspace's keys, so
     // nothing passes here only to be dropped, uncounted, by deleteUploads.
-    const own = urls.filter((url) => {
+    const inWorkspace = urls.filter((url) => {
       const key = keyFromUrl(url)
       return key !== null && isBusinessKey(key, viewer.businessId)
     })
+
+    /*
+     * The owner may delete any of the workspace's pictures. Anyone else only
+     * their own (lib/auth/permissions.ts): a picture a saved record points
+     * at must be recorded there as theirs (and, for an employee, not on a
+     * past ticket); one no record points at yet — a fresh upload left
+     * behind by a failed save — must carry their id in the object's own
+     * metadata. That second case is the system tidying up after the
+     * uploader, not a delete of anyone's saved work. Everything else is
+     * counted as refused.
+     */
+    const own: string[] = []
+    const audited: string[] = []
+    const business = await getWorkspace(viewer.businessId)
+    for (const url of inWorkspace) {
+      const key = keyFromUrl(url)!
+      const refs = await referencesOf(key, url, viewer.businessId, business.timeZone)
+      if (viewer.role === "owner") {
+        own.push(url)
+        if (refs.length > 0) audited.push(url)
+        continue
+      }
+      const allowed =
+        refs.length > 0
+          ? refs.every((ref) =>
+              canDelete(viewer, { kind: "image", uploadedBy: ref.uploadedBy, onPastTicket: ref.onPastTicket })
+            )
+          : (await uploaderOf(key)) === viewer.id
+      if (allowed) {
+        own.push(url)
+        if (refs.length > 0) audited.push(url)
+      }
+    }
     const result = await deleteUploads(own, viewer.businessId)
+
+    // A saved picture removed is a delete worth recording; tidying a fresh
+    // upload is not.
+    for (const url of audited) {
+      void logActivity({
+        businessId: viewer.businessId,
+        action: "image_deleted",
+        actorId: viewer.id,
+        actorName: viewer.name,
+        subject: keyFromUrl(url)?.split("/").slice(-2).join("/") ?? "picture",
+        targetKind: "image",
+      })
+    }
 
     return ok({ deleted: result.deleted, refused: urls.length - own.length })
   } catch (error) {

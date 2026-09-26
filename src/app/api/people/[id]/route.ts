@@ -1,5 +1,6 @@
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
-import { requireRole } from "@/lib/auth/guards"
+import { requireRole, requireUser } from "@/lib/auth/guards"
+import { assertCanDeleteRecord } from "@/lib/auth/permissions"
 import { logActivity } from "@/lib/activity"
 import { cleanWeek } from "@/lib/week-server"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -43,6 +44,7 @@ export async function PATCH(
 
     member.name = values.name
     member.phone = values.phone
+    const roleBefore = member.role
     member.role = values.role
     member.shift =
       values.role === "owner" || !values.shiftStart || !values.shiftEnd
@@ -70,6 +72,22 @@ export async function PATCH(
       href: "/dashboard/people",
     })
 
+    if (roleBefore !== member.role) {
+      // Audit trail: a role change is recorded on its own.
+      void logActivity({
+        businessId: viewer.businessId,
+        action: "role_changed",
+        actorId: viewer.id,
+        actorName: viewer.name,
+        subject: member.name,
+        from: roleBefore,
+        to: member.role,
+        targetKind: "member",
+        targetId: member._id,
+        href: "/dashboard/people",
+      })
+    }
+
     return ok({ member: toUserDTO(member) })
   } catch (error) {
     return handleApiError(error)
@@ -86,7 +104,9 @@ export async function DELETE(
   ctx: RouteContext<"/api/people/[id]">
 ) {
   try {
-    const viewer = await requireRole("owner")
+    const viewer = await requireUser()
+    // Deleting a record is the owner's alone (lib/auth/permissions.ts).
+    assertCanDeleteRecord(viewer)
     const { id } = await ctx.params
 
     await connectToDatabase()

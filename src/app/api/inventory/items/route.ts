@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
     await assertItemIsNew(viewer.businessId, values.name, values.sku)
 
-    const images = itemImagesFrom(values.images ?? [], viewer.businessId)
+    const images = itemImagesFrom(values.images ?? [], viewer.businessId, viewer.id)
 
     const item = await InventoryItem.create({
       business: viewer.businessId,

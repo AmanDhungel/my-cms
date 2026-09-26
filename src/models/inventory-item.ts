@@ -21,6 +21,9 @@ const itemImageSchema = new Schema(
   {
     key: { type: String, required: true, trim: true },
     url: { type: String, required: true, trim: true },
+    /** Who added it and when — set by the server from the session, never the body. Absent on older pictures (owner-only to remove). */
+    uploadedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    uploadedAt: { type: Date },
   },
   { _id: false }
 )
@@ -101,7 +104,7 @@ export type ItemDTO = {
   lowStockAt: number
   location: string | null
   /** In display order; empty for an item nobody has photographed. */
-  images: { key: string; url: string }[]
+  images: { key: string; url: string; uploadedById: string | null }[]
   category: { id: string; name: string } | null
   createdAt: string
 }
@@ -135,7 +138,11 @@ export function toItemDTO(
     stock: item.stock,
     lowStockAt: item.lowStockAt,
     location: item.location ?? null,
-    images: (item.images ?? []).map((one) => ({ key: one.key, url: one.url })),
+    images: (item.images ?? []).map((one) => ({
+      key: one.key,
+      url: one.url,
+      uploadedById: one.uploadedBy ? String(one.uploadedBy) : null,
+    })),
     category: named(item.category as MaybePopulated),
     createdAt: (item.createdAt as Date).toISOString(),
   }

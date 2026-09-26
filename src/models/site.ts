@@ -147,6 +147,23 @@ const siteSchema = new Schema(
      */
     extraSlots: { type: [extraSlotSchema], default: [] },
 
+    /**
+     * Who added each picture the content points at. The content's image
+     * fields stay plain URL strings; this list sits beside them and is
+     * maintained by the server on every save.
+     */
+    siteImageUploaders: {
+      type: [
+        {
+          _id: false,
+          url: { type: String, required: true, trim: true, maxlength: 600 },
+          uploadedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+          uploadedAt: { type: Date, required: true },
+        },
+      ],
+      default: [],
+    },
+
     updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

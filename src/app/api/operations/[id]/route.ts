@@ -1,5 +1,6 @@
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
-import { requireRole } from "@/lib/auth/guards"
+import { requireRole, requireUser } from "@/lib/auth/guards"
+import { assertCanDeleteRecord } from "@/lib/auth/permissions"
 import { logActivity } from "@/lib/activity"
 import { connectToDatabase } from "@/lib/mongodb"
 import { loadCrew } from "@/lib/tickets"
@@ -126,7 +127,9 @@ export async function DELETE(
   ctx: RouteContext<"/api/operations/[id]">
 ) {
   try {
-    const viewer = await requireRole("owner", "supervisor")
+    const viewer = await requireUser()
+    // Deleting a record is the owner's alone (lib/auth/permissions.ts).
+    assertCanDeleteRecord(viewer)
     const { id } = await ctx.params
 
     await connectToDatabase()

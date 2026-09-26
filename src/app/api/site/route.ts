@@ -12,6 +12,7 @@ import {
 } from "@/lib/s3"
 import { loadOrStartSite, picturesIn, slugIsFree } from "@/lib/site-server"
 import { siteSchema } from "@/lib/validations/site"
+import { nextUploaders } from "@/lib/image-uploaders"
 import { Site, toSiteContent, toSiteDTO } from "@/models/site"
 
 export const runtime = "nodejs"
@@ -104,6 +105,12 @@ export async function PUT(request: Request) {
     site.slug = values.slug
     site.template = values.template
     site.set("content", values.content)
+    // Who added each picture now in the content (the image fields are plain
+    // URLs; this list sits beside them). Kept ones keep their entry.
+    site.set(
+      "siteImageUploaders",
+      nextUploaders(picturesIn(toSiteContent(site.content)), before, site.siteImageUploaders ?? [], viewer.id)
+    )
     if (values.extraSlots) {
       site.set(
         "extraSlots",

@@ -1,4 +1,5 @@
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
+import { logActivity } from "@/lib/activity"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { deleteUploads, isBusinessKeyIn, keyFromUrl } from "@/lib/s3"
@@ -20,14 +21,15 @@ export async function PATCH(request: Request) {
     // here rather than trusted from the client, and fenced to this workspace
     // so one owner can never point their record at another's object.
     const logoChanged = values.logo !== undefined
-    let logo: { key: string; url: string } | null = null
+    let logo: { key: string; url: string; uploadedBy: string; uploadedAt: Date } | null = null
 
     if (logoChanged && values.logo) {
       const key = keyFromUrl(values.logo.url)
       if (!key || !isBusinessKeyIn(key, owner.businessId, "logo")) {
         throw new HttpError(400, "That picture isn't one of ours")
       }
-      logo = { key, url: values.logo.url }
+      // Who set it, from the session — never from the body.
+      logo = { key, url: values.logo.url, uploadedBy: owner.id, uploadedAt: new Date() }
     }
 
     /*
@@ -81,6 +83,17 @@ export async function PATCH(request: Request) {
     }
 
     const business = await Business.findById(owner.businessId).orFail()
+    if (logoChanged && replaced !== (logo?.url ?? null)) {
+      void logActivity({
+        businessId: owner.businessId,
+        action: "logo_changed",
+        actorId: owner.id,
+        actorName: owner.name,
+        subject: business.name,
+        detail: logo ? (replaced ? "replaced" : "added") : "removed",
+        href: "/dashboard/settings",
+      })
+    }
     return ok({ business: toBusinessDTO(business) })
   } catch (error) {
     return handleApiError(error)

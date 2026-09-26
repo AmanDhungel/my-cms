@@ -1,7 +1,9 @@
+import { logActivity } from "@/lib/activity"
 import type { NextRequest } from "next/server"
 
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
-import { requireRole } from "@/lib/auth/guards"
+import { requireRole, requireUser } from "@/lib/auth/guards"
+import { assertCanDeleteRecord } from "@/lib/auth/permissions"
 import { accountTotals } from "@/lib/ledger"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayRangeInZone } from "@/lib/time"
@@ -78,7 +80,9 @@ export async function DELETE(
   ctx: RouteContext<"/api/accounts/[id]">
 ) {
   try {
-    const viewer = await requireRole("owner")
+    const viewer = await requireUser()
+    // Deleting a record is the owner's alone (lib/auth/permissions.ts).
+    assertCanDeleteRecord(viewer)
     const { id } = await ctx.params
 
     await connectToDatabase()
@@ -97,6 +101,15 @@ export async function DELETE(
     }
 
     await account.deleteOne()
+    // Audit trail: every delete is recorded (never any secret).
+    void logActivity({
+      businessId: viewer.businessId,
+      action: "record_deleted",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: account.name,
+      detail: "account",
+    })
     return ok({ id, archived: false, movements: 0 })
   } catch (error) {
     return handleApiError(error)

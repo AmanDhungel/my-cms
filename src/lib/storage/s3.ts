@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3"
@@ -240,6 +241,12 @@ export type UploadFileOptions = {
    * stored name is always a fresh id.
    */
   fileName?: string
+  /**
+   * Who uploaded it (a user id), stored on the object as metadata. It is how
+   * a fresh upload that no record points at yet can be told apart as the
+   * uploader's own — to clean up after a failed save.
+   */
+  uploadedBy?: string
 }
 
 /**
@@ -279,6 +286,7 @@ export async function uploadFile(
       Body: input,
       ContentType: opts.contentType,
       ContentLength: input.byteLength,
+      ...(opts.uploadedBy ? { Metadata: { "uploaded-by": opts.uploadedBy } } : {}),
     })
   )
 
@@ -488,6 +496,21 @@ export function classifyUrl(url: string): StorageAddress {
   }
 
   return { kind: "external" }
+}
+
+/**
+ * The user id recorded on an object when it was uploaded, or null (no such
+ * object, an upload from before uploaders were recorded, or storage
+ * unavailable).
+ */
+export async function uploaderOf(key: string): Promise<string | null> {
+  if (!uploadsConfigured() || !isOurKey(key)) return null
+  try {
+    const head = await s3().send(new HeadObjectCommand({ Bucket: BUCKET, Key: key }))
+    return head.Metadata?.["uploaded-by"] ?? null
+  } catch {
+    return null
+  }
 }
 
 /**
