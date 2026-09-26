@@ -73,3 +73,12 @@ export function groupMyTickets<T extends Timed>(
 /** What an employee is told when they try to act on a past ticket. */
 export const PAST_TICKET_MESSAGE =
   "This ticket is finished, so it's view-only now. Ask your owner if it needs reopening."
+
+/**
+ * The query for tickets whose window touches [start, end): begun before the
+ * range ends and not over before it starts. A multi-day job counts on every
+ * day it spans, not only the day it began.
+ */
+export function windowOverlaps(start: Date, end: Date) {
+  return { startAt: { $lt: end }, endAt: { $gte: start } }
+}

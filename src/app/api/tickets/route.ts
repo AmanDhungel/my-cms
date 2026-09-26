@@ -10,6 +10,7 @@ import { loadCrew } from "@/lib/tickets"
 import { getWorkspace } from "@/lib/workspace"
 import { logActivity } from "@/lib/activity"
 import { notifyUser } from "@/lib/notify"
+import { windowOverlaps } from "@/lib/ticket-window"
 import { Project } from "@/models/project"
 import { Ticket, toTicketDTO } from "@/models/ticket"
 
@@ -68,8 +69,7 @@ export async function GET(request: NextRequest) {
         dayKeyInZone(new Date(), business.timeZone),
         business.timeZone
       )
-      filter.startAt = { $lt: end }
-      filter.endAt = { $gte: start }
+      Object.assign(filter, windowOverlaps(start, end))
       filter.status = { $nin: ["cancelled"] }
     } else if (scope === "in_progress") {
       // Live work, whenever it was scheduled: an overrunning ticket from

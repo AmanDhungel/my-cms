@@ -20,6 +20,7 @@ import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
 import { getWorkspace } from "@/lib/workspace"
 import { toBusinessDTO } from "@/models/business"
 import { WorkRequest, toRequestDTO } from "@/models/request"
+import { windowOverlaps } from "@/lib/ticket-window"
 import { Ticket, toTicketDTO } from "@/models/ticket"
 import { User } from "@/models/user"
 
@@ -54,7 +55,8 @@ export default async function DashboardPage() {
     User.countDocuments({ business: business._id }),
     Ticket.find({
       business: business._id,
-      startAt: { $gte: start, $lt: end },
+      // Every ticket running today, not only those that began today.
+      ...windowOverlaps(start, end),
       status: { $ne: "cancelled" },
     })
       .sort({ startAt: 1 })
