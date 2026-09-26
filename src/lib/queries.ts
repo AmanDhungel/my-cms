@@ -207,6 +207,8 @@ export function useTicketStatus(ticketId: string) {
       needs?: { name: string; qty?: number; unit?: string }[]
       /** The sender's own completion photos, the whole list in order. */
       photos?: { url: string }[]
+      /** When closing the visit counts as overtime (the server decides). */
+      overtimeReason?: string
     }) =>
       apiFetch<{ ticket: TicketDTO }>(`/api/tickets/${ticketId}/status`, {
         method: "PATCH",

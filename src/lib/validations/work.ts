@@ -119,6 +119,19 @@ export const ticketStatusSchema = z
       .array(z.object({ url: z.string().trim().url().max(600) }))
       .max(5, "Five photos is the most you can add to a ticket")
       .optional(),
+    /**
+     * Why, when handing work over closes a visit outside the shift. Only
+     * required when the server decides it is overtime.
+     */
+    overtimeReason: z.preprocess(
+      (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+      z
+        .string()
+        .trim()
+        .min(3, "Say a little more about why")
+        .max(500, "Keep this under 500 characters")
+        .optional()
+    ),
   })
   .refine(
     (values) =>

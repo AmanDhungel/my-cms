@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { inputClass } from "@/components/auth/field"
 import { ImagePickerList } from "@/components/dashboard/image-picker"
+import { ApiRequestError } from "@/lib/api-client"
 import { reportMutationError, useTicketStatus } from "@/lib/queries"
 import { commitImage, emptyImage, type ImageDraft } from "@/lib/upload-client"
 import { useRevokeOnUnmount, useUnsavedGuard } from "@/lib/use-unsaved-guard"
@@ -99,6 +100,11 @@ function Body({ ticket, onClose }: { ticket: TicketDTO; onClose: () => void }) {
     ticket.photos.filter((photo) => photo.byMe).map((photo) => emptyImage(photo.url))
   )
   const [photoError, setPhotoError] = React.useState<string | null>(null)
+  // Handing work over while checked in closes the visit; outside the shift
+  // the server asks why, and the dialog asks before sending again.
+  const [overtimeAsked, setOvertimeAsked] = React.useState<string | null>(null)
+  const [overtimeReason, setOvertimeReason] = React.useState("")
+  const [overtimeError, setOvertimeError] = React.useState<string | null>(null)
   const [uploading, setUploading] = React.useState(false)
   const picked = photos.some((photo) => photo.file)
   useUnsavedGuard(picked)
@@ -122,6 +128,10 @@ function Body({ ticket, onClose }: { ticket: TicketDTO; onClose: () => void }) {
     }
     if (choice === "in_review" && photos.length === 0) {
       setPhotoError("Add at least one photo of the finished work")
+      return
+    }
+    if (overtimeAsked && overtimeReason.trim().length < 3) {
+      setOvertimeError("Say a little more about why")
       return
     }
 
@@ -152,6 +162,7 @@ function Body({ ticket, onClose }: { ticket: TicketDTO; onClose: () => void }) {
     mutation.mutate(
       {
         photos: sendPhotos,
+        overtimeReason: overtimeAsked ? overtimeReason.trim() : undefined,
         status: choice,
         blockedReason: choice === "blocked" ? reason.trim() : undefined,
         blockerReason: choice === "blocked" ? cause : undefined,
@@ -175,7 +186,12 @@ function Body({ ticket, onClose }: { ticket: TicketDTO; onClose: () => void }) {
         },
         onError: (error) => {
           removeOrphans(fresh)
+          if (error instanceof ApiRequestError && error.fieldErrors?.overtimeReason && !overtimeAsked) {
+            setOvertimeAsked(error.fieldErrors.overtimeReason[0])
+            return
+          }
           reportMutationError(error, (path, message) => {
+            if (path === "overtimeReason") setOvertimeError(message)
             if (path === "blockedReason") setReasonError(message)
             if (path === "photos") setPhotoError(message)
           })
@@ -358,6 +374,32 @@ function Body({ ticket, onClose }: { ticket: TicketDTO; onClose: () => void }) {
               <span className="text-s-overdue text-[12.5px]">{photoError}</span>
             ) : null}
           </div>
+        ) : null}
+
+        {overtimeAsked ? (
+          <label className="mt-1 flex flex-col gap-[7px]" data-overtime-prompt>
+            <span className="text-n-600 text-[12.5px] font-semibold tracking-[0.05em] uppercase">
+              Outside your shift — why?
+            </span>
+            <textarea
+              value={overtimeReason}
+              onChange={(event) => {
+                setOvertimeReason(event.target.value)
+                setOvertimeError(null)
+              }}
+              maxLength={500}
+              aria-label="Why you’re working outside your shift"
+              aria-invalid={Boolean(overtimeError)}
+              className={cn(inputClass, "min-h-[72px] resize-y")}
+            />
+            {overtimeError ? (
+              <span className="text-s-overdue text-[12.5px]">{overtimeError}</span>
+            ) : (
+              <span className="text-n-400 text-[12px]">
+                {overtimeAsked} Your owner sees this as overtime.
+              </span>
+            )}
+          </label>
         ) : null}
 
         {choice === "in_review" && ticket.myCheckedInAt ? (
