@@ -92,6 +92,7 @@ export default async function DashboardLayout({
       status: "pending",
     }),
     Notification.countDocuments({
+      business: business._id,
       user: me.id,
       readAt: { $exists: false },
     }),

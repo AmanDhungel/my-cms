@@ -1,7 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 
-import { auth } from "@/auth"
 import { EmployeeHome } from "@/components/dashboard/employee/employee-home"
 import { TicketStatusBadge } from "@/components/dashboard/ticket-status-badge"
 import { DashboardCharts } from "@/components/dashboard/reports/dashboard-charts"
@@ -15,6 +14,7 @@ import {
   PanelHeader,
   StatCard,
 } from "@/components/dashboard/ui"
+import { loadViewer } from "@/lib/auth/page-guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
 import { getWorkspace } from "@/lib/workspace"
@@ -27,8 +27,9 @@ import { User } from "@/models/user"
 export const metadata: Metadata = { title: "Dashboard · EMS" }
 
 export default async function DashboardPage() {
-  const session = await auth()
-  const user = session!.user
+  // Role and workspace from the database, not the token: a token minted
+  // before someone moved workspaces must not open the old one.
+  const user = await loadViewer()
 
   await connectToDatabase()
 

@@ -60,7 +60,10 @@ export async function GET(request: NextRequest) {
       timeZone: business.timeZone,
     })
 
+    // This workspace's rows only: someone who joined from another one
+    // doesn't bring their old attendance with them.
     const records = await Attendance.find({
+      business: business._id,
       user: userId,
       day: { $gte: `${month}-01`, $lte: `${month}-31` },
     }).sort({ day: 1 })

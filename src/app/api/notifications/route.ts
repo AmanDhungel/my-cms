@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     if (params.get("count") === "1") {
       return ok({
         unread: await Notification.countDocuments({
+          business: viewer.businessId,
           user: viewer.id,
           readAt: { $exists: false },
         }),
@@ -27,12 +28,21 @@ export async function GET(request: NextRequest) {
     }
 
     const unreadOnly = params.get("unread") === "1"
-    const filter: Record<string, unknown> = { user: viewer.id }
+    // Scoped to the workspace as well as the person: notifications from a
+    // workspace they have since left stay behind there.
+    const filter: Record<string, unknown> = {
+      business: viewer.businessId,
+      user: viewer.id,
+    }
     if (unreadOnly) filter.readAt = { $exists: false }
 
     const [entries, unread] = await Promise.all([
       Notification.find(filter).sort({ createdAt: -1 }).limit(100),
-      Notification.countDocuments({ user: viewer.id, readAt: { $exists: false } }),
+      Notification.countDocuments({
+        business: viewer.businessId,
+        user: viewer.id,
+        readAt: { $exists: false },
+      }),
     ])
 
     return ok({ notifications: entries.map(toNotificationDTO), unread })
@@ -63,6 +73,7 @@ export async function POST(request: Request) {
     await connectToDatabase()
 
     const filter: Record<string, unknown> = {
+      business: viewer.businessId,
       user: viewer.id,
       readAt: { $exists: false },
     }
@@ -73,6 +84,7 @@ export async function POST(request: Request) {
     })
 
     const unread = await Notification.countDocuments({
+      business: viewer.businessId,
       user: viewer.id,
       readAt: { $exists: false },
     })
