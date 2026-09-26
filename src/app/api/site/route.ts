@@ -63,6 +63,12 @@ export async function PUT(request: Request) {
     site.slug = values.slug
     site.template = values.template
     site.set("content", values.content)
+    if (values.extraSlots) {
+      site.set(
+        "extraSlots",
+        Object.entries(values.extraSlots).map(([id, value]) => ({ id, value }))
+      )
+    }
     site.updatedBy = viewer.id as never
     await site.save()
 

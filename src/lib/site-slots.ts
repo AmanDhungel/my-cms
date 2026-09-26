@@ -186,7 +186,9 @@ export function withSamples(
     description: text(content.description, "description"),
     hero: {
       ...content.hero,
-      headline: text(content.hero.headline, "hero.headline"),
+      // The business name, not sample copy: it is what the published page
+      // falls back to, so it is what the editor should show.
+      headline: content.hero.headline ?? (content.name || mockText("hero.headline")),
       sub: text(content.hero.sub, "hero.sub"),
       ctaLabel: text(content.hero.ctaLabel, "hero.ctaLabel"),
       image: picture(content.hero.image, MOCK_CONTENT.hero.image),

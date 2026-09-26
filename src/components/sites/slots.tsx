@@ -58,6 +58,7 @@ export function Text({
           id,
           value: saved,
           display: value ?? "",
+          sample: saved === null,
           multiline,
           className,
         })}
@@ -98,6 +99,7 @@ export function ProseText({
           id,
           value: saved,
           display: value ?? "",
+          sample: saved === null,
           multiline: true,
         })}
       </div>
@@ -149,6 +151,7 @@ export function Extra({
           id,
           value: saved,
           display: saved ?? fallback,
+          sample: false,
           multiline: false,
           className,
         })}
@@ -184,7 +187,12 @@ export function Items({
   const count = Array.isArray(saved) ? saved.length : 0
 
   if (mode === "editor" && renderer) {
-    return <>{renderer.list({ id, count, children, className })}</>
+    const rows = React.Children.toArray(children).map((child, index) => (
+      <React.Fragment key={index}>
+        {renderer.item({ listId: id, index, sampled: count === 0, children: child })}
+      </React.Fragment>
+    ))
+    return <>{renderer.list({ id, count, children: rows, className })}</>
   }
   return <>{children}</>
 }

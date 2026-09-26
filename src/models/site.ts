@@ -57,6 +57,21 @@ const pictureSchema = new Schema(
   { _id: false }
 )
 
+/**
+ * One piece of template wording the owner has reworded — a section heading.
+ *
+ * A list of pairs rather than a Mongoose Map because slot ids have dots in
+ * them ("heading.services.title"), and a Map refuses dotted keys. The API
+ * and the renderer only ever see it as a plain id → text record.
+ */
+const extraSlotSchema = new Schema(
+  {
+    id: { type: String, required: true, trim: true, maxlength: 80 },
+    value: { type: String, required: true, trim: true, maxlength: 120 },
+  },
+  { _id: false }
+)
+
 const siteSchema = new Schema(
   {
     business: {
@@ -125,6 +140,13 @@ const siteSchema = new Schema(
       },
     },
 
+    /**
+     * Template-only text, by slot id. Optional, and empty for every site
+     * saved before the inline editor existed — which reads exactly as "use
+     * the template's own wording", so no migration is needed.
+     */
+    extraSlots: { type: [extraSlotSchema], default: [] },
+
     updatedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
@@ -176,6 +198,8 @@ export type SiteDTO = {
   published: boolean
   publishedAt: string | null
   content: SiteContent
+  /** Template wording the owner has changed, by slot id. */
+  extraSlots: Record<string, string>
   updatedAt: string
 }
 
@@ -233,6 +257,18 @@ export function toSiteContent(raw: SiteDocument["content"]): SiteContent {
   }
 }
 
+/** The stored pairs as the id → text record everything else works with. */
+export function toExtraSlots(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!Array.isArray(raw)) return out
+  for (const one of raw as { id?: unknown; value?: unknown }[]) {
+    if (typeof one?.id === "string" && typeof one.value === "string" && one.value.trim()) {
+      out[one.id] = one.value.trim()
+    }
+  }
+  return out
+}
+
 export function toSiteDTO(site: HydratedDocument<SiteDocument>): SiteDTO {
   return {
     id: String(site._id),
@@ -243,6 +279,7 @@ export function toSiteDTO(site: HydratedDocument<SiteDocument>): SiteDTO {
       ? (site.publishedAt as Date).toISOString()
       : null,
     content: toSiteContent(site.content),
+    extraSlots: toExtraSlots(site.extraSlots),
     updatedAt: (site.updatedAt as Date).toISOString(),
   }
 }

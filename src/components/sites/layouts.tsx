@@ -123,7 +123,7 @@ function Sub({
 }) {
   return content.hero.sub ? (
     <Lead className={className}>
-      <Text id="hero.sub" value={content.hero.sub} multiline />
+      <Text id="hero.sub" value={content.hero.sub} />
     </Lead>
   ) : null
 }

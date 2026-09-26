@@ -74,6 +74,12 @@ export type TextSlotRenderProps = {
   value: string | null
   /** What the page is showing now: the value, a profile fallback or a sample. */
   display: string
+  /**
+   * Whether `display` is a stand-in that will not be published as it is —
+   * sample copy, or the business name standing in for a headline. Template
+   * wording is not a sample: it is real copy and publishes untouched.
+   */
+  sample: boolean
   multiline: boolean
   className?: string
 }
@@ -84,6 +90,15 @@ export type ImageSlotRenderProps = {
   alt: string
   ratio: string
   className?: string
+}
+
+export type ListItemRenderProps = {
+  /** The list's slot id, e.g. "services". */
+  listId: string
+  index: number
+  /** True while the list is empty and these rows are samples. */
+  sampled: boolean
+  children: React.ReactNode
 }
 
 export type ListSlotRenderProps = {
@@ -103,6 +118,8 @@ export type SlotRenderer = {
   text: (props: TextSlotRenderProps) => React.ReactNode
   image: (props: ImageSlotRenderProps) => React.ReactNode
   list: (props: ListSlotRenderProps) => React.ReactNode
+  /** One row of a list, so the editor can offer to remove it. */
+  item: (props: ListItemRenderProps) => React.ReactNode
 }
 
 export const SlotRendererContext = React.createContext<SlotRenderer | null>(

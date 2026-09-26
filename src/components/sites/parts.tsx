@@ -370,11 +370,7 @@ export function ServiceList({
             </h3>
             {service.body ? (
               <p className={cn(muted, "m-0 text-[14.5px] leading-relaxed")}>
-                <Text
-                  id={`services.${index}.body`}
-                  value={service.body}
-                  multiline
-                />
+                <Text id={`services.${index}.body`} value={service.body} />
               </p>
             ) : null}
           </div>
@@ -428,11 +424,7 @@ export function ProductGrid({
               </h3>
               {product.blurb ? (
                 <p className={cn(muted, "m-0 text-[13.5px] leading-relaxed")}>
-                  <Text
-                    id={`products.${index}.blurb`}
-                    value={product.blurb}
-                    multiline
-                  />
+                  <Text id={`products.${index}.blurb`} value={product.blurb} />
                 </p>
               ) : null}
               {product.price ? (
@@ -473,11 +465,7 @@ export function FaqList({
               <Text id={`faq.${index}.question`} value={entry.question} />
             </h3>
             <p className={cn(muted, "m-0 text-[14.5px] leading-relaxed")}>
-              <Text
-                id={`faq.${index}.answer`}
-                value={entry.answer}
-                multiline
-              />
+              <Text id={`faq.${index}.answer`} value={entry.answer} />
             </p>
           </div>
         ))}
@@ -657,9 +645,9 @@ export function SiteNav({
     <header
       className={cn(
         "border-b border-[var(--site-border)] bg-[color-mix(in_oklab,var(--site-bg)_88%,transparent)]",
-        // A thumbnail is a still picture of the page; a sticky bar inside a
-        // scaled frame would only fight the card it sits in.
-        mode !== "thumbnail" && "sticky top-0 z-40 backdrop-blur-[10px]"
+        // Sticky only where it is a real page. In a thumbnail it would fight
+        // the card it sits in, and in the editor the dashboard's own header.
+        linksAreLive(mode) && "sticky top-0 z-40 backdrop-blur-[10px]"
       )}
     >
       <Wrap className="flex items-center justify-between gap-6 py-3.5">
