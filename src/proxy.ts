@@ -77,9 +77,15 @@ export const config = {
    * It has to be this wide because the tenant check reads the *host*, not the
    * path — a matcher of just `/dashboard` would never see a request for a
    * site's home page. The exclusions are the framework's own asset routes,
-   * the auth endpoints, and anything with a file extension.
+   * the auth endpoints, the upload endpoint, and anything with a file extension.
+   *
+   * Uploads are excluded for a reason that is easy to miss: Next buffers the
+   * whole request body before a matched route handler runs, so a size check
+   * inside the handler could only ever fire after the bytes had arrived.
+   * Outside the matcher the handler sees the headers first and can refuse an
+   * oversized body before reading it. The route does its own auth.
    */
   matcher: [
-    "/((?!api/auth|_next/static|_next/image|favicon.ico|.*\\.[\\w]+$).*)",
+    "/((?!api/auth|api/uploads|_next/static|_next/image|favicon.ico|.*\\.[\\w]+$).*)",
   ],
 }

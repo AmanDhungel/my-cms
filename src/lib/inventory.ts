@@ -1,4 +1,5 @@
 import { HttpError } from "@/lib/api-response"
+import { isBusinessKeyIn, keyFromUrl } from "@/lib/s3"
 import { InventoryItem } from "@/models/inventory-item"
 
 /**
@@ -41,4 +42,29 @@ export async function assertItemIsNew(
   })
 
   if (bySku) throw new HttpError(409, `${bySku.name} already uses code ${sku}`)
+}
+
+/**
+ * Turn the picture URLs a form sent into what an item stores.
+ *
+ * The cap is checked here as well as in the schema, so no route that skips
+ * the schema can store a fourth. Each key is derived from its URL and has to
+ * sit under this workspace's own prefix: an item can only ever point at a
+ * picture this business uploaded, never at any address on the internet.
+ */
+export function itemImagesFrom(
+  images: { url: string }[],
+  businessId: string
+): { key: string; url: string }[] {
+  if (images.length > 3) {
+    throw new HttpError(400, "Three pictures is the most an item can hold")
+  }
+
+  return images.map(({ url }) => {
+    const key = keyFromUrl(url)
+    if (!key || !isBusinessKeyIn(key, businessId, "products")) {
+      throw new HttpError(400, "That picture isn't one of ours")
+    }
+    return { key, url }
+  })
 }

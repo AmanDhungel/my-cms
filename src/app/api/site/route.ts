@@ -2,7 +2,12 @@ import { logActivity } from "@/lib/activity"
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
-import { reconcileUploads, uploadsConfigured } from "@/lib/s3"
+import {
+  isBusinessKeyIn,
+  keyFromUrl,
+  reconcileUploads,
+  uploadsConfigured,
+} from "@/lib/s3"
 import { loadOrStartSite, picturesIn, slugIsFree } from "@/lib/site-server"
 import { siteSchema } from "@/lib/validations/site"
 import { toSiteContent, toSiteDTO } from "@/models/site"
@@ -44,6 +49,26 @@ export async function PUT(request: Request) {
     const viewer = await requireRole("owner")
     const values = siteSchema.parse(await request.json())
 
+    /*
+     * A picture in our bucket has to be this workspace's own site picture.
+     * Anything else — another business's, or this one's logo or product
+     * photos — is refused: once stored, dropping it on a later save would
+     * delete an object this site never owned. An address outside the bucket
+     * is left alone, as it always was; nothing here would ever delete it.
+     */
+    const incoming = [
+      values.content.hero.image,
+      values.content.about.image,
+      ...values.content.products.map((one) => one.image),
+      ...values.content.gallery.map((one) => one.url),
+    ].filter((url): url is string => Boolean(url))
+    for (const url of incoming) {
+      const key = keyFromUrl(url)
+      if (key && !isBusinessKeyIn(key, viewer.businessId, "site")) {
+        throw new HttpError(400, "That picture isn't one of ours")
+      }
+    }
+
     await connectToDatabase()
     const site = await loadOrStartSite(viewer.businessId)
 
@@ -63,6 +88,12 @@ export async function PUT(request: Request) {
     site.slug = values.slug
     site.template = values.template
     site.set("content", values.content)
+    if (values.extraSlots) {
+      site.set(
+        "extraSlots",
+        Object.entries(values.extraSlots).map(([id, value]) => ({ id, value }))
+      )
+    }
     site.updatedBy = viewer.id as never
     await site.save()
 
@@ -72,7 +103,11 @@ export async function PUT(request: Request) {
      * awaited: a bucket that refuses a delete must not fail a save the person
      * has already made.
      */
-    void reconcileUploads(before, picturesIn(toSiteContent(site.content)))
+    void reconcileUploads(
+      before,
+      picturesIn(toSiteContent(site.content)),
+      viewer.businessId
+    )
 
     return ok({ site: toSiteDTO(site) })
   } catch (error) {

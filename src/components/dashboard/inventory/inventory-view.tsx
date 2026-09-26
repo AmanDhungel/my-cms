@@ -329,12 +329,35 @@ function ItemsPanel({
           key={item.id}
           className="border-n-200/70 hover:bg-n-50 grid gap-3.5 border-b px-[18px] py-3.5 lg:grid-cols-[1.7fr_140px_110px_130px_130px] lg:items-center"
         >
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="truncate text-sm font-semibold">{item.name}</span>
-            <span className="text-n-500 truncate text-xs">
-              {[item.sku, item.location].filter(Boolean).join(" · ") ||
-                item.description ||
-                "—"}
+          <div className="flex min-w-0 items-center gap-3">
+            {/* The first picture, or a quiet tile for an unphotographed item. */}
+            <span
+              data-item-thumb
+              className="bg-n-100 border-n-200 size-[44px] shrink-0 overflow-hidden rounded-md border"
+            >
+              {item.images?.[0] ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={item.images[0].url}
+                  alt=""
+                  loading="lazy"
+                  className="size-full object-cover"
+                />
+              ) : (
+                <span className="text-n-400 flex size-full items-center justify-center font-mono text-[8px] tracking-[0.06em]">
+                  NO PIC
+                </span>
+              )}
+            </span>
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="truncate text-sm font-semibold">
+                {item.name}
+              </span>
+              <span className="text-n-500 truncate text-xs">
+                {[item.sku, item.location].filter(Boolean).join(" · ") ||
+                  item.description ||
+                  "—"}
+              </span>
             </span>
           </div>
 

@@ -18,16 +18,30 @@ import {
 } from "@/components/ui/dialog"
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import { CategoryDialog } from "@/components/dashboard/inventory/category-dialog"
+import { ImagePickerList } from "@/components/dashboard/image-picker"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   reportMutationError,
   useCreateItem,
   useInventoryCategories,
+  useInventoryItems,
   useUpdateItem,
 } from "@/lib/queries"
+import {
+  clearImage,
+  commitImages,
+  emptyImage,
+  type ImageDraft,
+} from "@/lib/upload-client"
+import { useRevokeOnUnmount, useUnsavedGuard } from "@/lib/use-unsaved-guard"
 import { itemSchema } from "@/lib/validations/inventory"
 import { ITEM_UNITS, type ItemUnit } from "@/lib/work-constants"
 import type { ItemDTO } from "@/models/inventory-item"
+
+/** Kept in step with MAX_ITEM_IMAGES on the model and the schema's cap. */
+const MAX_IMAGES = 3
+
+const DISCARD = "Discard your changes to this item?"
 
 type Errors = Partial<Record<string, string>>
 
@@ -41,8 +55,20 @@ export function ItemDialog({
   onClose: () => void
   item?: ItemDTO
 }) {
+  /*
+   * Escape and a click outside close the dialog without going through the
+   * body's own Cancel button, so the body lends the dialog its check: with
+   * unsaved changes, closing asks first.
+   */
+  const mayCloseRef = React.useRef<() => boolean>(() => true)
+
   return (
-    <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && mayCloseRef.current()) onClose()
+      }}
+    >
       <DialogContent
         overlayClassName={emsDialogOverlay}
         className={cn(
@@ -60,14 +86,61 @@ export function ItemDialog({
         </DialogHeader>
         {/* Mounted only while open, so each visit starts from the item as it
             stands rather than from whatever was typed last time. */}
-        {open ? <Body onClose={onClose} item={item} /> : null}
+        {open ? (
+          <Body onClose={onClose} item={item} mayCloseRef={mayCloseRef} />
+        ) : null}
       </DialogContent>
     </Dialog>
   )
 }
 
-function Body({ onClose, item }: { onClose: () => void; item?: ItemDTO }) {
+function Body({
+  onClose,
+  item,
+  mayCloseRef,
+}: {
+  onClose: () => void
+  item?: ItemDTO
+  mayCloseRef: React.RefObject<() => boolean>
+}) {
   const [form, setForm] = React.useState(() => blank(item))
+  /*
+   * Pictures are drafts until Save: picking one previews it from memory and
+   * uploads nothing, so closing the dialog leaves nothing in the bucket.
+   */
+  const [images, setImages] = React.useState<ImageDraft[]>(() =>
+    (item?.images ?? []).map((one) => emptyImage(one.url))
+  )
+  const [uploading, setUploading] = React.useState(false)
+  const stock = useInventoryItems()
+  // The list endpoint reports whether storage is set up; default to on.
+  const uploads =
+    (stock.data as { uploads?: boolean } | undefined)?.uploads ?? true
+
+  const savedUrls = (item?.images ?? []).map((one) => one.url)
+  const imagesChanged =
+    images.some((one) => one.file) ||
+    images.map((one) => one.url ?? "").join("|") !== savedUrls.join("|")
+  const dirty =
+    imagesChanged || JSON.stringify(form) !== JSON.stringify(blank(item))
+
+  useUnsavedGuard(dirty, DISCARD)
+  useRevokeOnUnmount(() => images.map((one) => one.preview))
+
+  // Revoked either way: a discarded draft's blobs are nobody's any more.
+  function revokeAll() {
+    for (const draft of images) clearImage(draft)
+  }
+
+  function requestClose() {
+    if (dirty && !window.confirm(DISCARD)) return false
+    revokeAll()
+    return true
+  }
+
+  React.useEffect(() => {
+    mayCloseRef.current = requestClose
+  })
   const [errors, setErrors] = React.useState<Errors>({})
   const [categoryDialogOpen, setCategoryDialogOpen] = React.useState(false)
 
@@ -87,10 +160,97 @@ function Body({ onClose, item }: { onClose: () => void; item?: ItemDTO }) {
     setErrors((prev) => ({ ...prev, [key]: undefined }))
   }
 
-  function submit() {
-    if (mutation.isPending) return
+  /**
+   * Save, in the only order that can't lose a picture: upload the newly
+   * picked files, write the item, and let the server delete dropped objects
+   * once the item points elsewhere. If the write is refused after uploads
+   * succeeded, exactly those new objects are removed and the old pictures
+   * stay as they were.
+   */
+  async function submit() {
+    if (mutation.isPending || uploading) return
+    if (images.length > MAX_IMAGES) {
+      setErrors((prev) => ({
+        ...prev,
+        images: "Three pictures is the most an item can hold",
+      }))
+      return
+    }
+
+    // Checked before anything is uploaded, so a typo costs no bandwidth.
+    const check = itemSchema.safeParse(fields())
+    if (!check.success) {
+      showIssues(check.error.issues)
+      return
+    }
+
+    const urls: string[] = []
+    const fresh: string[] = []
+    setUploading(true)
+    try {
+      for (const draft of images) {
+        const [url] = await commitImages([draft], "products")
+        if (!url) continue
+        urls.push(url)
+        if (draft.file) fresh.push(url)
+      }
+    } catch (error) {
+      setUploading(false)
+      removeOrphans(fresh)
+      toast.error(
+        error instanceof Error ? error.message : "A picture didn't upload"
+      )
+      return
+    }
+    setUploading(false)
 
     const parsed = itemSchema.safeParse({
+      ...fields(),
+      images: urls.map((url) => ({ url })),
+    })
+    if (!parsed.success) {
+      removeOrphans(fresh)
+      showIssues(parsed.error.issues)
+      return
+    }
+
+    mutation.mutate(parsed.data, {
+      onSuccess: (result) => {
+        revokeAll()
+        toast.success(
+          item ? `${result.item.name} updated` : `${result.item.name} added`
+        )
+        onClose()
+      },
+      onError: (error) => {
+        // Only what this attempt uploaded; saved pictures are untouched.
+        removeOrphans(fresh)
+        reportMutationError(error, (path, message) =>
+          setErrors((prev) => ({ ...prev, [path]: message }))
+        )
+      },
+    })
+  }
+
+  function removeOrphans(fresh: string[]) {
+    if (fresh.length === 0) return
+    void fetch("/api/uploads", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ urls: fresh }),
+    })
+  }
+
+  function showIssues(issues: { path: PropertyKey[]; message: string }[]) {
+    const next: Errors = {}
+    for (const issue of issues) {
+      next[issue.path.map(String).join(".") || "root"] ??= issue.message
+    }
+    setErrors(next)
+  }
+
+  function fields() {
+    return {
       name: form.name,
       sku: form.sku || undefined,
       categoryId: form.categoryId,
@@ -101,29 +261,7 @@ function Body({ onClose, item }: { onClose: () => void; item?: ItemDTO }) {
       stock: form.stock || 0,
       lowStockAt: form.lowStockAt || 0,
       location: form.location || undefined,
-    })
-
-    if (!parsed.success) {
-      const next: Errors = {}
-      for (const issue of parsed.error.issues) {
-        next[issue.path.join(".") || "root"] ??= issue.message
-      }
-      setErrors(next)
-      return
     }
-
-    mutation.mutate(parsed.data, {
-      onSuccess: (result) => {
-        toast.success(
-          item ? `${result.item.name} updated` : `${result.item.name} added`
-        )
-        onClose()
-      },
-      onError: (error) =>
-        reportMutationError(error, (path, message) =>
-          setErrors((prev) => ({ ...prev, [path]: message }))
-        ),
-    })
   }
 
   return (
@@ -280,6 +418,22 @@ function Body({ onClose, item }: { onClose: () => void; item?: ItemDTO }) {
           <FieldError message={errors.location} />
         </label>
 
+        <div className="flex flex-col gap-1.5" data-item-images>
+          <ImagePickerList
+            label="Pictures"
+            hint="Up to three. The first one is shown in the stock list. They upload when you save."
+            values={images}
+            onChange={(next) => {
+              setImages(next.slice(0, MAX_IMAGES))
+              setErrors((prev) => ({ ...prev, images: undefined }))
+            }}
+            enabled={uploads}
+            limit={MAX_IMAGES}
+            compact
+          />
+          <FieldError message={errors.images} />
+        </div>
+
         <label className="flex flex-col gap-[7px]">
           <FieldLabel>Description</FieldLabel>
           <textarea
@@ -295,18 +449,26 @@ function Body({ onClose, item }: { onClose: () => void; item?: ItemDTO }) {
       <DialogFooter className="gap-2 sm:gap-2.5">
         <button
           type="button"
-          onClick={onClose}
+          onClick={() => {
+            if (requestClose()) onClose()
+          }}
           className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-4 py-2.5 text-sm font-semibold"
         >
           Cancel
         </button>
         <button
           type="button"
-          onClick={submit}
-          disabled={mutation.isPending}
+          onClick={() => void submit()}
+          disabled={mutation.isPending || uploading}
           className="bg-p-500 rounded-md px-[18px] py-2.5 text-sm font-semibold text-white hover:brightness-[1.06] disabled:opacity-60"
         >
-          {mutation.isPending ? "Saving…" : item ? "Save changes" : "Add item"}
+          {uploading
+            ? "Uploading pictures…"
+            : mutation.isPending
+              ? "Saving…"
+              : item
+                ? "Save changes"
+                : "Add item"}
         </button>
       </DialogFooter>
 

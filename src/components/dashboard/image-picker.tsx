@@ -150,6 +150,7 @@ export function ImagePickerList({
   onChange,
   enabled = true,
   limit = 8,
+  compact = false,
 }: {
   label: string
   hint?: string
@@ -157,6 +158,11 @@ export function ImagePickerList({
   onChange: (next: ImageDraft[]) => void
   enabled?: boolean
   limit?: number
+  /**
+   * Count as "2/3" and keep the add tile in place, disabled, once the list
+   * is full — for short lists, where a tile vanishing reads as a glitch.
+   */
+  compact?: boolean
 }) {
   const [busy, setBusy] = React.useState(false)
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -196,8 +202,8 @@ export function ImagePickerList({
     <div className="flex flex-col gap-[7px]">
       <div className="flex items-baseline justify-between gap-2">
         <FieldLabel>{label}</FieldLabel>
-        <span className="text-n-400 font-mono text-[11px]">
-          {values.length} of {limit}
+        <span data-image-count className="text-n-400 font-mono text-[11px]">
+          {compact ? `${values.length}/${limit}` : `${values.length} of ${limit}`}
         </span>
       </div>
       {hint ? (
@@ -228,6 +234,10 @@ export function ImagePickerList({
             <button
               type="button"
               aria-label={`Remove picture ${index + 1}`}
+              // Not while a pick is being prepared: that one will be added to
+              // the list as it stood when it was picked, bringing back
+              // anything removed in the meantime.
+              disabled={busy}
               onClick={() => {
                 clearImage(draft)
                 onChange(values.filter((_, i) => i !== index))
@@ -239,15 +249,16 @@ export function ImagePickerList({
           </figure>
         ))}
 
-        {enabled && values.length < limit ? (
+        {enabled && (values.length < limit || compact) ? (
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || values.length >= limit}
+            data-image-add
             onClick={() => inputRef.current?.click()}
-            className="border-n-300 text-n-500 hover:bg-n-100 flex size-[92px] flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed bg-white text-[11.5px] font-semibold"
+            className="border-n-300 text-n-500 hover:bg-n-100 flex size-[92px] flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed bg-white text-[11.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
           >
             <PlusIcon className="size-4" />
-            {busy ? "Preparing…" : "Add"}
+            {busy ? "Preparing…" : values.length >= limit ? "Full" : "Add"}
           </button>
         ) : null}
       </div>

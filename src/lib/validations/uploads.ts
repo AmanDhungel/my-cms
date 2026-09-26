@@ -1,14 +1,18 @@
 import { z } from "zod"
 
-import { UPLOAD_PURPOSES } from "@/lib/s3"
+import {
+  MAX_UPLOAD_BYTES,
+  UPLOAD_CONTENT_TYPES,
+  UPLOAD_PURPOSES,
+} from "@/lib/storage/types"
 
-/** What the upload endpoint will sign for, and nothing else. */
-export const UPLOAD_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/avif",
-] as const
+/**
+ * What the upload endpoint will sign for, and nothing else.
+ *
+ * The same list storage enforces, under the name this module has always
+ * exported — one allowlist, not two that drift.
+ */
+export const UPLOAD_TYPES = UPLOAD_CONTENT_TYPES
 
 export const uploadSchema = z.object({
   purpose: z.enum(UPLOAD_PURPOSES),
@@ -24,7 +28,10 @@ export const uploadSchema = z.object({
     .number()
     .int()
     .positive()
-    .max(1024 * 1024, "Pictures are compressed under 1 MB before uploading"),
+    .max(
+      MAX_UPLOAD_BYTES,
+      "Pictures are compressed under 1 MB before uploading"
+    ),
 })
 
 export type UploadValues = z.infer<typeof uploadSchema>

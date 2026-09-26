@@ -41,6 +41,25 @@ export const slugSchema = z
     message: "That address is kept for the platform. Pick another.",
   })
 
+/**
+ * The ids template-only wording may be stored under: a section's heading or
+ * its eyebrow line. Anything else is refused rather than stored and ignored.
+ */
+export const EXTRA_SLOT_PATTERN =
+  /^heading\.(hero|about|services|products|gallery|faq|contact)\.(title|eyebrow)$/
+
+const extraSlots = z
+  .record(
+    z.string().regex(EXTRA_SLOT_PATTERN, "That isn't a heading this site has"),
+    z.string().trim().max(120, "Keep this under 120 characters")
+  )
+  .refine((value) => Object.keys(value).length <= 40, "Too many headings")
+  // An emptied heading goes back to the template's own wording, so it is
+  // dropped rather than stored blank.
+  .transform((value) =>
+    Object.fromEntries(Object.entries(value).filter(([, text]) => text !== ""))
+  )
+
 export const siteSchema = z.object({
   slug: slugSchema,
   template: z.string().refine(isKnownTemplate, "Pick a template from the list"),
@@ -118,6 +137,9 @@ export const siteSchema = z.object({
       mapUrl: line(600),
     }),
   }),
+
+  /** Optional so a client that doesn't know about it changes nothing. */
+  extraSlots: extraSlots.optional(),
 })
 
 export type SiteValues = z.infer<typeof siteSchema>

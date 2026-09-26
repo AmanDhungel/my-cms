@@ -36,6 +36,15 @@ export const itemSchema = z.object({
     .min(0, "A threshold can't be negative")
     .max(1_000_000, "That threshold looks wrong"),
   location: z.string().trim().max(120).optional(),
+  /**
+   * The pictures, in order, by URL only: the server works out each key and
+   * checks it belongs to this workspace. Absent means "leave them as they
+   * are", so a caller that knows nothing about pictures can't wipe them.
+   */
+  images: z
+    .array(z.object({ url: z.string().trim().url() }))
+    .max(3, "Three pictures is the most an item can hold")
+    .optional(),
 })
 
 export type ItemValues = z.infer<typeof itemSchema>

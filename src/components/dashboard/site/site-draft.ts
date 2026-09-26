@@ -3,6 +3,7 @@
 import {
   commitImage,
   emptyImage,
+  hasImage,
   imageSrc,
   type ImageDraft,
 } from "@/lib/upload-client"
@@ -51,21 +52,33 @@ export function toDraft(content: SiteContent): SiteDraft {
  * Every picture goes through `commitImage`, which does nothing at all for one
  * that hasn't changed — so this is safe to run over the whole site on every
  * save, and only the newly chosen files cost anything.
+ *
+ * `fresh`, when given, collects the address of every file this call
+ * actually uploaded — pushed as each one lands, so it is complete even when
+ * a later upload throws. Those, and only those, are what a failed save has
+ * to clean up; pictures from earlier saves are never in it.
  */
-export async function commitDraft(draft: SiteDraft): Promise<SiteContent> {
-  const [heroImage, aboutImage] = await Promise.all([
-    commitImage(draft.hero.image, "site"),
-    commitImage(draft.about.image, "site"),
-  ])
+export async function commitDraft(
+  draft: SiteDraft,
+  fresh: string[] = []
+): Promise<SiteContent> {
+  const commit = async (image: ImageDraft) => {
+    const url = await commitImage(image, "site")
+    if (image.file && url) fresh.push(url)
+    return url
+  }
+
+  const heroImage = await commit(draft.hero.image)
+  const aboutImage = await commit(draft.about.image)
 
   const products = []
   for (const product of draft.products) {
-    products.push({ ...product, image: await commitImage(product.image, "site") })
+    products.push({ ...product, image: await commit(product.image) })
   }
 
   const gallery = []
   for (const picture of draft.gallery) {
-    const url = await commitImage(picture.url, "site")
+    const url = await commit(picture.url)
     // A row whose picture never arrived is not a row.
     if (url) gallery.push({ url, caption: picture.caption })
   }
@@ -76,6 +89,91 @@ export async function commitDraft(draft: SiteDraft): Promise<SiteContent> {
     about: { ...draft.about, image: aboutImage },
     products,
     gallery,
+  }
+}
+
+/** Every local preview the draft holds, so they can be let go of together. */
+export function draftPreviews(draft: SiteDraft): string[] {
+  return [
+    draft.hero.image,
+    draft.about.image,
+    ...draft.products.map((one) => one.image),
+    ...draft.gallery.map((one) => one.url),
+  ]
+    .map((image) => image.preview)
+    .filter((url): url is string => Boolean(url))
+}
+
+/**
+ * The draft without the rows nobody filled in.
+ *
+ * The inline editor adds a row the moment "Add" is pressed, before anything
+ * is typed into it. A row still completely empty at save time is a row that
+ * was never wanted, so it is dropped rather than failing the save for a
+ * missing name. A row that is half filled is kept, and the check says what
+ * it is missing.
+ */
+export function pruneDraft(draft: SiteDraft): SiteDraft {
+  const blank = (value: string | null | undefined) => !value?.trim()
+  return {
+    ...draft,
+    services: draft.services.filter((one) => !(blank(one.title) && blank(one.body))),
+    products: draft.products.filter(
+      (one) =>
+        !(blank(one.name) && blank(one.blurb) && blank(one.price) && !hasImage(one.image))
+    ),
+    faq: draft.faq.filter((one) => !(blank(one.question) && blank(one.answer))),
+  }
+}
+
+/** A new, empty row for one of the lists. */
+export function blankRow(list: "services" | "products" | "gallery" | "faq") {
+  switch (list) {
+    case "services":
+      return { title: "", body: null }
+    case "products":
+      return { name: "", blurb: null, price: null, image: emptyImage() }
+    case "gallery":
+      return { url: emptyImage(), caption: null }
+    case "faq":
+      return { question: "", answer: "" }
+  }
+}
+
+/**
+ * The draft as the inline editor draws it.
+ *
+ * Like the preview, except that a gallery row with no picture yet is kept:
+ * in the editor it is an "Add image" box waiting to be clicked, not a gap.
+ */
+export function editorContent(draft: SiteDraft): SiteContent {
+  const view = previewContent(draft)
+  return {
+    ...view,
+    gallery: draft.gallery.map((one) => ({
+      url: imageSrc(one.url) ?? "",
+      caption: one.caption,
+    })),
+  }
+}
+
+/**
+ * The draft as it would be stored, before anything is uploaded — for checking
+ * the words first, so a typo is caught without spending any bandwidth.
+ * A picture waiting to upload stands in as a placeholder address.
+ */
+export function checkableContent(draft: SiteDraft): SiteContent {
+  const pending = (image: ImageDraft) =>
+    image.file ? "https://upload.pending/picture" : image.url
+  return {
+    ...draft,
+    hero: { ...draft.hero, image: pending(draft.hero.image) },
+    about: { ...draft.about, image: pending(draft.about.image) },
+    products: draft.products.map((one) => ({ ...one, image: pending(one.image) })),
+    gallery: draft.gallery.flatMap((one) => {
+      const url = pending(one.url)
+      return url ? [{ url, caption: one.caption }] : []
+    }),
   }
 }
 

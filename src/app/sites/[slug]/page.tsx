@@ -3,7 +3,7 @@ import { notFound } from "next/navigation"
 
 import { SiteRenderer } from "@/components/sites/site-renderer"
 import { findPublishedSite } from "@/lib/site-server"
-import { toSiteContent } from "@/models/site"
+import { toExtraSlots, toSiteContent } from "@/models/site"
 
 /**
  * A tenant's public website.
@@ -54,6 +54,8 @@ export default async function TenantSitePage({
     <SiteRenderer
       template={site.template}
       content={toSiteContent(site.content)}
+      extraSlots={toExtraSlots(site.extraSlots)}
+      mode="published"
       className="min-h-screen"
     />
   )

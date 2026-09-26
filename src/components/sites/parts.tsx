@@ -1,5 +1,13 @@
+"use client"
+
 import { cn } from "cn"
 
+import {
+  linksAreLive,
+  useSiteMode,
+  useSlotRenderer,
+} from "@/components/sites/site-mode"
+import { Items, Text } from "@/components/sites/slots"
 import type { SiteContent } from "@/models/site"
 
 /**
@@ -9,12 +17,26 @@ import type { SiteContent } from "@/models/site"
  * theme sets on the page root, so nothing in here names a colour. That is the
  * whole trick behind fifty templates: a layout decides the arrangement, a
  * theme decides the finish, and neither has to know about the other.
+ *
+ * Every piece also reads the site mode. What differs between the editor, a
+ * preview, the live site and a gallery thumbnail is almost entirely what an
+ * empty slot looks like and whether a link goes anywhere — so that is decided
+ * here, once, rather than in each of the ten layouts.
  */
 
 export const surface = "bg-[var(--site-surface)] border-[var(--site-border)]"
 export const radius = "rounded-[var(--site-radius)]"
 export const display = "font-[family-name:var(--site-display)]"
 export const muted = "text-[var(--site-muted)]"
+
+/**
+ * An in-page anchor id, or nothing in a thumbnail — fifty copies of a page
+ * on one screen would otherwise mean fifty elements called "top".
+ */
+export function useAnchor(id: string | undefined) {
+  const mode = useSiteMode()
+  return mode === "thumbnail" ? undefined : id
+}
 
 /** A page-width wrapper. Narrow for reading, wide for grids. */
 export function Wrap({
@@ -53,9 +75,10 @@ export function Section({
   tone?: "bg" | "soft" | "surface"
   id?: string
 }) {
+  const anchor = useAnchor(id)
   return (
     <section
-      id={id}
+      id={anchor}
       className={cn(
         "py-14 sm:py-20",
         tone === "soft" && "bg-[var(--site-soft)]",
@@ -140,6 +163,31 @@ export function Prose({
   )
 }
 
+/**
+ * A link that only behaves as one where following it makes sense. In the
+ * editor a click means "edit this" and in a thumbnail "pick this template",
+ * so there it is a plain span with the same look.
+ */
+export function SiteLink({
+  href,
+  className,
+  children,
+}: {
+  href: string | null | undefined
+  className?: string
+  children: React.ReactNode
+}) {
+  const mode = useSiteMode()
+  if (!href || !linksAreLive(mode)) {
+    return <span className={className}>{children}</span>
+  }
+  return (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  )
+}
+
 export function Button({
   href,
   children,
@@ -150,7 +198,7 @@ export function Button({
   variant?: "solid" | "outline"
 }) {
   return (
-    <a
+    <SiteLink
       href={href}
       className={cn(
         radius,
@@ -161,44 +209,105 @@ export function Button({
       )}
     >
       {children}
-    </a>
+    </SiteLink>
+  )
+}
+
+/** The styled stand-in for an empty picture, in the editor and thumbnails. */
+export function ImagePlaceholder({
+  ratio = "4/3",
+  className,
+  label = "Add image",
+}: {
+  ratio?: string
+  className?: string
+  label?: string
+}) {
+  return (
+    <div
+      data-image-placeholder
+      style={{ aspectRatio: ratio }}
+      className={cn(
+        radius,
+        "flex w-full flex-col items-center justify-center gap-2 overflow-hidden border border-dashed border-[var(--site-border)] bg-[var(--site-soft)] text-[var(--site-muted)]",
+        className
+      )}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="26"
+        height="26"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <circle cx="9" cy="10" r="1.8" />
+        <path d="m21 16-5.2-5.2L6 20" />
+      </svg>
+      <span className="px-3 text-center text-[11px] font-semibold tracking-[0.12em] uppercase">
+        {label}
+      </span>
+    </div>
   )
 }
 
 /**
- * A picture, or a stand-in that doesn't look broken.
+ * A picture, or what stands in for one.
  *
- * A site is usually published before every photograph has been taken, and a
- * missing image should read as "not yet" rather than as a fault. Plain `img`
- * rather than `next/image`: these are arbitrary S3 URLs on a tenant domain,
- * and the optimiser would need each bucket whitelisted in the config.
+ * With a source it is the picture, everywhere. Without one it depends on who
+ * is looking: the editor and a thumbnail show the "Add image" box, because
+ * there it is something to click or an honest sample; a preview and the live
+ * site show nothing at all — the caller decides how the section re-flows —
+ * unless `empty="block"` asks for a quiet tinted block with no label, which
+ * is what a product card or a gallery tile uses to keep its grid even.
+ *
+ * `slot` names the picture for the editor, which makes it clickable there.
+ *
+ * Plain `img` rather than `next/image`: these are arbitrary S3 URLs on a
+ * tenant domain, and the optimiser would need each bucket whitelisted.
  */
 export function Picture({
   src,
   alt,
   className,
   ratio = "4/3",
+  slot,
+  empty = "none",
 }: {
   src: string | null
   alt: string
   className?: string
   ratio?: string
+  slot?: string
+  empty?: "none" | "block"
 }) {
-  if (!src) {
+  const mode = useSiteMode()
+  const renderer = useSlotRenderer()
+
+  if (mode === "editor" && renderer && slot) {
     return (
-      <div
-        style={{ aspectRatio: ratio }}
-        className={cn(
-          radius,
-          "flex w-full items-center justify-center overflow-hidden border border-dashed border-[var(--site-border)] bg-[var(--site-soft)]",
-          className
-        )}
-      >
-        <span className="px-4 text-center text-[10.5px] font-semibold tracking-[0.14em] text-[var(--site-muted)] uppercase">
-          {alt || "Picture to come"}
-        </span>
-      </div>
+      <>{renderer.image({ id: slot, value: src, alt, ratio, className })}</>
     )
+  }
+
+  if (!src) {
+    if (mode === "editor" || mode === "thumbnail") {
+      return <ImagePlaceholder ratio={ratio} className={className} />
+    }
+    if (empty === "block") {
+      return (
+        <div
+          aria-hidden
+          style={{ aspectRatio: ratio }}
+          className={cn(radius, "w-full bg-[var(--site-soft)]", className)}
+        />
+      )
+    }
+    return null
   }
 
   return (
@@ -207,10 +316,21 @@ export function Picture({
       src={src}
       alt={alt}
       loading="lazy"
+      data-slot={slot}
       style={{ aspectRatio: ratio }}
       className={cn(radius, "w-full object-cover", className)}
     />
   )
+}
+
+/**
+ * Whether a picture slot is going to draw anything. Layouts that put a
+ * picture beside text use it to fall back to a single column on the live
+ * site when there is no picture, instead of leaving half the row empty.
+ */
+export function usePictureShown(src: string | null) {
+  const mode = useSiteMode()
+  return Boolean(src) || mode === "editor" || mode === "thumbnail"
 }
 
 export function ServiceList({
@@ -232,28 +352,30 @@ export function ServiceList({
         columns === 2 && "sm:grid-cols-2"
       )}
     >
-      {services.map((service, index) => (
-        <div key={index} className="flex flex-col gap-2">
-          {numbered ? (
-            <span
-              className={cn(
-                display,
-                "text-[13px] font-bold text-[var(--site-accent)] tabular-nums"
-              )}
-            >
-              {String(index + 1).padStart(2, "0")}
-            </span>
-          ) : null}
-          <h3 className={cn(display, "m-0 text-[17px] font-semibold")}>
-            {service.title}
-          </h3>
-          {service.body ? (
-            <p className={cn(muted, "m-0 text-[14.5px] leading-relaxed")}>
-              {service.body}
-            </p>
-          ) : null}
-        </div>
-      ))}
+      <Items id="services">
+        {services.map((service, index) => (
+          <div key={index} data-list-item className="flex flex-col gap-2">
+            {numbered ? (
+              <span
+                className={cn(
+                  display,
+                  "text-[13px] font-bold text-[var(--site-accent)] tabular-nums"
+                )}
+              >
+                {String(index + 1).padStart(2, "0")}
+              </span>
+            ) : null}
+            <h3 className={cn(display, "m-0 text-[17px] font-semibold")}>
+              <Text id={`services.${index}.title`} value={service.title} />
+            </h3>
+            {service.body ? (
+              <p className={cn(muted, "m-0 text-[14.5px] leading-relaxed")}>
+                <Text id={`services.${index}.body`} value={service.body} />
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </Items>
     </div>
   )
 }
@@ -278,33 +400,42 @@ export function ProductGrid({
         columns === 4 && "sm:grid-cols-2 lg:grid-cols-4"
       )}
     >
-      {products.map((product, index) => (
-        <article
-          key={index}
-          className={cn(
-            radius,
-            surface,
-            "flex flex-col gap-3 overflow-hidden border p-3"
-          )}
-        >
-          <Picture src={product.image} alt={product.name} ratio={ratio} />
-          <div className="flex flex-1 flex-col gap-1.5 px-1 pb-1">
-            <h3 className={cn(display, "m-0 text-[15.5px] font-semibold")}>
-              {product.name}
-            </h3>
-            {product.blurb ? (
-              <p className={cn(muted, "m-0 text-[13.5px] leading-relaxed")}>
-                {product.blurb}
-              </p>
-            ) : null}
-            {product.price ? (
-              <span className="mt-auto pt-1 text-[14px] font-semibold text-[var(--site-accent)]">
-                {product.price}
-              </span>
-            ) : null}
-          </div>
-        </article>
-      ))}
+      <Items id="products">
+        {products.map((product, index) => (
+          <article
+            key={index}
+            data-list-item
+            className={cn(
+              radius,
+              surface,
+              "flex flex-col gap-3 overflow-hidden border p-3"
+            )}
+          >
+            <Picture
+              src={product.image}
+              alt={product.name}
+              ratio={ratio}
+              slot={`products.${index}.image`}
+              empty="block"
+            />
+            <div className="flex flex-1 flex-col gap-1.5 px-1 pb-1">
+              <h3 className={cn(display, "m-0 text-[15.5px] font-semibold")}>
+                <Text id={`products.${index}.name`} value={product.name} />
+              </h3>
+              {product.blurb ? (
+                <p className={cn(muted, "m-0 text-[13.5px] leading-relaxed")}>
+                  <Text id={`products.${index}.blurb`} value={product.blurb} />
+                </p>
+              ) : null}
+              {product.price ? (
+                <span className="mt-auto pt-1 text-[14px] font-semibold text-[var(--site-accent)]">
+                  <Text id={`products.${index}.price`} value={product.price} />
+                </span>
+              ) : null}
+            </div>
+          </article>
+        ))}
+      </Items>
     </div>
   )
 }
@@ -327,17 +458,26 @@ export function FaqList({
 
   return (
     <div className={cn("grid gap-7", columns === 2 && "sm:grid-cols-2")}>
-      {faq.map((entry, index) => (
-        <div key={index} className="flex flex-col gap-1.5">
-          <h3 className={cn(display, "m-0 text-[16px] font-semibold")}>
-            {entry.question}
-          </h3>
-          <p className={cn(muted, "m-0 text-[14.5px] leading-relaxed")}>
-            {entry.answer}
-          </p>
-        </div>
-      ))}
+      <Items id="faq">
+        {faq.map((entry, index) => (
+          <div key={index} data-list-item className="flex flex-col gap-1.5">
+            <h3 className={cn(display, "m-0 text-[16px] font-semibold")}>
+              <Text id={`faq.${index}.question`} value={entry.question} />
+            </h3>
+            <p className={cn(muted, "m-0 text-[14.5px] leading-relaxed")}>
+              <Text id={`faq.${index}.answer`} value={entry.answer} />
+            </p>
+          </div>
+        ))}
+      </Items>
     </div>
+  )
+}
+
+/** Whether the contact section has anything to say. */
+export function hasContact(contact: SiteContent["contact"]) {
+  return Boolean(
+    contact.phone || contact.email || contact.address || contact.hours
   )
 }
 
@@ -349,11 +489,39 @@ export function ContactCard({
   className?: string
 }) {
   const rows = [
-    contact.phone ? { label: "Phone", value: contact.phone, href: `tel:${contact.phone.replace(/\s+/g, "")}` } : null,
-    contact.email ? { label: "Email", value: contact.email, href: `mailto:${contact.email}` } : null,
-    contact.address ? { label: "Where", value: contact.address, href: contact.mapUrl } : null,
-    contact.hours ? { label: "Open", value: contact.hours, href: null } : null,
-  ].filter(Boolean) as { label: string; value: string; href?: string | null }[]
+    contact.phone
+      ? {
+          id: "contact.phone",
+          label: "Phone",
+          value: contact.phone,
+          href: `tel:${contact.phone.replace(/\s+/g, "")}`,
+        }
+      : null,
+    contact.email
+      ? {
+          id: "contact.email",
+          label: "Email",
+          value: contact.email,
+          href: `mailto:${contact.email}`,
+        }
+      : null,
+    contact.address
+      ? {
+          id: "contact.address",
+          label: "Where",
+          value: contact.address,
+          href: contact.mapUrl,
+        }
+      : null,
+    contact.hours
+      ? { id: "contact.hours", label: "Open", value: contact.hours, href: null }
+      : null,
+  ].filter(Boolean) as {
+    id: string
+    label: string
+    value: string
+    href?: string | null
+  }[]
 
   if (rows.length === 0) return null
 
@@ -365,16 +533,16 @@ export function ContactCard({
             {row.label}
           </dt>
           <dd className="m-0 text-[15.5px] leading-snug">
-            {row.href ? (
-              <a
-                href={row.href}
-                className="text-[var(--site-fg)] underline decoration-[var(--site-border)] underline-offset-4 hover:decoration-[var(--site-accent)]"
-              >
-                {row.value}
-              </a>
-            ) : (
-              row.value
-            )}
+            <SiteLink
+              href={row.href}
+              className={
+                row.href
+                  ? "text-[var(--site-fg)] underline decoration-[var(--site-border)] underline-offset-4 hover:decoration-[var(--site-accent)]"
+                  : undefined
+              }
+            >
+              <Text id={row.id} value={row.value} />
+            </SiteLink>
           </dd>
         </div>
       ))}
@@ -400,20 +568,24 @@ export function Gallery({
         columns === 4 && "grid-cols-2 lg:grid-cols-4"
       )}
     >
-      {pictures.map((picture, index) => (
-        <figure key={index} className="m-0 flex flex-col gap-1.5">
-          <Picture
-            src={picture.url}
-            alt={picture.caption ?? "Our work"}
-            ratio="1/1"
-          />
-          {picture.caption ? (
-            <figcaption className={cn(muted, "text-[12.5px]")}>
-              {picture.caption}
-            </figcaption>
-          ) : null}
-        </figure>
-      ))}
+      <Items id="gallery">
+        {pictures.map((picture, index) => (
+          <figure key={index} data-list-item className="m-0 flex flex-col gap-1.5">
+            <Picture
+              src={picture.url || null}
+              alt={picture.caption ?? "Our work"}
+              ratio="1/1"
+              slot={`gallery.${index}.url`}
+              empty="block"
+            />
+            {picture.caption ? (
+              <figcaption className={cn(muted, "text-[12.5px]")}>
+                <Text id={`gallery.${index}.caption`} value={picture.caption} />
+              </figcaption>
+            ) : null}
+          </figure>
+        ))}
+      </Items>
     </div>
   )
 }
@@ -450,6 +622,7 @@ export function SiteNav({
   content: SiteContent
   sections: string[]
 }) {
+  const mode = useSiteMode()
   const links = [
     sections.includes("services") && content.services.length > 0
       ? { href: "#services", label: "What we do" }
@@ -463,21 +636,30 @@ export function SiteNav({
     sections.includes("faq") && content.faq.length > 0
       ? { href: "#faq", label: "Questions" }
       : null,
-    sections.includes("contact") ? { href: "#contact", label: "Contact" } : null,
+    sections.includes("contact") && hasContact(content.contact)
+      ? { href: "#contact", label: "Contact" }
+      : null,
   ].filter(Boolean) as { href: string; label: string }[]
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--site-border)] bg-[color-mix(in_oklab,var(--site-bg)_88%,transparent)] backdrop-blur-[10px]">
+    <header
+      className={cn(
+        "border-b border-[var(--site-border)] bg-[color-mix(in_oklab,var(--site-bg)_88%,transparent)]",
+        // Sticky only where it is a real page. In a thumbnail it would fight
+        // the card it sits in, and in the editor the dashboard's own header.
+        linksAreLive(mode) && "sticky top-0 z-40 backdrop-blur-[10px]"
+      )}
+    >
       <Wrap className="flex items-center justify-between gap-6 py-3.5">
-        <a
+        <SiteLink
           href="#top"
           className={cn(display, "text-[15.5px] font-bold no-underline")}
         >
           {content.name}
-        </a>
+        </SiteLink>
         <nav className="flex flex-wrap items-center gap-x-5 gap-y-1">
           {links.map((link) => (
-            <a
+            <SiteLink
               key={link.href}
               href={link.href}
               className={cn(
@@ -486,7 +668,7 @@ export function SiteNav({
               )}
             >
               {link.label}
-            </a>
+            </SiteLink>
           ))}
         </nav>
       </Wrap>
