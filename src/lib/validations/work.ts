@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { safeUrl } from "@/lib/security/safe-url"
 
 import { BLOCKER_REASONS } from "@/lib/work-constants"
 
@@ -116,7 +117,7 @@ export const ticketStatusSchema = z
      * crew sends it; the server checks every one belongs to this workspace.
      */
     photos: z
-      .array(z.object({ url: z.string().trim().url().max(600) }))
+      .array(z.object({ url: safeUrl(600) }))
       .max(5, "Five photos is the most you can add to a ticket")
       .optional(),
     /**

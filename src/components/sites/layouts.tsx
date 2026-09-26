@@ -28,6 +28,7 @@ import {
   useShowsList,
 } from "@/components/sites/parts"
 import { Extra, ProseText, Text } from "@/components/sites/slots"
+import { telHref } from "@/lib/security/safe-url"
 import type { SiteContent } from "@/models/site"
 
 /**
@@ -146,9 +147,8 @@ function heroCta(content: SiteContent) {
   const label = content.hero.ctaLabel
   const href =
     content.hero.ctaHref ??
-    (content.contact.phone
-      ? `tel:${content.contact.phone.replace(/\s+/g, "")}`
-      : "#contact")
+    telHref(content.contact.phone) ??
+    "#contact"
 
   return label ? (
     <Button href={href}>
@@ -891,7 +891,7 @@ export function Beacon({ content, sections }: LayoutProps) {
 
           {phone ? (
             <SiteLink
-              href={`tel:${phone.replace(/\s+/g, "")}`}
+              href={telHref(phone)}
               className={cn(
                 display,
                 "mt-2 text-[clamp(2.2rem,8cqw,4.5rem)] leading-none font-bold tracking-[-0.03em] text-[var(--site-accent)] no-underline tabular-nums"

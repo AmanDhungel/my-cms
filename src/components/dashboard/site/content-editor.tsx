@@ -113,7 +113,7 @@ export function ContentEditor({
               onChange={(value) =>
                 set("hero", { ...content.hero, ctaHref: value })
               }
-              placeholder="tel:+977…"
+              placeholder="https://…"
             />
           </div>
           <ImagePicker

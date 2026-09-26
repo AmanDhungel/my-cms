@@ -56,6 +56,12 @@ export function handleApiError(error: unknown) {
     return fail("Validation failed", 422, z_flatten(error))
   }
 
+  // A malformed id in the path can't name anything: the same 404 as an id
+  // that exists in another workspace, so the two can't be told apart.
+  if (error instanceof Error && error.name === "CastError") {
+    return fail("Not found", 404)
+  }
+
   if (isMongoDuplicateKeyError(error)) {
     const field = Object.keys(error.keyPattern ?? {})[0] ?? "field"
     return fail(`That ${field} is already taken`, 409, {

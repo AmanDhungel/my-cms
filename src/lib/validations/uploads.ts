@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { safeUrl } from "@/lib/security/safe-url"
 
 import {
   MAX_UPLOAD_BYTES,
@@ -37,5 +38,5 @@ export const uploadSchema = z.object({
 export type UploadValues = z.infer<typeof uploadSchema>
 
 export const deleteUploadSchema = z.object({
-  urls: z.array(z.string().trim().url()).max(50, "That is a lot of files"),
+  urls: z.array(safeUrl(600)).max(50, "That is a lot of files"),
 })

@@ -8,6 +8,12 @@ import {
   useSlotRenderer,
 } from "@/components/sites/site-mode"
 import { Items, Text } from "@/components/sites/slots"
+import {
+  mailtoHref,
+  safeHref,
+  safeImageSrc,
+  telHref,
+} from "@/lib/security/safe-url"
 import type { SiteContent } from "@/models/site"
 
 /**
@@ -178,6 +184,9 @@ export function SiteLink({
   children: React.ReactNode
 }) {
   const mode = useSiteMode()
+  // Whatever is stored, only a web address, an anchor on this page or a
+  // tel:/mailto: rebuilt from its digits or address is ever a link.
+  href = siteHref(href)
   if (!href || !linksAreLive(mode)) {
     return <span className={className}>{children}</span>
   }
@@ -186,6 +195,19 @@ export function SiteLink({
       {children}
     </a>
   )
+}
+
+/**
+ * A link target safe to render on a public site, or null. javascript:,
+ * data:, vbscript: and //host never get through (lib/security/safe-url.ts).
+ */
+export function siteHref(value: string | null | undefined): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (/^#[\w-]*$/.test(trimmed)) return trimmed
+  if (/^tel:/i.test(trimmed)) return telHref(trimmed.slice(4))
+  if (/^mailto:/i.test(trimmed)) return mailtoHref(trimmed.slice(7))
+  return safeHref(trimmed)
 }
 
 export function Button({
@@ -287,6 +309,8 @@ export function Picture({
 }) {
   const mode = useSiteMode()
   const renderer = useSlotRenderer()
+  // A stored javascript: or data: address renders as no picture at all.
+  src = safeImageSrc(src)
 
   if (mode === "editor" && renderer && slot) {
     return (
@@ -507,7 +531,7 @@ export function ContactCard({
           id: "contact.phone",
           label: "Phone",
           value: contact.phone,
-          href: `tel:${contact.phone.replace(/\s+/g, "")}`,
+          href: telHref(contact.phone),
         }
       : null,
     contact.email
@@ -515,7 +539,7 @@ export function ContactCard({
           id: "contact.email",
           label: "Email",
           value: contact.email,
-          href: `mailto:${contact.email}`,
+          href: mailtoHref(contact.email),
         }
       : null,
     contact.address

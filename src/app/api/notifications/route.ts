@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
+import { z } from "zod"
 
-import { handleApiError, ok, readJson } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { Notification, toNotificationDTO } from "@/models/notification"
@@ -40,11 +41,24 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/** One id, or nothing for "all of them". A string, never a query operator. */
+const markSchema = z.object({
+  id: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/, "That isn't a notification")
+    .optional(),
+})
+
 /** Marks one notification read, or all of them when no id is given. */
 export async function POST(request: Request) {
   try {
     const viewer = await requireUser()
-    const body = (await readJson(request).catch(() => ({}))) as { id?: string }
+    // An empty body means "all"; an oversized one is still refused.
+    const raw = await readJson(request).catch((error: unknown) => {
+      if (error instanceof HttpError && error.status === 413) throw error
+      return {}
+    })
+    const body = markSchema.parse(raw ?? {})
 
     await connectToDatabase()
 

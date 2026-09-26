@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { safeUrl } from "@/lib/security/safe-url"
 
 import { PATTERN_KINDS } from "@/lib/work-constants"
 
@@ -203,7 +204,7 @@ export const businessSettingsSchema = z.object({
    * Absent leaves the logo alone, null removes it, `{ url }` sets it. Only
    * the URL travels: the server works out the key and checks it is ours.
    */
-  logo: z.object({ url: z.string().trim().url() }).nullable().optional(),
+  logo: z.object({ url: safeUrl(600) }).nullable().optional(),
 })
 
 export type BusinessSettingsValues = z.infer<typeof businessSettingsSchema>
