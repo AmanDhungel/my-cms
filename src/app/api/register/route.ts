@@ -1,8 +1,9 @@
+import { createHash, timingSafeEqual } from "node:crypto"
 import { Types } from "mongoose"
 
 import { hashPassword } from "@/lib/auth/password"
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
-import { isSuperAdmin } from "@/lib/auth/super-admin"
+import { isSuperAdmin, SUPER_ADMIN_ADDRESS_MESSAGE } from "@/lib/auth/super-admin"
 import { connectToDatabase } from "@/lib/mongodb"
 import { signupSchema } from "@/lib/validations/auth"
 import { Business, toBusinessDTO } from "@/models/business"
@@ -13,6 +14,18 @@ import { enforceLimit } from "@/lib/security/rate-limit"
 import { clientIp } from "@/lib/security/client-ip"
 
 export const runtime = "nodejs"
+
+/**
+ * Whether a request carries this deployment's bootstrap token. Unset means
+ * nobody can open a workspace without an invite. Compared as digests so the
+ * time taken says nothing about how much of it was right.
+ */
+function isBootstrapToken(sent: string | undefined) {
+  const expected = process.env.SUPER_ADMIN_BOOTSTRAP_TOKEN
+  if (!expected || !sent) return false
+  const digest = (value: string) => createHash("sha256").update(value).digest()
+  return timingSafeEqual(digest(sent), digest(expected))
+}
 
 /**
  * Creates a workspace and its owner — but only against a live invite from a
@@ -37,10 +50,17 @@ export async function POST(request: Request) {
      * deployment. Somebody has to be able to open the first workspace, and
      * the environment — not the database — decides who that is.
      */
-    const bootstrapping = !values.invite && isSuperAdmin(email)
+    const bootstrapping =
+      !values.invite && isSuperAdmin(email) && isBootstrapToken(values.bootstrapToken)
 
     if (!values.invite && !bootstrapping) {
       throw new HttpError(403, "Opening a workspace needs an invite link")
+    }
+
+    // Knowing the administrator's address is not enough to become them: an
+    // invite (addressed or open) can never create that account.
+    if (!bootstrapping && isSuperAdmin(email)) {
+      throw new HttpError(403, SUPER_ADMIN_ADDRESS_MESSAGE)
     }
 
     const invite = values.invite

@@ -13,6 +13,14 @@ function allowList() {
     .filter(Boolean)
 }
 
+/**
+ * An administrator address never comes in through an invite: it is who the
+ * environment says it is, and an account under it is a super admin on its
+ * first sign-in. Registering or accepting an invite with one is refused.
+ */
+export const SUPER_ADMIN_ADDRESS_MESSAGE =
+  "That address is reserved. Use a different email."
+
 export function isSuperAdmin(email?: string | null) {
   if (!email) return false
   return allowList().includes(email.trim().toLowerCase())

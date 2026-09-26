@@ -3,6 +3,7 @@ import { z } from "zod"
 
 import { handleApiError, ok, readJson } from "@/lib/api-response"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { isSuperAdmin, SUPER_ADMIN_ADDRESS_MESSAGE } from "@/lib/auth/super-admin"
 import { connectToDatabase } from "@/lib/mongodb"
 import { createInviteToken } from "@/models/invite"
 import {
@@ -17,7 +18,8 @@ const workspaceInviteSchema = z.object({
   /** Optional: leave it out and whoever opens the link picks their address. */
   email: z
     .union([z.literal(""), z.email("That email doesn't look right")])
-    .optional(),
+    .optional()
+    .refine((email) => !isSuperAdmin(email), SUPER_ADMIN_ADDRESS_MESSAGE),
   businessName: z.string().trim().max(120).optional(),
   note: z.string().trim().max(500).optional(),
 })

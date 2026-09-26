@@ -3,6 +3,7 @@ import { Types } from "mongoose"
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { findPendingInvite } from "@/lib/auth/invites"
 import { hashPassword } from "@/lib/auth/password"
+import { isSuperAdmin, SUPER_ADMIN_ADDRESS_MESSAGE } from "@/lib/auth/super-admin"
 import { connectToDatabase } from "@/lib/mongodb"
 import { logActivity } from "@/lib/activity"
 import { notifySupervisors } from "@/lib/notify"
@@ -28,6 +29,10 @@ export async function POST(
     const { token } = await ctx.params
     const values = acceptInviteSchema.parse(await readJson(request))
     const invite = await findPendingInvite(token)
+    // An invite can't mint an administrator account (lib/auth/super-admin.ts).
+    if (isSuperAdmin(invite.email)) {
+      throw new HttpError(403, SUPER_ADMIN_ADDRESS_MESSAGE)
+    }
 
     const connection = await connectToDatabase()
 
