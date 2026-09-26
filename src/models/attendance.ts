@@ -83,6 +83,17 @@ const attendanceSchema = new Schema(
 
     /** Snapshot, so editing someone's shift doesn't rewrite their history. */
     shift: { type: String, trim: true, maxlength: 32 },
+
+    /**
+     * A ticket check-in or check-out outside the shift that day (see
+     * lib/overtime.ts). Absent on every day before overtime existed, which
+     * reads as "no overtime" — no migration.
+     */
+    overtime: { type: Boolean },
+    /** The most recent reason given for it that day. */
+    overtimeReason: { type: String, trim: true, maxlength: 500 },
+    /** Minutes worked past the shift end, the longest of the day's check-outs. */
+    overtimeMinutes: { type: Number, min: 0 },
   },
   { timestamps: true }
 )
@@ -118,6 +129,9 @@ export type AttendanceDTO = {
   outLat: number | null
   outLng: number | null
   outAccuracyM: number | null
+  overtime: boolean
+  overtimeReason: string | null
+  overtimeMinutes: number
 }
 
 export function toAttendanceDTO(
@@ -145,5 +159,8 @@ export function toAttendanceDTO(
     outLat: record.outLat ?? null,
     outLng: record.outLng ?? null,
     outAccuracyM: record.outAccuracyM ?? null,
+    overtime: record.overtime ?? false,
+    overtimeReason: record.overtimeReason ?? null,
+    overtimeMinutes: record.overtimeMinutes ?? 0,
   }
 }

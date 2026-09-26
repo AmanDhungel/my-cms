@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { inputClass } from "@/components/auth/field"
 import { useLocationFix } from "@/components/dashboard/employee/use-location"
 import { distanceInMetres, formatDistance } from "@/lib/geo"
+import { ApiRequestError } from "@/lib/api-client"
 import { reportMutationError, useCheckIn, useCheckOut } from "@/lib/queries"
 import type { TicketDTO } from "@/models/ticket"
 
@@ -76,6 +77,12 @@ function Body({
   const { fix, error: locationError, locating, retry } = useLocationFix()
   const [reason, setReason] = React.useState("")
   const [reasonError, setReasonError] = React.useState<string | null>(null)
+  // Overtime is the server's call (it knows the shift and the clock); when
+  // it says this is outside the shift, the dialog asks why before sending
+  // again, and nothing is recorded until it has an answer.
+  const [overtimeAsked, setOvertimeAsked] = React.useState<string | null>(null)
+  const [overtimeReason, setOvertimeReason] = React.useState("")
+  const [overtimeError, setOvertimeError] = React.useState<string | null>(null)
 
   const checkIn = useCheckIn(ticket.id)
   const checkOut = useCheckOut(ticket.id)
@@ -94,9 +101,17 @@ function Body({
       setReasonError("Say why you're checking in from outside the area")
       return
     }
+    if (overtimeAsked && overtimeReason.trim().length < 3) {
+      setOvertimeError("Say a little more about why")
+      return
+    }
 
     mutation.mutate(
-      { ...fix, reason: needsReason ? reason.trim() : undefined },
+      {
+        ...fix,
+        reason: needsReason ? reason.trim() : undefined,
+        overtimeReason: overtimeAsked ? overtimeReason.trim() : undefined,
+      },
       {
         onSuccess: () => {
           toast.success(
@@ -106,10 +121,18 @@ function Body({
           )
           onClose()
         },
-        onError: (error) =>
+        onError: (error) => {
+          if (error instanceof ApiRequestError && error.fieldErrors?.overtimeReason && !overtimeAsked) {
+            // The first answer to "outside your shift": ask, don't toast.
+            setOvertimeAsked(error.fieldErrors.overtimeReason[0])
+            if (error.fieldErrors.reason) setReasonError(error.fieldErrors.reason[0])
+            return
+          }
           reportMutationError(error, (path, message) => {
             if (path === "reason") setReasonError(message)
-          }),
+            if (path === "overtimeReason") setOvertimeError(message)
+          })
+        },
       }
     )
   }
@@ -187,6 +210,32 @@ function Body({
             ) : (
               <span className="text-n-400 text-[12px]">
                 Your owner sees this next to the check-in.
+              </span>
+            )}
+          </label>
+        ) : null}
+        {overtimeAsked ? (
+          <label className="flex flex-col gap-[7px]" data-overtime-prompt>
+            <span className="text-n-600 text-[12.5px] font-semibold tracking-[0.05em] uppercase">
+              Outside your shift — why?
+            </span>
+            <textarea
+              value={overtimeReason}
+              onChange={(event) => {
+                setOvertimeReason(event.target.value)
+                setOvertimeError(null)
+              }}
+              maxLength={500}
+              placeholder="Client asked us to finish the wiring tonight"
+              aria-label="Why you're working outside your shift"
+              aria-invalid={Boolean(overtimeError)}
+              className={cn(inputClass, "min-h-[76px] resize-y")}
+            />
+            {overtimeError ? (
+              <span className="text-s-overdue text-[12.5px]">{overtimeError}</span>
+            ) : (
+              <span className="text-n-400 text-[12px]">
+                {overtimeAsked} Your owner sees this as overtime.
               </span>
             )}
           </label>

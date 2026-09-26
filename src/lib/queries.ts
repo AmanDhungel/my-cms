@@ -159,7 +159,7 @@ export function useCheckIn(ticketId: string) {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: (body: Fix & { reason?: string }) =>
+    mutationFn: (body: Fix & { reason?: string; overtimeReason?: string }) =>
       apiFetch<CheckInResponse>(`/api/tickets/${ticketId}/check-in`, {
         method: "POST",
         body: JSON.stringify(body),
@@ -172,7 +172,7 @@ export function useCheckOut(ticketId: string) {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: (body: Fix & { reason?: string }) =>
+    mutationFn: (body: Fix & { reason?: string; overtimeReason?: string }) =>
       apiFetch<CheckInResponse>(`/api/tickets/${ticketId}/check-out`, {
         method: "POST",
         body: JSON.stringify(body),

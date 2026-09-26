@@ -33,6 +33,12 @@ const checkInSchema = new Schema(
 
     /** Required when `insideFence` is false — the owner sees it verbatim. */
     reason: { type: String, trim: true, maxlength: 500 },
+
+    /** Outside the shift (lib/overtime.ts decides); absent on older records. */
+    overtime: { type: Boolean },
+    overtimeReason: { type: String, trim: true, maxlength: 500 },
+    /** On a check-out: minutes past the shift end. */
+    overtimeMinutes: { type: Number, min: 0 },
   },
   { timestamps: true }
 )
@@ -54,6 +60,9 @@ export type CheckInDTO = {
   distanceM: number
   insideFence: boolean
   reason: string | null
+  overtime: boolean
+  overtimeReason: string | null
+  overtimeMinutes: number
 }
 
 export function toCheckInDTO(
@@ -67,5 +76,8 @@ export function toCheckInDTO(
     distanceM: entry.distanceM,
     insideFence: entry.insideFence,
     reason: entry.reason ?? null,
+    overtime: entry.overtime ?? false,
+    overtimeReason: entry.overtimeReason ?? null,
+    overtimeMinutes: entry.overtimeMinutes ?? 0,
   }
 }

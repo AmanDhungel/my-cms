@@ -1,4 +1,4 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { HttpError, fail, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { logActivity } from "@/lib/activity"
 import { markDeparture } from "@/lib/attendance"
@@ -9,6 +9,7 @@ import { dayKeyInZone } from "@/lib/time"
 import { shiftOn } from "@/lib/week-server"
 import { loadTicketForViewer } from "@/lib/tickets"
 import { checkInSchema } from "@/lib/validations/work"
+import { OVERTIME_REASON_MESSAGE, classifyOvertime, shiftToday } from "@/lib/overtime"
 import { getWorkspace } from "@/lib/workspace"
 import { CheckIn, toCheckInDTO } from "@/models/check-in"
 import { toAttendanceDTO } from "@/models/attendance"
@@ -50,6 +51,32 @@ export async function POST(
     const insideFence = distanceM <= ticket.radiusM
     const at = new Date()
 
+    const [business, me] = await Promise.all([
+      getWorkspace(viewer.businessId),
+      User.findById(viewer.id).select("shift week"),
+    ])
+
+    // Leaving after the shift end (or on a rest day) is overtime, decided
+    // here with the server's clock. Leaving early is not.
+    const overtime = classifyOvertime(
+      at,
+      shiftToday(at, me, business, business.timeZone),
+      business.timeZone
+    )
+    const late = overtime.when === "after" || overtime.when === "off"
+    if (late && !values.overtimeReason) {
+      return fail(OVERTIME_REASON_MESSAGE, 422, {
+        overtimeReason: [OVERTIME_REASON_MESSAGE],
+      })
+    }
+    // Past the shift end: how far past it. On a rest day there is no end to
+    // measure from, so it is the length of this visit.
+    const overtimeMinutes = !late
+      ? 0
+      : overtime.when === "after"
+        ? overtime.minutes
+        : Math.max(0, Math.round((at.getTime() - mine.at.getTime()) / 60_000))
+
     const entry = await CheckIn.create({
       business: ticket.business,
       ticket: ticket._id,
@@ -62,6 +89,9 @@ export async function POST(
       distanceM,
       insideFence,
       reason: insideFence ? undefined : values.reason,
+      ...(late
+        ? { overtime: true, overtimeReason: values.overtimeReason, overtimeMinutes }
+        : {}),
     })
 
     // `set` rather than assignment: the field is a mongoose DocumentArray,
@@ -73,11 +103,6 @@ export async function POST(
     ticket.checkedOutAt = at
     await ticket.save()
 
-    const [business, me] = await Promise.all([
-      getWorkspace(viewer.businessId),
-      User.findById(viewer.id).select("shift week"),
-    ])
-
     const attendance = await markDeparture({
       businessId: ticket.business,
       userId: viewer.id,
@@ -86,6 +111,13 @@ export async function POST(
       shift: shiftOn(dayKeyInZone(at, business.timeZone), me, business),
       timeZone: business.timeZone,
     })
+
+    if (late) {
+      attendance.overtime = true
+      attendance.overtimeReason = values.overtimeReason
+      attendance.overtimeMinutes = Math.max(attendance.overtimeMinutes ?? 0, overtimeMinutes)
+      await attendance.save()
+    }
 
     await ticket.populate([
       { path: "assignees", select: "name" },

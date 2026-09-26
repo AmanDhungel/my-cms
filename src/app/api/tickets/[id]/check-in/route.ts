@@ -12,6 +12,7 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { shiftOn } from "@/lib/week-server"
 import { loadTicketForViewer } from "@/lib/tickets"
 import { PAST_TICKET_MESSAGE, isPastTicket } from "@/lib/ticket-window"
+import { OVERTIME_REASON_MESSAGE, classifyOvertime, shiftToday } from "@/lib/overtime"
 import { checkInSchema } from "@/lib/validations/work"
 import { getWorkspace } from "@/lib/workspace"
 import { CheckIn, toCheckInDTO } from "@/models/check-in"
@@ -80,19 +81,35 @@ export async function POST(
     )
     const insideFence = distanceM <= ticket.radiusM
 
+    // Overtime is decided here, from the server's clock and the shift this
+    // server resolves — never from anything the client says.
+    const at = new Date()
+    const me = await User.findById(viewer.id).select("shift week")
+    const overtime = classifyOvertime(
+      at,
+      shiftToday(at, me, business, business.timeZone),
+      business.timeZone
+    )
+
+    // Both questions answered in one go, so nobody is asked twice.
+    const missing: Record<string, string[]> = {}
     if (!insideFence && !values.reason) {
+      missing.reason = [
+        `You're outside the ${formatDistance(ticket.radiusM)} check-in area. A reason is required.`,
+      ]
+    }
+    if (overtime.overtime && !values.overtimeReason) {
+      missing.overtimeReason = [OVERTIME_REASON_MESSAGE]
+    }
+    if (Object.keys(missing).length > 0) {
       return fail(
-        `You're ${formatDistance(distanceM)} from ${ticket.site}. Say why before checking in.`,
+        missing.reason
+          ? `You're ${formatDistance(distanceM)} from ${ticket.site}. Say why before checking in.`
+          : OVERTIME_REASON_MESSAGE,
         422,
-        {
-          reason: [
-            `You're outside the ${formatDistance(ticket.radiusM)} check-in area. A reason is required.`,
-          ],
-        }
+        missing
       )
     }
-
-    const at = new Date()
 
     const entry = await CheckIn.create({
       business: ticket.business,
@@ -106,6 +123,9 @@ export async function POST(
       distanceM,
       insideFence,
       reason: insideFence ? undefined : values.reason,
+      ...(overtime.overtime
+        ? { overtime: true, overtimeReason: values.overtimeReason }
+        : {}),
     })
 
     ticket.openCheckIns.push({ user: new Types.ObjectId(viewer.id), at })
@@ -115,8 +135,6 @@ export async function POST(
     }
     await ticket.save()
 
-    const me = await User.findById(viewer.id).select("shift week")
-
     const attendance = await markArrival({
       businessId: ticket.business,
       userId: viewer.id,
@@ -125,6 +143,12 @@ export async function POST(
       shift: shiftOn(dayKeyInZone(at, business.timeZone), me, business),
       timeZone: business.timeZone,
     })
+
+    if (overtime.overtime) {
+      attendance.overtime = true
+      attendance.overtimeReason = values.overtimeReason
+      await attendance.save()
+    }
 
     await ticket.populate([
       { path: "assignees", select: "name" },

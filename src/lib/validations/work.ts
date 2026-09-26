@@ -57,6 +57,19 @@ export const checkInSchema = z.object({
   lng: z.number().min(-180).max(180),
   accuracyM: z.number().min(0).max(100_000).optional(),
   reason: z.string().trim().max(500).optional(),
+  /**
+   * Why this is happening outside the shift. Only required when the server
+   * decides it is (lib/overtime.ts); an empty value counts as not given.
+   */
+  overtimeReason: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z
+      .string()
+      .trim()
+      .min(3, "Say a little more about why")
+      .max(500, "Keep this under 500 characters")
+      .optional()
+  ),
 })
 
 export type CheckInValues = z.infer<typeof checkInSchema>
