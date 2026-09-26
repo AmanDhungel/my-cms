@@ -18,7 +18,14 @@ import { Toaster } from "@/components/ui/sonner"
 const ON_TENANT_SITE =
   typeof window !== "undefined" && tenantFromHost(window.location.host) !== null
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  nonce,
+}: {
+  children: React.ReactNode
+  /** The request CSP nonce, for the theme script next-themes injects. */
+  nonce?: string
+}) {
   const queryClient = getQueryClient()
 
   return (
@@ -34,6 +41,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           defaultTheme="light"
           forcedTheme="light"
           disableTransitionOnChange
+          nonce={nonce}
         >
           {children}
           <Toaster richColors position="top-right" />

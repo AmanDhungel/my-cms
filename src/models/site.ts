@@ -7,6 +7,7 @@ import {
   type Model,
 } from "mongoose"
 
+import { safeHref, safeImageSrc } from "@/lib/security/safe-url"
 import { DEFAULT_TEMPLATE } from "@/lib/site-templates"
 
 /**
@@ -225,7 +226,19 @@ const text = (value: unknown) => {
   return trimmed === "" ? null : trimmed
 }
 
-/** The content, with every absent field spelled `null` rather than missing. */
+/** A stored link, or null unless it is absolute http(s). */
+const link = (value: unknown) => safeHref(text(value))
+
+/** A stored picture address, or null unless it is safe as an <img src>. */
+const picture = (value: unknown) => safeImageSrc(text(value))
+
+/**
+ * The content, with every absent field spelled `null` rather than missing.
+ *
+ * Links and pictures are re-checked on the way out (lib/security/safe-url.ts),
+ * so a javascript: or data: address that reached the database some other way
+ * than the API never reaches a page — not even inside its serialized props.
+ */
 export function toSiteContent(raw: SiteDocument["content"]): SiteContent {
   // Mongoose types every nested object as possibly absent. Normalising once
   // here keeps the twenty reads below from each carrying their own guard.
@@ -238,13 +251,13 @@ export function toSiteContent(raw: SiteDocument["content"]): SiteContent {
       headline: text(safe.hero?.headline),
       sub: text(safe.hero?.sub),
       ctaLabel: text(safe.hero?.ctaLabel),
-      ctaHref: text(safe.hero?.ctaHref),
-      image: text(safe.hero?.image),
+      ctaHref: link(safe.hero?.ctaHref),
+      image: picture(safe.hero?.image),
     },
     about: {
       title: text(safe.about?.title),
       body: text(safe.about?.body),
-      image: text(safe.about?.image),
+      image: picture(safe.about?.image),
     },
     services: (safe.services ?? []).map((one) => ({
       title: one.title,
@@ -254,12 +267,14 @@ export function toSiteContent(raw: SiteDocument["content"]): SiteContent {
       name: one.name,
       blurb: text(one.blurb),
       price: text(one.price),
-      image: text(one.image),
+      image: picture(one.image),
     })),
-    gallery: (safe.gallery ?? []).map((one) => ({
-      url: one.url,
-      caption: text(one.caption),
-    })),
+    gallery: (safe.gallery ?? [])
+      .filter((one) => picture(one.url) !== null)
+      .map((one) => ({
+        url: one.url.trim(),
+        caption: text(one.caption),
+      })),
     faq: (safe.faq ?? []).map((one) => ({
       question: one.question,
       answer: one.answer,
@@ -269,7 +284,7 @@ export function toSiteContent(raw: SiteDocument["content"]): SiteContent {
       phone: text(safe.contact?.phone),
       address: text(safe.contact?.address),
       hours: text(safe.contact?.hours),
-      mapUrl: text(safe.contact?.mapUrl),
+      mapUrl: link(safe.contact?.mapUrl),
     },
   }
 }

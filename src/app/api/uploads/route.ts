@@ -46,6 +46,15 @@ const PURPOSES_BY_ROLE: Record<UserRole, readonly string[]> = {
  * Not reachable from a tenant site's host: the proxy is kept off this route
  * (see proxy.ts), so the route turns such requests away itself.
  */
+/**
+ * Nothing is read from here. On a tenant host it is a 404 like every other
+ * /api path (the proxy is kept off this route); elsewhere, 405.
+ */
+export function GET(request: Request) {
+  if (isTenantRequest(request)) return fail("Not found", 404)
+  return fail("Method not allowed", 405, undefined, { Allow: "POST, DELETE" })
+}
+
 export async function POST(request: Request) {
   if (isTenantRequest(request)) return fail("Not found", 404)
   // The proxy is kept off this route, so it checks the origin itself (CSRF).

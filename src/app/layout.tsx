@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { headers } from "next/headers"
 import { connection } from "next/server"
 import { Inter, JetBrains_Mono, Sora } from "next/font/google"
 
@@ -40,6 +41,8 @@ export const metadata: Metadata = {
  */
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   await connection()
+  // next-themes injects an inline script; it needs the same nonce.
+  const nonce = (await headers()).get("x-nonce") ?? undefined
   return (
     <html
       lang="en"
@@ -47,7 +50,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${sora.variable} ${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="bg-background text-foreground flex min-h-full flex-col">
-        <Providers>{children}</Providers>
+        <Providers nonce={nonce}>{children}</Providers>
       </body>
     </html>
   )
