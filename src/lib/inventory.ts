@@ -1,5 +1,5 @@
 import { HttpError } from "@/lib/api-response"
-import { isBusinessKey, keyFromUrl } from "@/lib/s3"
+import { isBusinessKeyIn, keyFromUrl } from "@/lib/s3"
 import { InventoryItem } from "@/models/inventory-item"
 
 /**
@@ -62,7 +62,7 @@ export function itemImagesFrom(
 
   return images.map(({ url }) => {
     const key = keyFromUrl(url)
-    if (!key || !isBusinessKey(key, businessId)) {
+    if (!key || !isBusinessKeyIn(key, businessId, "products")) {
       throw new HttpError(400, "That picture isn't one of ours")
     }
     return { key, url }

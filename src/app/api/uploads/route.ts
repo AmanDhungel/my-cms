@@ -126,7 +126,7 @@ export async function DELETE(request: Request) {
       const key = keyFromUrl(url)
       return key !== null && isBusinessKey(key, viewer.businessId)
     })
-    const result = await deleteUploads(own)
+    const result = await deleteUploads(own, viewer.businessId)
 
     return ok({ deleted: result.deleted, refused: urls.length - own.length })
   } catch (error) {

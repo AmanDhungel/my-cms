@@ -112,6 +112,7 @@ export function InlineEditor({
   extraSlots,
   onDraft,
   onExtraSlots,
+  onPreparing,
   uploads,
   errors,
 }: {
@@ -120,9 +121,21 @@ export function InlineEditor({
   extraSlots: Record<string, string>
   onDraft: Setter<SiteDraft>
   onExtraSlots: Setter<Record<string, string>>
+  /** Told +1 when a picture starts compressing and -1 when it is done. */
+  onPreparing?: (delta: 1 | -1) => void
   uploads: boolean
   errors: Record<string, string>
 }) {
+  // A picture can finish compressing after the editor has gone (the page
+  // was left). Its preview then has no one to show it and is let go of.
+  const aliveRef = React.useRef(true)
+  React.useEffect(() => {
+    aliveRef.current = true
+    return () => {
+      aliveRef.current = false
+    }
+  }, [])
+
   const renderer = React.useMemo<SlotRenderer>(() => {
     function commitText(id: string, text: string) {
       if (id.startsWith("heading.")) {
@@ -142,12 +155,19 @@ export function InlineEditor({
 
     async function pickImage(id: string, file: File) {
       let next: ImageDraft
+      onPreparing?.(1)
       try {
         next = await prepareImage(file)
       } catch (error) {
         toast.error(
           error instanceof Error ? error.message : `${file.name} couldn't be read`
         )
+        return
+      } finally {
+        onPreparing?.(-1)
+      }
+      if (!aliveRef.current) {
+        if (next.preview) URL.revokeObjectURL(next.preview)
         return
       }
       onDraft((prev) => {
@@ -238,7 +258,7 @@ export function InlineEditor({
               type="button"
               aria-label={`Remove ${LIST_NOUN[listId as ListSlotId]} ${index + 1}`}
               onClick={() => removeRow(listId as ListSlotId, index)}
-              className="text-n-700 absolute -top-2.5 -right-2.5 z-10 hidden size-6 items-center justify-center rounded-full bg-white shadow-md ring-1 ring-black/10 group-hover/row:flex hover:text-red-600 focus-visible:flex"
+              className="text-n-700 absolute -top-2.5 -right-2.5 z-10 flex size-6 items-center justify-center rounded-full bg-white opacity-0 shadow-md ring-1 ring-black/10 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:text-red-600 focus-visible:opacity-100"
             >
               <XIcon className="size-3.5" />
             </button>
@@ -246,7 +266,7 @@ export function InlineEditor({
         </div>
       ),
     }
-  }, [errors, onDraft, onExtraSlots, uploads])
+  }, [errors, onDraft, onExtraSlots, onPreparing, uploads])
 
   const content = React.useMemo(() => editorContent(draft), [draft])
 
@@ -321,24 +341,10 @@ function EditableText({
   function onFocus() {
     editingRef.current = true
     cancelRef.current = false
-    // A sample is there to be replaced, so the whole of it is selected and
-    // the first key typed takes its place.
-    if (sample) {
-      // A frame later, so it lands after the click has placed its caret —
-      // and only if nothing has been typed or selected in that frame, or
-      // the first keystrokes would be selected over and lost.
-      requestAnimationFrame(() => {
-        const node = ref.current
-        const selection = window.getSelection()
-        if (!node || !selection || document.activeElement !== node) return
-        if (node.textContent !== display) return
-        if (selection.rangeCount > 0 && !selection.getRangeAt(0).collapsed) return
-        const range = document.createRange()
-        range.selectNodeContents(node)
-        selection.removeAllRanges()
-        selection.addRange(range)
-      })
-    }
+    // A sample is there to be replaced, not edited: it is cleared the moment
+    // the field is entered, and stays visible only as a placeholder. Done
+    // synchronously, so no keystroke can land inside the sample text.
+    if (sample && ref.current) ref.current.textContent = ""
   }
 
   function onBlur() {
@@ -346,7 +352,10 @@ function EditableText({
     editingRef.current = false
     if (node && !cancelRef.current) {
       const text = normalise(node.textContent ?? "", multiline)
-      if (text !== normalise(display, multiline)) onCommit(id, text)
+      // Entering a sample and leaving it empty changes nothing — above all,
+      // it must not turn a sample list row into a real, empty one.
+      const changed = sample ? text !== "" : text !== normalise(display, multiline)
+      if (changed) onCommit(id, text)
     }
     cancelRef.current = false
     setRevision((value) => value + 1)
@@ -390,6 +399,7 @@ function EditableText({
         spellCheck
         data-edit-slot={id}
         data-sample={sample ? "" : undefined}
+        data-placeholder={sample ? display : undefined}
         onFocus={onFocus}
         onBlur={onBlur}
         onKeyDown={onKeyDown}
@@ -398,8 +408,10 @@ function EditableText({
         className={cn(
           "cursor-text rounded-[3px] outline-2 outline-offset-[3px] outline-transparent transition-[outline-color] hover:outline-dashed hover:outline-[color-mix(in_oklab,var(--site-accent)_70%,transparent)] focus:outline-solid focus:outline-[var(--site-accent)]",
           multiline ? "block whitespace-pre-wrap" : "inline-block min-w-[3ch]",
-          // Faded, so a sample reads as "not yours yet" at a glance.
-          sample && "opacity-55 focus:opacity-100",
+          // Faded, so a sample reads as "not yours yet" at a glance; while
+          // it is being typed over, it lingers as a placeholder.
+          sample &&
+            "opacity-55 empty:before:pointer-events-none empty:before:opacity-50 empty:before:content-[attr(data-placeholder)] focus:opacity-100",
           error && "outline-solid outline-red-500 hover:outline-red-500",
           className
         )}

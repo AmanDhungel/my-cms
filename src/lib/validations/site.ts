@@ -46,7 +46,7 @@ export const slugSchema = z
  * its eyebrow line. Anything else is refused rather than stored and ignored.
  */
 export const EXTRA_SLOT_PATTERN =
-  /^heading.(hero|about|services|products|gallery|faq|contact).(title|eyebrow)$/
+  /^heading\.(hero|about|services|products|gallery|faq|contact)\.(title|eyebrow)$/
 
 const extraSlots = z
   .record(

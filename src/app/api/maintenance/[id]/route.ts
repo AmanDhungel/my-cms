@@ -60,7 +60,7 @@ export async function PATCH(
      * otherwise leave an orphan in the bucket for ever. Not awaited, because
      * a bucket that refuses a delete must not fail a save already made.
      */
-    void reconcileUploads(before, values.photos)
+    void reconcileUploads(before, values.photos, viewer.businessId)
 
     void logActivity({
       businessId: viewer.businessId,
@@ -104,7 +104,7 @@ export async function DELETE(
       : row.item
 
     await row.deleteOne()
-    void deleteUploads(photos)
+    void deleteUploads(photos, viewer.businessId)
 
     void logActivity({
       businessId: viewer.businessId,

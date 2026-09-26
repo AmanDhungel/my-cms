@@ -33,23 +33,28 @@ function useSavedText(id: string): string | null {
  * A line or block of text.
  *
  * `value` is what the view shows — already a sample in the editor and a
- * thumbnail, already the business name where the layout falls back to it.
- * With nothing to show, the slot is not drawn at all.
+ * thumbnail. `fallback` is what publishes when nothing was typed: the
+ * business name for a headline, the template's wording for a heading. It is
+ * real copy, so the editor shows it as it will publish, not faded like a
+ * sample. With nothing to show at all, the slot is not drawn.
  */
 export function Text({
   id,
   value,
+  fallback,
   multiline = false,
   className,
 }: {
   id: string
   value: string | null | undefined
+  fallback?: string | null
   multiline?: boolean
   className?: string
 }) {
   const mode = useSiteMode()
   const renderer = useSlotRenderer()
   const saved = useSavedText(id)
+  const shown = value || fallback || null
 
   if (mode === "editor" && renderer) {
     return (
@@ -57,8 +62,9 @@ export function Text({
         {renderer.text({
           id,
           value: saved,
-          display: value ?? "",
-          sample: saved === null,
+          display: shown ?? "",
+          // A sample is a view value nobody saved; a fallback is not one.
+          sample: saved === null && Boolean(value),
           multiline,
           className,
         })}
@@ -66,10 +72,10 @@ export function Text({
     )
   }
 
-  if (!value) return null
+  if (!shown) return null
   return (
     <span data-slot={id} className={className}>
-      {value}
+      {shown}
     </span>
   )
 }

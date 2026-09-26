@@ -110,8 +110,11 @@ function Tagline({ content }: { content: SiteContent }) {
   ) : null
 }
 
+/** With no headline typed, the business name is what publishes — and shows. */
 function Headline({ content }: { content: SiteContent }) {
-  return <Text id="hero.headline" value={content.hero.headline ?? content.name} />
+  return (
+    <Text id="hero.headline" value={content.hero.headline} fallback={content.name} />
+  )
 }
 
 function Sub({
@@ -135,7 +138,7 @@ function AboutTitle({
   content: SiteContent
   fallback: string
 }) {
-  return <Text id="about.title" value={content.about.title ?? fallback} />
+  return <Text id="about.title" value={content.about.title} fallback={fallback} />
 }
 
 function heroCta(content: SiteContent) {
@@ -753,6 +756,8 @@ export function Bulletin({ content, sections }: LayoutProps) {
   const contactAnchor = useAnchor("contact")
   const heroPicture = usePictureShown(content.hero.image)
   const contactCard = showContact(sections, content)
+  const showAbout = has(sections, "about") && Boolean(content.about.body)
+  const showFaq = has(sections, "faq") && content.faq.length > 0
 
   return (
     <>
@@ -822,16 +827,19 @@ export function Bulletin({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "about") && content.about.body ? (
+      {/* About and the questions share a band, but either can stand alone. */}
+      {showAbout || showFaq ? (
         <Section tone="soft" className="py-10">
-          <Wrap className="grid gap-8 lg:grid-cols-2">
-            <div className="flex flex-col gap-3">
-              <Title as="h3" className="text-[20px]">
-                <AboutTitle content={content} fallback="About us" />
-              </Title>
-              <ProseText id="about.body" value={content.about.body} />
-            </div>
-            {has(sections, "faq") && content.faq.length > 0 ? (
+          <Wrap className={cn("grid gap-8", showAbout && showFaq && "lg:grid-cols-2")}>
+            {showAbout ? (
+              <div className="flex flex-col gap-3">
+                <Title as="h3" className="text-[20px]">
+                  <AboutTitle content={content} fallback="About us" />
+                </Title>
+                <ProseText id="about.body" value={content.about.body} />
+              </div>
+            ) : null}
+            {showFaq ? (
               <div id={faqAnchor} className="flex flex-col gap-3">
                 <Title as="h3" className="text-[20px]">
                   {heading("faq", "Questions")}

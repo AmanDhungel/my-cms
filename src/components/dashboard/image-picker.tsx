@@ -234,6 +234,10 @@ export function ImagePickerList({
             <button
               type="button"
               aria-label={`Remove picture ${index + 1}`}
+              // Not while a pick is being prepared: that one will be added to
+              // the list as it stood when it was picked, bringing back
+              // anything removed in the meantime.
+              disabled={busy}
               onClick={() => {
                 clearImage(draft)
                 onChange(values.filter((_, i) => i !== index))

@@ -163,6 +163,37 @@ export function isBusinessKey(key: string, businessId: string): boolean {
   return businessIdOf(key) === businessId
 }
 
+/**
+ * Where each purpose used to live before `businesses/<id>/`, for folder
+ * checks that must still accept pictures saved under the old layout.
+ */
+const LEGACY_FOLDERS: Partial<Record<UploadPurpose, readonly string[]>> = {
+  site: ["site", "sites"],
+  maintenance: ["maintenance"],
+  ticket: ["ticket"],
+}
+
+/**
+ * Whether a key belongs to one workspace AND sits in the folder for one
+ * purpose — `businesses/<id>/<purpose>/…`, or the legacy root for it.
+ *
+ * Stricter than `isBusinessKey`, for records that point at pictures: an
+ * inventory item may only reference product pictures, a logo only logos.
+ * Without the folder check, a record could adopt a picture that another
+ * record owns, and deleting it would take the other record's picture too.
+ */
+export function isBusinessKeyIn(
+  key: string,
+  businessId: string,
+  purpose: UploadPurpose
+): boolean {
+  if (!isBusinessKey(key, businessId)) return false
+  if (key.startsWith(`businesses/${businessId}/${purpose}/`)) return true
+  return (LEGACY_FOLDERS[purpose] ?? []).some((root) =>
+    key.startsWith(`${root}/${businessId}/`)
+  )
+}
+
 export type SignedUpload = {
   /** PUT the bytes here, with the same Content-Type. */
   uploadUrl: string
@@ -404,18 +435,27 @@ export function isOwnUpload(url: string) {
  *
  * Deletes are batched because S3 charges a request either way, and a form
  * with a dozen pictures otherwise costs a dozen round trips.
+ *
+ * `businessId` is required: only that workspace's keys are ever deleted.
+ * Every caller works from URLs that came, at some point, from a request
+ * body, so the fence lives here rather than in each route — a route that
+ * forgot it would otherwise let one business delete another's pictures.
  */
-export async function deleteUploads(urls: string[]): Promise<{
+export async function deleteUploads(
+  urls: string[],
+  businessId: string
+): Promise<{
   deleted: number
   failed: string[]
 }> {
-  // The same fence as deleteFile: a URL that resolves to a key outside the
-  // app's own folders is dropped here, whatever the caller was handed.
   const keys = [
     ...new Set(
       urls
         .map(keyFromUrl)
-        .filter((key): key is string => key !== null && isOurKey(key))
+        .filter(
+          (key): key is string =>
+            key !== null && isOurKey(key) && isBusinessKey(key, businessId)
+        )
     ),
   ]
   if (keys.length === 0 || !uploadsConfigured()) {
@@ -456,9 +496,13 @@ export async function deleteUploads(urls: string[]): Promise<{
  * the browser is what stops a closed tab from leaving an orphan behind for
  * ever.
  */
-export async function reconcileUploads(before: string[], after: string[]) {
+export async function reconcileUploads(
+  before: string[],
+  after: string[],
+  businessId: string
+) {
   const kept = new Set(after)
   const orphans = before.filter((url) => url && !kept.has(url))
   if (orphans.length === 0) return { deleted: 0, failed: [] }
-  return deleteUploads(orphans)
+  return deleteUploads(orphans, businessId)
 }

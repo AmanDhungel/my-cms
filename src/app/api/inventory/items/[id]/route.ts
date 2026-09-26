@@ -2,12 +2,34 @@ import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { assertItemIsNew, itemImagesFrom } from "@/lib/inventory"
 import { connectToDatabase } from "@/lib/mongodb"
-import { deleteUploads, reconcileUploads } from "@/lib/s3"
+import { deleteUploads } from "@/lib/s3"
 import { itemSchema } from "@/lib/validations/inventory"
 import { InventoryCategory } from "@/models/inventory-category"
 import { InventoryItem, toItemDTO } from "@/models/inventory-item"
 
 export const runtime = "nodejs"
+
+/**
+ * The pictures no other item of this business still points at.
+ *
+ * Items can only reference their own business's product pictures, but two
+ * items can still share one (a copied URL through the API). Deleting a
+ * picture because one of them let go of it would break the other.
+ */
+async function onlyHere(urls: string[], businessId: string, itemId: string) {
+  if (urls.length === 0) return []
+  const others = await InventoryItem.find({
+    business: businessId,
+    _id: { $ne: itemId },
+    "images.url": { $in: urls },
+  })
+    .select("images.url")
+    .lean()
+  const shared = new Set(
+    others.flatMap((one) => (one.images ?? []).map((image) => image.url))
+  )
+  return urls.filter((url) => !shared.has(url))
+}
 
 /** Edit an item, including the stock count and where it is kept. */
 export async function PATCH(
@@ -66,10 +88,11 @@ export async function PATCH(
      * awaited: a bucket that refuses a delete must not fail the edit.
      */
     if (values.images !== undefined) {
-      void reconcileUploads(
-        before,
-        (item.images ?? []).map((one) => one.url)
-      )
+      const kept = new Set((item.images ?? []).map((one) => one.url))
+      const dropped = before.filter((url) => !kept.has(url))
+      void onlyHere(dropped, viewer.businessId, String(item._id))
+        .then((urls) => deleteUploads(urls, viewer.businessId))
+        .catch(() => undefined)
     }
 
     await item.populate("category", "name")
@@ -104,7 +127,11 @@ export async function DELETE(
 
     // After the row is gone, so a failed delete never loses the pictures.
     const urls = (item.images ?? []).map((one) => one.url)
-    if (urls.length > 0) void deleteUploads(urls)
+    if (urls.length > 0) {
+      void onlyHere(urls, viewer.businessId, String(item._id))
+        .then((own) => deleteUploads(own, viewer.businessId))
+        .catch(() => undefined)
+    }
 
     return ok({ id: String(item._id) })
   } catch (error) {

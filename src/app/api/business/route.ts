@@ -1,7 +1,7 @@
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
-import { isBusinessKey, keyFromUrl, reconcileUploads } from "@/lib/s3"
+import { isBusinessKeyIn, keyFromUrl, reconcileUploads } from "@/lib/s3"
 import { businessSettingsSchema } from "@/lib/validations/auth"
 import { cleanWeek } from "@/lib/week-server"
 import { Business, toBusinessDTO } from "@/models/business"
@@ -26,7 +26,7 @@ export async function PATCH(request: Request) {
     if (logoChanged) {
       if (values.logo) {
         const key = keyFromUrl(values.logo.url)
-        if (!key || !isBusinessKey(key, owner.businessId)) {
+        if (!key || !isBusinessKeyIn(key, owner.businessId, "logo")) {
           throw new HttpError(400, "That picture isn't one of ours")
         }
         logo = { key, url: values.logo.url }
@@ -74,7 +74,8 @@ export async function PATCH(request: Request) {
     if (logoChanged) {
       void reconcileUploads(
         previousLogoUrl ? [previousLogoUrl] : [],
-        logo ? [logo.url] : []
+        logo ? [logo.url] : [],
+        owner.businessId
       )
     }
 

@@ -153,6 +153,14 @@ function Editor({
   const chosen = templateById(template)
 
   const [uploading, setUploading] = React.useState(false)
+  // Pictures still being compressed. Save waits for them: saving before one
+  // is ready would store the page without it, and the editor remounting on
+  // the save would drop it on the floor.
+  const [preparing, setPreparing] = React.useState(0)
+  const onPreparing = React.useCallback(
+    (delta: 1 | -1) => setPreparing((count) => Math.max(0, count + delta)),
+    []
+  )
 
   function removeOrphans(fresh: string[]) {
     if (fresh.length === 0) return
@@ -196,9 +204,12 @@ function Editor({
    * saves are left alone: the stored site still points at them.
    */
   async function submit() {
-    if (save.isPending || uploading) return
+    if (save.isPending || uploading || preparing > 0) return
 
+    // The empty rows are dropped from what is on screen too, so an error
+    // about "service 2" points at the row the owner sees as service 2.
     const draft = pruneDraft(content)
+    setContent(draft)
     const check = siteSchema.safeParse({
       slug,
       template,
@@ -311,156 +322,171 @@ function Editor({
             <button
               type="button"
               onClick={() => void submit()}
-              disabled={!dirty || busy}
+              disabled={!dirty || busy || preparing > 0}
               className={primaryButtonClass}
             >
               {uploading
                 ? "Uploading pictures…"
                 : save.isPending
                   ? "Saving…"
-                  : "Save changes"}
+                  : preparing > 0
+                    ? "Preparing picture…"
+                    : "Save changes"}
             </button>
           </>
         }
       />
 
-      {/* The address, and whether anyone can see it yet. */}
-      <div className="border-n-200 flex flex-wrap items-end gap-4 rounded-[14px] border bg-white p-4">
-        <label className="flex min-w-[240px] flex-1 flex-col gap-[7px]">
-          <FieldLabel>Web address</FieldLabel>
-          <div className="flex items-center gap-0">
-            <input
-              value={slug}
-              onChange={(event) => {
-                setSlug(event.target.value.toLowerCase().trim())
-                setErrors((prev) => ({ ...prev, slug: "" }))
-              }}
-              aria-label="Web address"
-              aria-invalid={Boolean(errors.slug)}
-              className={cn(inputClass, "rounded-r-none text-right font-mono")}
-            />
-            <span className="border-n-300 bg-n-100 text-n-600 h-[42px] rounded-r-md border border-l-0 px-2.5 font-mono text-[13px] leading-[40px]">
-              .{url.split("//")[1]?.split(".").slice(1).join(".") ?? "localhost"}
+      {/*
+        Everything editable is frozen while a save is in flight. The editor
+        restarts from the stored site once the save lands, so anything typed
+        in the meantime would be silently thrown away.
+      */}
+      <div
+        inert={busy || undefined}
+        aria-busy={busy || undefined}
+        data-site-workspace
+        className={cn("flex flex-col gap-5 transition-opacity", busy && "opacity-60")}
+      >
+        {/* The address, and whether anyone can see it yet. */}
+        <div className="border-n-200 flex flex-wrap items-end gap-4 rounded-[14px] border bg-white p-4">
+          <label className="flex min-w-[240px] flex-1 flex-col gap-[7px]">
+            <FieldLabel>Web address</FieldLabel>
+            <div className="flex items-center gap-0">
+              <input
+                value={slug}
+                onChange={(event) => {
+                  setSlug(event.target.value.toLowerCase().trim())
+                  setErrors((prev) => ({ ...prev, slug: "" }))
+                }}
+                aria-label="Web address"
+                aria-invalid={Boolean(errors.slug)}
+                className={cn(inputClass, "rounded-r-none text-right font-mono")}
+              />
+              <span className="border-n-300 bg-n-100 text-n-600 h-[42px] rounded-r-md border border-l-0 px-2.5 font-mono text-[13px] leading-[40px]">
+                .{url.split("//")[1]?.split(".").slice(1).join(".") ?? "localhost"}
+              </span>
+            </div>
+            <FieldError message={errors.slug} />
+          </label>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-n-500 font-mono text-[10.5px] tracking-[0.07em]">
+              STATUS
+            </span>
+            <span
+              className={cn(
+                "w-fit rounded-full px-2.5 py-1 text-[12px] font-semibold",
+                saved.published
+                  ? "bg-s-done/15 text-s-done"
+                  : "bg-n-100 text-n-500"
+              )}
+            >
+              {saved.published ? "Live" : "Not published"}
             </span>
           </div>
-          <FieldError message={errors.slug} />
-        </label>
 
-        <div className="flex flex-col gap-1.5">
-          <span className="text-n-500 font-mono text-[10.5px] tracking-[0.07em]">
-            STATUS
-          </span>
-          <span
-            className={cn(
-              "w-fit rounded-full px-2.5 py-1 text-[12px] font-semibold",
-              saved.published
-                ? "bg-s-done/15 text-s-done"
-                : "bg-n-100 text-n-500"
-            )}
-          >
-            {saved.published ? "Live" : "Not published"}
-          </span>
+          {saved.published ? (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className={secondaryButtonClass}
+            >
+              Open {url.replace(/^https?:\/\//, "")} ↗
+            </a>
+          ) : (
+            <span className="text-n-500 max-w-[280px] text-[12.5px] leading-snug">
+              It will be at{" "}
+              <span className="font-mono">{url.replace(/^https?:\/\//, "")}</span>{" "}
+              once you publish.
+            </span>
+          )}
         </div>
 
-        {saved.published ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className={secondaryButtonClass}
-          >
-            Open {url.replace(/^https?:\/\//, "")} ↗
-          </a>
+        <div className="border-n-200 flex w-fit gap-0.5 rounded-md border bg-white p-0.5">
+          {(["template", "content", "preview"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setTab(option)}
+              aria-pressed={tab === option}
+              className={cn(
+                "rounded-[5px] px-3 py-1.5 text-[12.5px] capitalize transition-colors",
+                tab === option
+                  ? "bg-p-100 text-p-700 font-semibold"
+                  : "text-n-600 hover:bg-n-100 font-medium"
+              )}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+
+        {tab === "template" ? (
+          <TemplateGallery
+            value={template}
+            onPick={(id) => {
+              setTemplate(id)
+              // Everything typed so far is kept: the page on the next tab is
+              // the same words in the new shape.
+              toast.success(`${templateById(id).name} chosen`)
+            }}
+          />
+        ) : tab === "content" ? (
+          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="flex min-w-0 flex-col gap-3">
+              <p className="text-n-500 m-0 text-[13px] leading-relaxed">
+                Using <span className="font-semibold">{chosen.name}</span>, which
+                shows {sections.length} sections. Click any words on the page to
+                change them, and any picture to add or replace it. Faded words are
+                samples: they are never published, and a section left as samples
+                is left off the live site.
+              </p>
+              <div
+                data-site-canvas
+                className="border-n-200 overflow-hidden rounded-[14px] border bg-white"
+              >
+                <InlineEditor
+                  template={template}
+                  draft={content}
+                  extraSlots={extraSlots}
+                  onDraft={setContent}
+                  onExtraSlots={setExtraSlots}
+                  onPreparing={onPreparing}
+                  uploads={uploads}
+                  errors={errors}
+                />
+              </div>
+            </div>
+
+            <DetailsPanel
+              draft={content}
+              onDraft={setContent}
+              errors={errors}
+              uploads={uploads}
+            />
+          </div>
         ) : (
-          <span className="text-n-500 max-w-[280px] text-[12.5px] leading-snug">
-            It will be at{" "}
-            <span className="font-mono">{url.replace(/^https?:\/\//, "")}</span>{" "}
-            once you publish.
-          </span>
-        )}
-      </div>
-
-      <div className="border-n-200 flex w-fit gap-0.5 rounded-md border bg-white p-0.5">
-        {(["template", "content", "preview"] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setTab(option)}
-            aria-pressed={tab === option}
-            className={cn(
-              "rounded-[5px] px-3 py-1.5 text-[12.5px] capitalize transition-colors",
-              tab === option
-                ? "bg-p-100 text-p-700 font-semibold"
-                : "text-n-600 hover:bg-n-100 font-medium"
-            )}
-          >
-            {option}
-          </button>
-        ))}
-      </div>
-
-      {tab === "template" ? (
-        <TemplateGallery
-          value={template}
-          onPick={(id) => {
-            setTemplate(id)
-            // Everything typed so far is kept: the page on the next tab is
-            // the same words in the new shape.
-            toast.success(`${templateById(id).name} chosen`)
-          }}
-        />
-      ) : tab === "content" ? (
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="flex min-w-0 flex-col gap-3">
-            <p className="text-n-500 m-0 text-[13px] leading-relaxed">
-              Using <span className="font-semibold">{chosen.name}</span>, which
-              shows {sections.length} sections. Click any words on the page to
-              change them, and any picture to add or replace it. Faded words are
-              samples: they are never published, and a section left as samples
-              is left off the live site.
+          <div className="flex flex-col gap-3">
+            <p className="text-n-500 m-0 text-[13px]">
+              Exactly what a visitor gets, with whatever you have typed so far.
+              {dirty ? " Unsaved changes are included." : ""}
             </p>
             <div
-              data-site-canvas
+              data-site-preview
               className="border-n-200 overflow-hidden rounded-[14px] border bg-white"
             >
-              <InlineEditor
+              <SiteRenderer
                 template={template}
-                draft={content}
+                content={previewContent(content)}
                 extraSlots={extraSlots}
-                onDraft={setContent}
-                onExtraSlots={setExtraSlots}
-                uploads={uploads}
-                errors={errors}
+                mode="preview"
               />
             </div>
           </div>
-
-          <DetailsPanel
-            draft={content}
-            onDraft={setContent}
-            errors={errors}
-            uploads={uploads}
-          />
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          <p className="text-n-500 m-0 text-[13px]">
-            Exactly what a visitor gets, with whatever you have typed so far.
-            {dirty ? " Unsaved changes are included." : ""}
-          </p>
-          <div
-            data-site-preview
-            className="border-n-200 overflow-hidden rounded-[14px] border bg-white"
-          >
-            <SiteRenderer
-              template={template}
-              content={previewContent(content)}
-              extraSlots={extraSlots}
-              mode="preview"
-            />
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </DashboardMain>
   )
 }

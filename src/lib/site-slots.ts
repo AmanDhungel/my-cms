@@ -186,16 +186,17 @@ export function withSamples(
     description: text(content.description, "description"),
     hero: {
       ...content.hero,
-      // The business name, not sample copy: it is what the published page
-      // falls back to, so it is what the editor should show.
-      headline: content.hero.headline ?? (content.name || mockText("hero.headline")),
+      // Left as it is: with no headline the layout falls back to the business
+      // name, which is what publishes, so it is what the editor shows.
+      headline: content.hero.headline,
       sub: text(content.hero.sub, "hero.sub"),
       ctaLabel: text(content.hero.ctaLabel, "hero.ctaLabel"),
       image: picture(content.hero.image, MOCK_CONTENT.hero.image),
     },
     about: {
       ...content.about,
-      title: text(content.about.title, "about.title"),
+      // Likewise: the template's own heading stands in, not a sample.
+      title: content.about.title,
       body: text(content.about.body, "about.body"),
       image: picture(content.about.image, MOCK_CONTENT.about.image),
     },
