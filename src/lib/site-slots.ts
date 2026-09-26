@@ -79,6 +79,31 @@ export function slotsForLayout(layoutId: string): string[] {
   return [...new Set(ids)]
 }
 
+/**
+ * The content with every section the template doesn't draw emptied out.
+ *
+ * For the public page. The renderer is a client component, so whatever it
+ * is handed is serialised into the page's HTML — including sections this
+ * template never shows, kept from another template. Those are the owner's
+ * stored words but not their published site, so they are dropped on the
+ * server before anything is sent. Hero and contact are kept whole: every
+ * layout draws the hero, and the hero, nav and footer read contact details.
+ */
+export function publishedContent(
+  content: SiteContent,
+  sections: readonly string[]
+): SiteContent {
+  const shows = (key: SectionKey) => sections.includes(key)
+  return {
+    ...content,
+    about: shows("about") ? content.about : { title: null, body: null, image: null },
+    services: shows("services") ? content.services : [],
+    products: shows("products") ? content.products : [],
+    gallery: shows("gallery") ? content.gallery : [],
+    faq: shows("faq") ? content.faq : [],
+  }
+}
+
 // ---- reading and writing by path -------------------------------------------
 
 type Tree = Record<string, unknown> | unknown[]

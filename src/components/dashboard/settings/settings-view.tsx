@@ -97,6 +97,7 @@ export function SettingsView({
     emptyImage(business.logo?.url ?? null)
   )
   const [uploading, setUploading] = React.useState(false)
+  const savingRef = React.useRef(false)
   const logoChanged = Boolean(logo.file) || logo.url !== savedLogo
   const dirty = isDirty || logoChanged
 
@@ -165,7 +166,11 @@ export function SettingsView({
    * succeeded, the new object is removed again and the old logo stays.
    */
   async function submit(values: BusinessSettingsValues) {
-    if (mutation.isPending || uploading) return
+    // The ref, not just the disabled button: two clicks inside one render
+    // both see the old `isPending`, and two saves in flight would race each
+    // other over which logo to keep.
+    if (savingRef.current || mutation.isPending || uploading) return
+    savingRef.current = true
 
     let uploaded: string | null = null
     let url: string | null = logo.url
@@ -178,6 +183,7 @@ export function SettingsView({
         toast.error(
           error instanceof Error ? error.message : "The logo didn't upload"
         )
+        savingRef.current = false
         return
       } finally {
         setUploading(false)
@@ -189,6 +195,9 @@ export function SettingsView({
       : values
 
     mutation.mutate(body, {
+      onSettled: () => {
+        savingRef.current = false
+      },
       onError: () => {
         if (!uploaded) return
         // Only the object this save created; the saved logo is untouched.
@@ -203,7 +212,7 @@ export function SettingsView({
 
   return (
     <DashboardMain className="max-w-[980px] gap-[22px] pb-16">
-      <form onSubmit={handleSubmit(submit)}>
+      <form onSubmit={(event) => void handleSubmit(submit)(event)}>
         <PageHeading
           eyebrow="Account"
           title="Organization settings"

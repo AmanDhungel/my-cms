@@ -1,4 +1,4 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { HttpError, fail, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import {
   MAX_UPLOAD_BYTES,
@@ -6,12 +6,12 @@ import {
   isBusinessKey,
   isUploadPurpose,
   keyFromUrl,
-  signUpload,
   sniffImageType,
   uploadFile,
 } from "@/lib/s3"
 import { assertMultipartLength } from "@/lib/storage/http"
-import { uploadSchema, deleteUploadSchema } from "@/lib/validations/uploads"
+import { isTenantRequest } from "@/lib/tenancy"
+import { deleteUploadSchema } from "@/lib/validations/uploads"
 
 export const runtime = "nodejs"
 
@@ -22,14 +22,17 @@ export const runtime = "nodejs"
  * types, what size — are the same everywhere, and a second copy of them is a
  * second place for them to drift.
  *
- * Two bodies, told apart by Content-Type. JSON asks for a signature and the
- * browser PUTs to S3 itself; the signature is narrowed to a single key, one
- * content type and one size, and expires in five minutes, so it is worth
- * nothing to anyone else. Multipart carries the bytes here, where they are
- * read before they are stored: the type comes from the first bytes, not the
- * filename, so nothing but a picture ever lands in the bucket.
+ * One body: multipart, carrying the bytes here, where they are read before
+ * they are stored — the type comes from the first bytes, not the filename,
+ * so nothing but a picture ever lands in the bucket. The older JSON body,
+ * which asked for a presigned PUT and let the browser write to S3 unchecked,
+ * is retired: nothing calls it, and it now answers 410.
+ *
+ * Not reachable from a tenant site's host: the proxy is kept off this route
+ * (see proxy.ts), so the route turns such requests away itself.
  */
 export async function POST(request: Request) {
+  if (isTenantRequest(request)) return fail("Not found", 404)
   try {
     const viewer = await requireRole("owner", "supervisor", "employee")
 
@@ -85,16 +88,7 @@ export async function POST(request: Request) {
       return ok({ key: stored.key, url: stored.url }, 201)
     }
 
-    const values = uploadSchema.parse(await request.json())
-
-    const signed = await signUpload(
-      viewer.businessId,
-      values.purpose,
-      values.contentType,
-      values.size
-    )
-
-    return ok({ uploadUrl: signed.uploadUrl, url: signed.url })
+    return fail("Uploads now go through the form upload", 410)
   } catch (error) {
     return handleApiError(error)
   }
@@ -113,6 +107,7 @@ export async function POST(request: Request) {
  * has orphaned something and nothing else will notice.
  */
 export async function DELETE(request: Request) {
+  if (isTenantRequest(request)) return fail("Not found", 404)
   try {
     const viewer = await requireRole("owner", "supervisor", "employee")
     const { urls } = deleteUploadSchema.parse(await request.json())

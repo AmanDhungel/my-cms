@@ -1,7 +1,7 @@
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
-import { isBusinessKeyIn, keyFromUrl, reconcileUploads } from "@/lib/s3"
+import { deleteUploads, isBusinessKeyIn, keyFromUrl } from "@/lib/s3"
 import { businessSettingsSchema } from "@/lib/validations/auth"
 import { cleanWeek } from "@/lib/week-server"
 import { Business, toBusinessDTO } from "@/models/business"
@@ -21,24 +21,25 @@ export async function PATCH(request: Request) {
     // so one owner can never point their record at another's object.
     const logoChanged = values.logo !== undefined
     let logo: { key: string; url: string } | null = null
-    let previousLogoUrl: string | null = null
 
-    if (logoChanged) {
-      if (values.logo) {
-        const key = keyFromUrl(values.logo.url)
-        if (!key || !isBusinessKeyIn(key, owner.businessId, "logo")) {
-          throw new HttpError(400, "That picture isn't one of ours")
-        }
-        logo = { key, url: values.logo.url }
+    if (logoChanged && values.logo) {
+      const key = keyFromUrl(values.logo.url)
+      if (!key || !isBusinessKeyIn(key, owner.businessId, "logo")) {
+        throw new HttpError(400, "That picture isn't one of ours")
       }
-      const current = await Business.findById(owner.businessId)
-        .select("logo")
-        .lean()
-      previousLogoUrl = current?.logo?.url ?? null
+      logo = { key, url: values.logo.url }
     }
 
-    const business = await Business.findByIdAndUpdate(
-      owner.businessId,
+    /*
+     * One atomic write that hands back the document as it was just before
+     * it. The logo this write replaced is read from that, not from a
+     * separate read beforehand: two saves racing each other would both have
+     * read the same "old" logo, both deleted it, and left the loser's new
+     * upload orphaned in the bucket. This way each save deletes exactly the
+     * logo it displaced — the winner's is the one left.
+     */
+    const previous = await Business.findOneAndUpdate(
+      { _id: owner.businessId },
       {
         $set: {
           name: values.name,
@@ -65,20 +66,21 @@ export async function PATCH(request: Request) {
             }
           : {}),
       },
-      { new: true, runValidators: true }
-    ).orFail()
+      { returnDocument: "before", runValidators: true }
+    )
+      .select("logo")
+      .lean()
+      .orFail()
 
     // Only once the record points elsewhere is the old object let go of, so
     // a failed save never costs the logo that was already there. Nothing
     // waits on the bucket: the edit has landed either way.
-    if (logoChanged) {
-      void reconcileUploads(
-        previousLogoUrl ? [previousLogoUrl] : [],
-        logo ? [logo.url] : [],
-        owner.businessId
-      )
+    const replaced = previous.logo?.url ?? null
+    if (logoChanged && replaced && replaced !== logo?.url) {
+      void deleteUploads([replaced], owner.businessId)
     }
 
+    const business = await Business.findById(owner.businessId).orFail()
     return ok({ business: toBusinessDTO(business) })
   } catch (error) {
     return handleApiError(error)

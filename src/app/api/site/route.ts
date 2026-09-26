@@ -3,8 +3,7 @@ import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import {
-  isBusinessKeyIn,
-  keyFromUrl,
+  foreignPictures,
   reconcileUploads,
   uploadsConfigured,
 } from "@/lib/s3"
@@ -62,11 +61,8 @@ export async function PUT(request: Request) {
       ...values.content.products.map((one) => one.image),
       ...values.content.gallery.map((one) => one.url),
     ].filter((url): url is string => Boolean(url))
-    for (const url of incoming) {
-      const key = keyFromUrl(url)
-      if (key && !isBusinessKeyIn(key, viewer.businessId, "site")) {
-        throw new HttpError(400, "That picture isn't one of ours")
-      }
+    if (foreignPictures(incoming, viewer.businessId, "site").length > 0) {
+      throw new HttpError(400, "That picture isn't one of ours")
     }
 
     await connectToDatabase()

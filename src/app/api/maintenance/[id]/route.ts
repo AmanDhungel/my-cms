@@ -5,7 +5,7 @@ import { HttpError, handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { ownParty } from "@/lib/money-refs"
 import { connectToDatabase } from "@/lib/mongodb"
-import { deleteUploads, reconcileUploads } from "@/lib/s3"
+import { deleteUploads, foreignPictures, reconcileUploads } from "@/lib/s3"
 import { dayRangeInZone } from "@/lib/time"
 import { maintenanceSchema } from "@/lib/validations/maintenance"
 import { getWorkspace } from "@/lib/workspace"
@@ -28,6 +28,16 @@ export async function PATCH(
     const viewer = await requireRole("owner", "supervisor")
     const { id } = await ctx.params
     const values = maintenanceSchema.parse(await request.json())
+
+    // A photo in our bucket must be this workspace's own maintenance photo.
+    // Once stored, dropping it on a later save would delete it — so another
+    // business's picture, or this one's site or product pictures, never get
+    // in. Addresses outside the bucket are left as they are.
+    if (foreignPictures(values.photos, viewer.businessId, "maintenance").length > 0) {
+      throw new HttpError(422, "Validation failed", {
+        photos: ["That picture isn't one of ours"],
+      })
+    }
 
     await connectToDatabase()
     const business = await getWorkspace(viewer.businessId)

@@ -102,6 +102,17 @@ export function tenantFromHost(host: string | null | undefined): string | null {
   return label
 }
 
+/**
+ * Whether a request arrived on a tenant site's host.
+ *
+ * For the few API routes the proxy is kept away from (auth, uploads): the
+ * proxy is what normally stops a tenant host from reaching the product, so
+ * those routes ask here themselves and answer 404 — a public site has no API.
+ */
+export function isTenantRequest(request: Request) {
+  return tenantFromHost(request.headers.get("host")) !== null
+}
+
 /** Where a published site lives, for links and for the copy-to-clipboard. */
 export function siteHostFor(slug: string, port?: string | number | null) {
   const host = `${slug}.${ROOT_DOMAIN}`

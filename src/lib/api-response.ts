@@ -10,11 +10,18 @@ export type ApiError = {
 /** Thrown by route guards; `handleApiError` turns it into the right status. */
 export class HttpError extends Error {
   readonly status: number
+  /** Optional per-field messages, sent back as `fieldErrors`. */
+  readonly fieldErrors?: ApiError["fieldErrors"]
 
-  constructor(status: number, message: string) {
+  constructor(
+    status: number,
+    message: string,
+    fieldErrors?: ApiError["fieldErrors"]
+  ) {
     super(message)
     this.name = "HttpError"
     this.status = status
+    this.fieldErrors = fieldErrors
   }
 }
 
@@ -29,7 +36,7 @@ export function fail(message: string, status = 400, fieldErrors?: ApiError["fiel
 /** Maps thrown errors to a consistent JSON body so the client can rely on `error`. */
 export function handleApiError(error: unknown) {
   if (error instanceof HttpError) {
-    return fail(error.message, error.status)
+    return fail(error.message, error.status, error.fieldErrors)
   }
 
   if (error instanceof ZodError) {

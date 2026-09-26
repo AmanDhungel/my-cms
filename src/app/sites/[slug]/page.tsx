@@ -3,6 +3,8 @@ import { notFound } from "next/navigation"
 
 import { SiteRenderer } from "@/components/sites/site-renderer"
 import { findPublishedSite } from "@/lib/site-server"
+import { publishedContent } from "@/lib/site-slots"
+import { sectionsOf } from "@/lib/site-templates"
 import { toExtraSlots, toSiteContent } from "@/models/site"
 
 /**
@@ -53,7 +55,12 @@ export default async function TenantSitePage({
   return (
     <SiteRenderer
       template={site.template}
-      content={toSiteContent(site.content)}
+      // Only what this template shows: the renderer's props are serialised
+      // into the HTML, so anything else would be readable in the source.
+      content={publishedContent(
+        toSiteContent(site.content),
+        sectionsOf(site.template)
+      )}
       extraSlots={toExtraSlots(site.extraSlots)}
       mode="published"
       className="min-h-screen"
