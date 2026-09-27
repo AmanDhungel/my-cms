@@ -1,4 +1,4 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { assertItemIsNew, itemImagesFrom } from "@/lib/inventory"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -37,7 +37,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("owner", "supervisor")
-    const values = itemSchema.parse(await request.json())
+    const values = itemSchema.parse(await readJson(request))
 
     await connectToDatabase()
 
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
     await assertItemIsNew(viewer.businessId, values.name, values.sku)
 
-    const images = itemImagesFrom(values.images ?? [], viewer.businessId)
+    const images = itemImagesFrom(values.images ?? [], viewer.businessId, viewer.id)
 
     const item = await InventoryItem.create({
       business: viewer.businessId,

@@ -73,6 +73,22 @@ const maintenanceSchema = new Schema(
       type: [{ type: String, trim: true, maxlength: 600 }],
       default: [],
     },
+    /**
+     * Who added each photo (`photos` stays a list of URLs). Maintained on
+     * every save by the server; a photo with no entry predates tracking and
+     * only the owner can remove it.
+     */
+    photoUploaders: {
+      type: [
+        {
+          _id: false,
+          url: { type: String, required: true, trim: true, maxlength: 600 },
+          uploadedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+          uploadedAt: { type: Date, required: true },
+        },
+      ],
+      default: [],
+    },
 
     note: { type: String, trim: true, maxlength: 1000 },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -107,6 +123,8 @@ export type MaintenanceDTO = {
   cost: number | null
   assignee: { id: string; name: string } | null
   photos: string[]
+  /** Who added each photo, by URL; photos from before tracking are absent. */
+  photoUploaders: Record<string, string>
   note: string | null
   createdAt: string
 }
@@ -152,6 +170,9 @@ export function toMaintenanceDTO(
     cost: row.cost ?? null,
     assignee: named(row.assignee as MaybePopulated),
     photos: (row.photos ?? []).filter(Boolean),
+    photoUploaders: Object.fromEntries(
+      (row.photoUploaders ?? []).map((one) => [one.url, String(one.uploadedBy)])
+    ),
     note: text(row.note),
     createdAt: (row.createdAt as Date).toISOString(),
   }

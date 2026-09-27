@@ -10,6 +10,8 @@ declare module "next-auth" {
       businessId: string
       /** UI hint only — /admin re-checks the email against the env list. */
       superAdmin: boolean
+      /** When this session signed in (ms), checked against sessionsValidAfter. */
+      signedInAt?: number
     } & DefaultSession["user"]
   }
 
@@ -18,6 +20,7 @@ declare module "next-auth" {
     role: UserRole
     businessId: string
     superAdmin?: boolean
+    signedInAt?: number
   }
 }
 
@@ -31,5 +34,6 @@ declare module "@auth/core/jwt" {
     role: UserRole
     businessId: string
     superAdmin?: boolean
+    signedInAt?: number
   }
 }

@@ -292,6 +292,15 @@ export const ACTIVITY_ACTIONS = [
   "quote_shared",
   "quote_reviewed",
   "quote_revoked",
+  // Security audit trail (additive). Never carries a password, token or key.
+  "login_succeeded",
+  "login_failed",
+  "login_rate_limited",
+  "record_deleted",
+  "image_deleted",
+  "role_changed",
+  "password_changed",
+  "logo_changed",
 ] as const
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number]
 
@@ -307,6 +316,8 @@ export const ACTIVITY_TARGETS = [
   "site",
   "maintenance",
   "quote",
+  "account",
+  "image",
 ] as const
 export type ActivityTarget = (typeof ACTIVITY_TARGETS)[number]
 

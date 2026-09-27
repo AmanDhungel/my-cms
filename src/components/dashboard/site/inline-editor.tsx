@@ -6,10 +6,13 @@ import { toast } from "sonner"
 import { cn } from "cn"
 
 import {
-  blankRow,
-  editorContent,
-  type SiteDraft,
-} from "@/components/dashboard/site/site-draft"
+  editorViews,
+  insertIndexAt,
+  realCount,
+  realIndexAt,
+  type SampleLayout,
+} from "@/components/dashboard/site/sample-rows"
+import { blankRow, type SiteDraft } from "@/components/dashboard/site/site-draft"
 import { ImagePlaceholder, radius } from "@/components/sites/parts"
 import {
   SlotRendererContext,
@@ -86,32 +89,24 @@ export function slotLabel(id: string) {
 }
 
 /**
- * Write one slot into the draft.
- *
- * A list that is still showing samples has no rows to write into. Editing a
- * sample row makes it the first real row — holding just what was typed —
- * and the other samples give way, because from then on the list is the
- * owner's own and shows only what they have put in it.
+ * A list slot id, split: "services.3.title" → the list, the row as drawn,
+ * and the field.
  */
-function writeSlot(draft: SiteDraft, id: string, value: unknown): SiteDraft {
+function listSlot(id: string) {
   const item = LIST_ITEM.exec(id)
-  if (item) {
-    const list = item[1] as ListSlotId
-    const rows = draft[list] as unknown[]
-    if (rows.length === 0) {
-      return { ...draft, [list]: [{ ...blankRow(list), [item[3]]: value }] }
-    }
-    if (Number(item[2]) >= rows.length) return draft
-  }
-  return setPath(draft, id, value)
+  return item
+    ? { list: item[1] as ListSlotId, row: Number(item[2]), field: item[3] }
+    : null
 }
 
 export function InlineEditor({
   template,
   draft,
   extraSlots,
+  layout,
   onDraft,
   onExtraSlots,
+  onLayout,
   onPreparing,
   uploads,
   errors,
@@ -119,8 +114,11 @@ export function InlineEditor({
   template: string
   draft: SiteDraft
   extraSlots: Record<string, string>
+  /** Which rows of each list are real and which are samples (sample-rows.ts). */
+  layout: SampleLayout
   onDraft: Setter<SiteDraft>
   onExtraSlots: Setter<Record<string, string>>
+  onLayout: Setter<SampleLayout>
   /** Told +1 when a picture starts compressing and -1 when it is done. */
   onPreparing?: (delta: 1 | -1) => void
   uploads: boolean
@@ -129,6 +127,12 @@ export function InlineEditor({
   // A picture can finish compressing after the editor has gone (the page
   // was left). Its preview then has no one to show it and is let go of.
   const aliveRef = React.useRef(true)
+  // The layout as it is by the time a picture has finished compressing,
+  // which may not be the layout it was picked under.
+  const layoutRef = React.useRef(layout)
+  React.useEffect(() => {
+    layoutRef.current = layout
+  })
   React.useEffect(() => {
     aliveRef.current = true
     return () => {
@@ -137,6 +141,49 @@ export function InlineEditor({
   }, [])
 
   const renderer = React.useMemo<SlotRenderer>(() => {
+    /**
+     * Write a value into the slot drawn at `id`. A real row is written in
+     * place; a sample becomes a real row holding just this value, inserted
+     * where it sits in the list, and the other samples stay samples.
+     */
+    function write(current: SampleLayout, id: string, value: unknown) {
+      const slot = listSlot(id)
+      if (!slot) {
+        onDraft((prev) => setPath(prev, id, value))
+        return
+      }
+      const entries = current[slot.list]
+      const entry = entries[slot.row]
+      if (entry === undefined) return
+      if (entry === "real") {
+        const at = realIndexAt(entries, slot.row)
+        onDraft((prev) => {
+          const old = getPath(prev, `${slot.list}.${at}.${slot.field}`) as
+            | ImageDraft
+            | undefined
+          // A picture it replaces is let go of here; revoking twice is
+          // harmless, so this is safe under a double-invoked updater.
+          if (old && typeof old === "object" && old.preview && value !== old) {
+            URL.revokeObjectURL(old.preview)
+          }
+          return setPath(prev, `${slot.list}.${at}.${slot.field}`, value)
+        })
+        return
+      }
+      const at = insertIndexAt(entries, slot.row)
+      onDraft((prev) => {
+        const rows = [...(prev[slot.list] as unknown[])]
+        rows.splice(at, 0, { ...blankRow(slot.list), [slot.field]: value })
+        return { ...prev, [slot.list]: rows }
+      })
+      onLayout((prev) => ({
+        ...prev,
+        [slot.list]: prev[slot.list].map((one, i) =>
+          i === slot.row ? ("real" as const) : one
+        ),
+      }))
+    }
+
     function commitText(id: string, text: string) {
       if (id.startsWith("heading.")) {
         onExtraSlots((prev) => {
@@ -148,9 +195,7 @@ export function InlineEditor({
         return
       }
       const required = id === "name" || REQUIRED_FIELD.test(id)
-      onDraft((prev) =>
-        writeSlot(prev, id, text === "" ? (required ? "" : null) : text)
-      )
+      write(layout, id, text === "" ? (required ? "" : null) : text)
     }
 
     async function pickImage(id: string, file: File) {
@@ -170,19 +215,18 @@ export function InlineEditor({
         if (next.preview) URL.revokeObjectURL(next.preview)
         return
       }
-      onDraft((prev) => {
-        const old = getPath(prev, id) as ImageDraft | undefined
-        // The picture it replaces is let go of here; revoking twice is
-        // harmless, so this is safe under a double-invoked updater.
-        if (old?.preview) URL.revokeObjectURL(old.preview)
-        return writeSlot(prev, id, { ...next, url: old?.url ?? null })
-      })
+      write(layoutRef.current, id, next)
     }
 
     function removeImage(id: string) {
+      const slot = listSlot(id)
+      const path = slot
+        ? `${slot.list}.${realIndexAt(layout[slot.list], slot.row)}.${slot.field}`
+        : id
+      if (slot && realIndexAt(layout[slot.list], slot.row) < 0) return
       onDraft((prev) => {
-        const old = getPath(prev, id) as ImageDraft | undefined
-        return old ? setPath(prev, id, clearImage(old)) : prev
+        const old = getPath(prev, path) as ImageDraft | undefined
+        return old ? setPath(prev, path, clearImage(old)) : prev
       })
     }
 
@@ -191,26 +235,39 @@ export function InlineEditor({
         ...prev,
         [list]: [...(prev[list] as unknown[]), blankRow(list)],
       }))
+      onLayout((prev) => ({ ...prev, [list]: [...prev[list], "real" as const] }))
     }
 
-    function removeRow(list: ListSlotId, index: number) {
-      onDraft((prev) => {
-        const rows = prev[list] as Record<string, unknown>[]
-        const row = rows[index]
-        for (const value of Object.values(row ?? {})) {
-          const image = value as ImageDraft | null
-          if (image && typeof image === "object" && image.preview) {
-            URL.revokeObjectURL(image.preview)
+    /** × on a row: a real row is removed, a sample is dismissed. */
+    function removeRow(list: ListSlotId, row: number) {
+      const at = realIndexAt(layout[list], row)
+      if (at >= 0) {
+        onDraft((prev) => {
+          const rows = prev[list] as Record<string, unknown>[]
+          for (const value of Object.values(rows[at] ?? {})) {
+            const image = value as ImageDraft | null
+            if (image && typeof image === "object" && image.preview) {
+              URL.revokeObjectURL(image.preview)
+            }
           }
-        }
-        return { ...prev, [list]: rows.filter((_, i) => i !== index) }
-      })
+          return { ...prev, [list]: rows.filter((_, i) => i !== at) }
+        })
+      }
+      onLayout((prev) => ({
+        ...prev,
+        [list]: prev[list].filter((_, i) => i !== row),
+      }))
     }
 
-    const errorFor = (id: string) =>
-      id.startsWith("heading.")
-        ? errors[`extraSlots.${id}`]
-        : errors[`content.${id}`]
+    // Errors come back against the draft's rows; the page draws them among
+    // samples, so a row's error is found through the layout.
+    const errorFor = (id: string) => {
+      if (id.startsWith("heading.")) return errors[`extraSlots.${id}`]
+      const slot = listSlot(id)
+      if (!slot) return errors[`content.${id}`]
+      const at = realIndexAt(layout[slot.list], slot.row)
+      return at < 0 ? undefined : errors[`content.${slot.list}.${at}.${slot.field}`]
+    }
 
     return {
       text: (props: TextSlotRenderProps) => (
@@ -224,12 +281,13 @@ export function InlineEditor({
           onRemove={removeImage}
         />
       ),
-      list: ({ id, count, children }: ListSlotRenderProps) => {
+      list: ({ id, children }: ListSlotRenderProps) => {
         const list = id as ListSlotId
+        // Only real rows count towards the limit; samples never do.
         return (
           <>
             {children}
-            {count < LIMITS[list] ? (
+            {realCount(layout[list]) < LIMITS[list] ? (
               <button
                 type="button"
                 data-add-row={list}
@@ -246,35 +304,54 @@ export function InlineEditor({
           </>
         )
       },
-      item: ({ listId, index, sampled, children }: ListItemRenderProps) => (
-        <div
-          data-edit-row={`${listId}.${index}`}
-          data-sample-row={sampled ? "" : undefined}
-          className="group/row relative grid"
-        >
-          {children}
-          {sampled ? null : (
+      item: ({ listId, index, children }: ListItemRenderProps) => {
+        const list = listId as ListSlotId
+        const sampled = typeof layout[list]?.[index] === "number"
+        const noun = LIST_NOUN[list]
+        return (
+          <div
+            data-edit-row={`${listId}.${index}`}
+            data-sample-row={sampled ? "" : undefined}
+            className="group/row relative grid"
+          >
+            {children}
+            {sampled ? (
+              <span
+                data-sample-tag
+                className="bg-n-800/85 pointer-events-none absolute top-1.5 left-1.5 z-10 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-white uppercase"
+              >
+                Sample
+              </span>
+            ) : null}
             <button
               type="button"
-              aria-label={`Remove ${LIST_NOUN[listId as ListSlotId]} ${index + 1}`}
-              onClick={() => removeRow(listId as ListSlotId, index)}
+              aria-label={
+                sampled
+                  ? `Dismiss sample ${noun} ${index + 1}`
+                  : `Remove ${noun} ${index + 1}`
+              }
+              onClick={() => removeRow(list, index)}
               className="text-n-700 absolute -top-2.5 -right-2.5 z-10 flex size-6 items-center justify-center rounded-full bg-white opacity-0 shadow-md ring-1 ring-black/10 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:text-red-600 focus-visible:opacity-100"
             >
               <XIcon className="size-3.5" />
             </button>
-          )}
-        </div>
-      ),
+          </div>
+        )
+      },
     }
-  }, [errors, onDraft, onExtraSlots, onPreparing, uploads])
+  }, [errors, layout, onDraft, onExtraSlots, onLayout, onPreparing, uploads])
 
-  const content = React.useMemo(() => editorContent(draft), [draft])
+  const { view, saved } = React.useMemo(
+    () => editorViews(draft, layout),
+    [draft, layout]
+  )
 
   return (
     <SlotRendererContext.Provider value={renderer}>
       <SiteRenderer
         template={template}
-        content={content}
+        content={view}
+        savedContent={saved}
         extraSlots={extraSlots}
         mode="editor"
       />

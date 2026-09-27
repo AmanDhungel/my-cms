@@ -9,6 +9,7 @@ import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import { Panel } from "@/components/dashboard/ui"
 import { inviteReviewSchema } from "@/lib/validations/review"
 import type { BillDTO } from "@/models/bill"
+import { useViewer } from "@/lib/use-viewer"
 
 /**
  * Sending a quotation to the client, and what came back.
@@ -19,6 +20,7 @@ import type { BillDTO } from "@/models/bill"
  * does nothing.
  */
 export function QuoteReviewPanel({ bill }: { bill: BillDTO }) {
+  const { isOwner } = useViewer()
   const router = useRouter()
   const review = bill.review
 
@@ -161,7 +163,7 @@ export function QuoteReviewPanel({ bill }: { bill: BillDTO }) {
           {busy ? "Working…" : live ? "New link" : "Create link"}
         </button>
 
-        {live ? (
+        {live && isOwner ? (
           <button
             type="button"
             onClick={() => void revoke()}

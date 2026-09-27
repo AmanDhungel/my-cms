@@ -1,5 +1,7 @@
+import { logActivity } from "@/lib/activity"
 import { HttpError, handleApiError, ok } from "@/lib/api-response"
-import { requireRole } from "@/lib/auth/guards"
+import { requireUser } from "@/lib/auth/guards"
+import { assertCanDeleteRecord } from "@/lib/auth/permissions"
 import { connectToDatabase } from "@/lib/mongodb"
 import { syncBillPayment } from "@/lib/payments"
 import { Payment } from "@/models/payment"
@@ -16,7 +18,9 @@ export async function DELETE(
   ctx: RouteContext<"/api/payments/[id]">
 ) {
   try {
-    const viewer = await requireRole("owner")
+    const viewer = await requireUser()
+    // Deleting a record is the owner's alone (lib/auth/permissions.ts).
+    assertCanDeleteRecord(viewer)
     const { id } = await ctx.params
 
     await connectToDatabase()
@@ -30,6 +34,15 @@ export async function DELETE(
 
     if (payment.bill) await syncBillPayment(payment.bill)
 
+    // Audit trail: every delete is recorded (never any secret).
+    void logActivity({
+      businessId: viewer.businessId,
+      action: "record_deleted",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: String(payment.amount ?? ""),
+      detail: "payment",
+    })
     return ok({ id: String(payment._id) })
   } catch (error) {
     return handleApiError(error)

@@ -79,6 +79,31 @@ export function slotsForLayout(layoutId: string): string[] {
   return [...new Set(ids)]
 }
 
+/**
+ * The content with every section the template doesn't draw emptied out.
+ *
+ * For the public page. The renderer is a client component, so whatever it
+ * is handed is serialised into the page's HTML — including sections this
+ * template never shows, kept from another template. Those are the owner's
+ * stored words but not their published site, so they are dropped on the
+ * server before anything is sent. Hero and contact are kept whole: every
+ * layout draws the hero, and the hero, nav and footer read contact details.
+ */
+export function publishedContent(
+  content: SiteContent,
+  sections: readonly string[]
+): SiteContent {
+  const shows = (key: SectionKey) => sections.includes(key)
+  return {
+    ...content,
+    about: shows("about") ? content.about : { title: null, body: null, image: null },
+    services: shows("services") ? content.services : [],
+    products: shows("products") ? content.products : [],
+    gallery: shows("gallery") ? content.gallery : [],
+    faq: shows("faq") ? content.faq : [],
+  }
+}
+
 // ---- reading and writing by path -------------------------------------------
 
 type Tree = Record<string, unknown> | unknown[]
@@ -144,7 +169,11 @@ export function mockList<K extends ListSlotId>(id: K): SiteContent[K] {
  */
 export function withSamples(
   content: SiteContent,
-  options: { pictures: boolean }
+  /**
+   * `lists: false` leaves an empty list empty: the inline editor draws its
+   * own sample rows (see sample-rows.ts), which the owner can dismiss.
+   */
+  options: { pictures: boolean; lists?: boolean }
 ): SiteContent {
   const text = (value: string | null, id: string) => value ?? mockText(id)
   const picture = (value: string | null, sample: string | null) =>
@@ -154,6 +183,7 @@ export function withSamples(
     const items = content[id] as unknown[]
     const sample = mockList(id) as unknown[]
     const sampled = items.length === 0
+    if (sampled && options.lists === false) return [] as unknown as SiteContent[K]
     const source = sampled ? sample : items
     return source.map((raw, index) => {
       const item = raw as Record<string, unknown>

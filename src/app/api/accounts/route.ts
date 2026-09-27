@@ -1,4 +1,4 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { loadAccounts } from "@/lib/ledger"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -40,7 +40,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("owner")
-    const values = accountSchema.parse(await request.json())
+    const values = accountSchema.parse(await readJson(request))
 
     await connectToDatabase()
     const business = await getWorkspace(viewer.businessId)

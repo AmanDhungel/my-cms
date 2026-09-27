@@ -1,4 +1,4 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { fail, handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
 import { logActivity } from "@/lib/activity"
 import { prettyState } from "@/lib/activity-labels"
@@ -8,12 +8,20 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone } from "@/lib/time"
 import { shiftOn } from "@/lib/week-server"
 import { loadTicketForViewer } from "@/lib/tickets"
+import { PAST_TICKET_MESSAGE, isPastTicket } from "@/lib/ticket-window"
 import {
   ticketStatusSchema,
   type TicketStatusValues,
 } from "@/lib/validations/work"
 import { getWorkspace } from "@/lib/workspace"
-import { toTicketDTO, type TicketStatus } from "@/models/ticket"
+import {
+  MAX_TICKET_PHOTOS_EACH,
+  Ticket,
+  toTicketDTO,
+  type TicketStatus,
+} from "@/models/ticket"
+import { deleteUploads, isBusinessKeyIn, keyFromUrl } from "@/lib/s3"
+import { OVERTIME_REASON_MESSAGE, classifyOvertime, shiftToday } from "@/lib/overtime"
 import { User } from "@/models/user"
 
 export const runtime = "nodejs"
@@ -41,7 +49,7 @@ export async function PATCH(
   try {
     const viewer = await requireUser()
     const { id } = await ctx.params
-    const values = ticketStatusSchema.parse(await request.json())
+    const values = ticketStatusSchema.parse(await readJson(request))
 
     await connectToDatabase()
 
@@ -52,6 +60,15 @@ export async function PATCH(
     }
 
     const isReviewer = viewer.role !== "employee"
+
+    // Past tickets are view-only for the crew. Owners and supervisors keep
+    // every move they had, including reopening one.
+    if (!isReviewer) {
+      const business = await getWorkspace(viewer.businessId)
+      if (isPastTicket(ticket, new Date(), business.timeZone)) {
+        throw new HttpError(403, PAST_TICKET_MESSAGE)
+      }
+    }
 
     // Permission is settled before position: "you can't move it there" is a
     // truer answer than "it's already there" when both would apply.
@@ -66,6 +83,58 @@ export async function PATCH(
 
     if (ticket.status === values.status) {
       throw new HttpError(409, `That ticket is already ${label(values.status)}`)
+    }
+
+    /*
+     * Completion photos. The crew sends its own whole list with the change:
+     * kept photos by URL, new ones as just uploaded. Sending a ticket for
+     * review needs at least one. Each new one must be this workspace's
+     * ticket picture; nobody can adopt someone else's photo on the ticket
+     * (dropping it later would delete theirs). Removed ones are deleted from
+     * storage only after the save has landed.
+     */
+    let removedPhotos: string[] = []
+    if (!isReviewer && (values.photos !== undefined || values.status === "in_review")) {
+      const all = ticket.photos ?? []
+      const mine = all.filter((photo) => String(photo.uploadedBy) === viewer.id)
+      const othersUrls = new Set(
+        all.filter((photo) => String(photo.uploadedBy) !== viewer.id).map((photo) => photo.url)
+      )
+      const wanted = [
+        ...new Set((values.photos ?? mine.map((photo) => ({ url: photo.url }))).map((one) => one.url)),
+      ]
+      const refuse = (message: string) =>
+        new HttpError(422, "Validation failed", { photos: [message] })
+
+      if (wanted.length > MAX_TICKET_PHOTOS_EACH) {
+        throw refuse(`Five photos is the most you can add to a ticket`)
+      }
+      const keptUrls = new Set(mine.map((photo) => photo.url))
+      const added: { key: string; url: string; uploadedBy: string; uploadedAt: Date }[] = []
+      for (const url of wanted) {
+        if (othersUrls.has(url)) throw refuse("That photo was added by someone else")
+        if (keptUrls.has(url)) continue
+        const key = keyFromUrl(url)
+        if (!key || !isBusinessKeyIn(key, viewer.businessId, "ticket")) {
+          throw refuse("That picture isn't one of ours")
+        }
+        // A photo already on another ticket stays that ticket's: adopting
+        // it here and dropping it later would delete it from under them.
+        if (await Ticket.exists({ _id: { $ne: ticket._id }, "photos.key": key })) {
+          throw refuse("That photo belongs to another ticket")
+        }
+        added.push({ key, url, uploadedBy: viewer.id, uploadedAt: new Date() })
+      }
+      if (values.status === "in_review" && wanted.length === 0) {
+        throw refuse("Add at least one photo of the finished work")
+      }
+      const keep = new Set(wanted)
+      removedPhotos = mine.filter((photo) => !keep.has(photo.url)).map((photo) => photo.url)
+      // Everything already there stays where it was; new ones go on the end.
+      ticket.set("photos", [
+        ...all.filter((photo) => !removedPhotos.includes(photo.url)),
+        ...added,
+      ])
     }
 
     const cameFrom = ticket.status
@@ -101,20 +170,45 @@ export async function PATCH(
       (entry) => String(entry.user) === viewer.id
     )
 
+    let visitOvertime: { reason?: string; minutes: number } | null = null
     if (CLOSES_THE_VISIT.includes(values.status) && myVisit) {
       const at = new Date()
+      const [business, me] = await Promise.all([
+        getWorkspace(viewer.businessId),
+        User.findById(viewer.id).select("shift week"),
+      ])
+
+      // Handing work over while checked in is a check-out, so the same
+      // overtime rule applies (lib/overtime.ts, the server's clock): past
+      // the shift end, or on a rest day, it needs a reason. Asked before
+      // anything is written, so a refusal leaves the ticket as it was.
+      const overtime = classifyOvertime(
+        at,
+        shiftToday(at, me, business, business.timeZone),
+        business.timeZone
+      )
+      if (overtime.when === "after" || overtime.when === "off") {
+        if (!values.overtimeReason) {
+          return fail(OVERTIME_REASON_MESSAGE, 422, {
+            overtimeReason: [OVERTIME_REASON_MESSAGE],
+          })
+        }
+        visitOvertime = {
+          reason: values.overtimeReason,
+          minutes:
+            overtime.when === "after"
+              ? overtime.minutes
+              : Math.max(0, Math.round((at.getTime() - myVisit.at.getTime()) / 60_000)),
+        }
+      }
+
       ticket.set(
         "openCheckIns",
         ticket.openCheckIns.filter((entry) => String(entry.user) !== viewer.id)
       )
       ticket.checkedOutAt = at
 
-      const [business, me] = await Promise.all([
-        getWorkspace(viewer.businessId),
-        User.findById(viewer.id).select("shift week"),
-      ])
-
-      await markDeparture({
+      const attendance = await markDeparture({
         businessId: ticket.business,
         userId: viewer.id,
         at,
@@ -122,9 +216,17 @@ export async function PATCH(
         shift: shiftOn(dayKeyInZone(at, business.timeZone), me, business),
         timeZone: business.timeZone,
       })
+      if (visitOvertime) {
+        attendance.overtime = true
+        attendance.overtimeReason = visitOvertime.reason
+        attendance.overtimeMinutes = Math.max(attendance.overtimeMinutes ?? 0, visitOvertime.minutes)
+        await attendance.save()
+      }
     }
 
     await ticket.save()
+    // Only now that the ticket no longer points at them.
+    if (removedPhotos.length > 0) void deleteUploads(removedPhotos, viewer.businessId)
     await ticket.populate([
       { path: "assignees", select: "name" },
       { path: "project", select: "name" },

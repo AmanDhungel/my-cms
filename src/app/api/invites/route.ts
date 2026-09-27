@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server"
 
-import { fail, handleApiError, ok } from "@/lib/api-response"
+import { fail, handleApiError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
+import { isSuperAdmin, SUPER_ADMIN_ADDRESS_MESSAGE } from "@/lib/auth/super-admin"
 import { connectToDatabase } from "@/lib/mongodb"
 import { composeShift, inviteSchema } from "@/lib/validations/auth"
 import {
@@ -38,8 +39,14 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const owner = await requireRole("owner")
-    const values = inviteSchema.parse(await request.json())
+    const values = inviteSchema.parse(await readJson(request))
     const email = values.email.toLowerCase()
+
+    if (isSuperAdmin(email)) {
+      return fail(SUPER_ADMIN_ADDRESS_MESSAGE, 422, {
+        email: [SUPER_ADMIN_ADDRESS_MESSAGE],
+      })
+    }
 
     await connectToDatabase()
 

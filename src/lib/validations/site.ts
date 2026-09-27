@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { isSafeHttpUrl, safeUrl, UNSAFE_URL_MESSAGE } from "@/lib/security/safe-url"
 import { LIMITS, isKnownTemplate } from "@/lib/site-templates"
 import { RESERVED_SLUGS, SLUG_PATTERN } from "@/lib/tenancy"
 
@@ -22,12 +23,19 @@ const line = (max: number) =>
 
 /** An uploaded image, which is always one of ours rather than any URL. */
 const imageUrl = z
-  .string()
-  .trim()
-  .max(600)
-  .url("That doesn't look like an image address")
+  .union([z.literal(""), safeUrl(600)])
   .nullish()
   .transform((value) => value || undefined)
+
+/**
+ * An optional link: http(s) only. javascript:, data:, vbscript:, //host and
+ * tel:/mailto: are refused here; phone and email have their own fields.
+ */
+const link = (max: number) =>
+  line(max).refine(
+    (value) => value === undefined || isSafeHttpUrl(value),
+    UNSAFE_URL_MESSAGE
+  )
 
 export const slugSchema = z
   .string()
@@ -73,7 +81,7 @@ export const siteSchema = z.object({
       headline: line(120),
       sub: line(240),
       ctaLabel: line(40),
-      ctaHref: line(300),
+      ctaHref: link(300),
       image: imageUrl,
     }),
 
@@ -107,7 +115,7 @@ export const siteSchema = z.object({
     gallery: z
       .array(
         z.object({
-          url: z.string().trim().url().max(600),
+          url: safeUrl(600),
           caption: line(120),
         })
       )
@@ -134,12 +142,19 @@ export const siteSchema = z.object({
       phone: line(40),
       address: line(240),
       hours: line(240),
-      mapUrl: line(600),
+      mapUrl: link(600),
     }),
   }),
 
   /** Optional so a client that doesn't know about it changes nothing. */
   extraSlots: extraSlots.optional(),
+
+  /**
+   * The version (updatedAt) this save was made from. When sent, a save made
+   * from an older version than the one stored is refused with 409, rather
+   * than silently overwriting a change made in another tab.
+   */
+  updatedAt: z.string().max(40).optional(),
 })
 
 export type SiteValues = z.infer<typeof siteSchema>

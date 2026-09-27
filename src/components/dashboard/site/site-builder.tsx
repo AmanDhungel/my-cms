@@ -33,10 +33,15 @@ import {
   draftFingerprint,
   draftPreviews,
   previewContent,
-  pruneDraft,
   toDraft,
   type SiteDraft,
 } from "@/components/dashboard/site/site-draft"
+import {
+  initialLayout,
+  layoutFits,
+  pruneWithLayout,
+  type SampleLayout,
+} from "@/components/dashboard/site/sample-rows"
 import type { SiteDTO } from "@/models/site"
 
 type Tab = "template" | "content" | "preview"
@@ -82,14 +87,93 @@ export function SiteBuilder({ port }: { port: string | null }) {
     )
   }
 
-  // Keyed on the saved version, so a save elsewhere starts the editor from
-  // what is actually stored rather than from a stale draft.
   return (
-    <Editor
-      key={query.data.site.updatedAt}
-      saved={query.data.site}
+    <EditorHost
+      latest={query.data.site}
       uploads={query.data.uploads}
       port={port}
+      refetch={async () => (await query.refetch()).data?.site ?? null}
+    />
+  )
+}
+
+/**
+ * Which version of the site the editor is working from, and what to do when
+ * the stored site moves on without it.
+ *
+ * The editor works from a snapshot (`shown`), keyed on its updatedAt. When
+ * a newer version arrives — a save or publish from another tab, noticed
+ * when this tab regains focus — it replaces the snapshot quietly if there is
+ * nothing unsaved here, as before. If there is, nothing is dropped: a banner
+ * offers to reload (discarding this tab's changes) or keep editing. Keeping
+ * editing adopts the newer version as the one this tab's next save is based
+ * on — this tab's save then wins. A save based on an out-of-date version
+ * that slipped through is refused by the API with 409 and shows the same
+ * banner.
+ */
+function EditorHost({
+  latest,
+  uploads,
+  port,
+  refetch,
+}: {
+  latest: SiteDTO
+  uploads: boolean
+  port: string | null
+  refetch: () => Promise<SiteDTO | null>
+}) {
+  const [shown, setShown] = React.useState(latest)
+  // The sample-row layout, carried over the remount that follows this tab's
+  // own save so untouched samples outlive it.
+  const [carry, setCarry] = React.useState<SampleLayout | null>(null)
+  const [dirty, setDirty] = React.useState(false)
+  // The newer version the owner chose to keep editing over.
+  const [acknowledged, setAcknowledged] = React.useState<string | null>(null)
+  // The current version, as reported by a 409 before a refetch catches up.
+  const [staleAt, setStaleAt] = React.useState<string | null>(null)
+
+  // Newer in time, not just different: straight after this tab's own save
+  // the query still holds the version from before it, which must not win.
+  const newer = Date.parse(latest.updatedAt) > Date.parse(shown.updatedAt)
+  // Nothing unsaved here: take the newer version quietly, as before.
+  if (newer && !dirty && staleAt === null) {
+    setShown(latest)
+    setCarry(null)
+    setAcknowledged(null)
+  }
+
+  const current = staleAt ?? latest.updatedAt
+  const conflict =
+    dirty && (staleAt !== null || newer) && acknowledged !== current
+
+  function adopt(site: SiteDTO, layout: SampleLayout | null) {
+    setShown(site)
+    setCarry(layout)
+    setAcknowledged(null)
+    setStaleAt(null)
+    setDirty(false)
+  }
+
+  return (
+    <Editor
+      key={shown.updatedAt}
+      saved={shown}
+      uploads={uploads}
+      port={port}
+      initialLayout={carry}
+      baseVersion={acknowledged ?? shown.updatedAt}
+      conflict={conflict}
+      onDirty={setDirty}
+      onSaved={(site, layout) => adopt(site, layout)}
+      onStale={(updatedAt) => {
+        setStaleAt(updatedAt ?? latest.updatedAt)
+        void refetch()
+      }}
+      onReload={async () => adopt((await refetch()) ?? latest, null)}
+      onKeepEditing={() => {
+        setAcknowledged(current)
+        setStaleAt(null)
+      }}
     />
   )
 }
@@ -114,10 +198,29 @@ function Editor({
   saved,
   uploads,
   port,
+  initialLayout: carried,
+  baseVersion,
+  conflict,
+  onDirty,
+  onSaved,
+  onStale,
+  onReload,
+  onKeepEditing,
 }: {
   saved: SiteDTO
   uploads: boolean
   port: string | null
+  /** A sample-row layout carried over from before a save, if it still fits. */
+  initialLayout: SampleLayout | null
+  /** The version this editor's next save is based on. */
+  baseVersion: string
+  /** Whether to show the "changed in another tab" banner. */
+  conflict: boolean
+  onDirty: (dirty: boolean) => void
+  onSaved: (site: SiteDTO, layout: SampleLayout) => void
+  onStale: (updatedAt: string | null) => void
+  onReload: () => Promise<void>
+  onKeepEditing: () => void
 }) {
   const [tab, setTab] = React.useState<Tab>("content")
   const [slug, setSlug] = React.useState(saved.slug)
@@ -125,6 +228,10 @@ function Editor({
   const [content, setContent] = React.useState<SiteDraft>(() =>
     toDraft(saved.content)
   )
+  const [layout, setLayout] = React.useState<SampleLayout>(() => {
+    const draft = toDraft(saved.content)
+    return carried && layoutFits(carried, draft) ? carried : initialLayout(draft)
+  })
   const savedExtras = React.useMemo(() => saved.extraSlots ?? {}, [saved.extraSlots])
   const [extraSlots, setExtraSlots] =
     React.useState<Record<string, string>>(savedExtras)
@@ -147,6 +254,7 @@ function Editor({
 
   useUnsavedGuard(dirty)
   useRevokeOnUnmount(() => draftPreviews(content))
+  React.useEffect(() => onDirty(dirty), [dirty, onDirty])
 
   const url = siteUrlFor(slug, port)
   const sections = sectionsOf(template)
@@ -208,8 +316,10 @@ function Editor({
 
     // The empty rows are dropped from what is on screen too, so an error
     // about "service 2" points at the row the owner sees as service 2.
-    const draft = pruneDraft(content)
+    const pruned = pruneWithLayout(content, layout)
+    const draft = pruned.draft
     setContent(draft)
+    setLayout(pruned.layout)
     const check = siteSchema.safeParse({
       slug,
       template,
@@ -244,10 +354,20 @@ function Editor({
     }
 
     setErrors({})
-    save.mutate(parsed.data, {
-      onSuccess: () => toast.success("Saved"),
+    save.mutate({ ...parsed.data, updatedAt: baseVersion }, {
+      onSuccess: ({ site }) => {
+        toast.success("Saved")
+        onSaved(site, pruned.layout)
+      },
       onError: (error) => {
         removeOrphans(fresh)
+        // Saved from an out-of-date version: the banner explains it, and
+        // offers the way out — not a generic error.
+        if (error instanceof ApiRequestError && error.body?.code === "stale") {
+          const at = error.body.updatedAt
+          onStale(typeof at === "string" ? at : null)
+          return
+        }
         // A taken address comes back as a conflict, not a field error, so
         // it is pinned to the address box here.
         if (error instanceof ApiRequestError && error.status === 409) {
@@ -266,6 +386,7 @@ function Editor({
     setSlug(saved.slug)
     setTemplate(saved.template)
     setContent(toDraft(saved.content))
+    setLayout(initialLayout(toDraft(saved.content)))
     setExtraSlots(savedExtras)
     setErrors({})
   }
@@ -336,6 +457,34 @@ function Editor({
           </>
         }
       />
+
+      {conflict ? (
+        <div
+          role="alert"
+          data-site-conflict
+          className="flex flex-wrap items-center justify-between gap-3 rounded-[12px] border border-amber-300 bg-amber-50 px-4 py-3 text-[13.5px] text-amber-900"
+        >
+          <span className="font-semibold">
+            This site was changed in another tab.
+          </span>
+          <span className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void onReload()}
+              className={secondaryButtonClass}
+            >
+              Reload (discard my changes)
+            </button>
+            <button
+              type="button"
+              onClick={onKeepEditing}
+              className={primaryButtonClass}
+            >
+              Keep editing
+            </button>
+          </span>
+        </div>
+      ) : null}
 
       {/*
         Everything editable is frozen while a save is in flight. The editor
@@ -451,8 +600,10 @@ function Editor({
                   template={template}
                   draft={content}
                   extraSlots={extraSlots}
+                  layout={layout}
                   onDraft={setContent}
                   onExtraSlots={setExtraSlots}
+                  onLayout={setLayout}
                   onPreparing={onPreparing}
                   uploads={uploads}
                   errors={errors}

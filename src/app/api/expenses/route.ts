@@ -1,7 +1,7 @@
 import mongoose from "mongoose"
 
 import { logActivity } from "@/lib/activity"
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { SUPERVISOR_KINDS, kindLabel, linesTotal } from "@/lib/expenses"
 import {
@@ -73,7 +73,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("owner", "supervisor")
-    const values = expenseSchema.parse(await request.json())
+    const values = expenseSchema.parse(await readJson(request))
 
     const allowed = kindsFor(viewer.role)
     if (allowed && !allowed.includes(values.kind)) {

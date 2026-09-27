@@ -10,6 +10,7 @@ import { initialsOf, type Viewer } from "@/components/dashboard/viewer";
 const NAV = [
   { href: "/dashboard", label: "Home", icon: HomeGlyph },
   { href: "/dashboard/check-in", label: "Check in", icon: PinGlyph },
+  { href: "/dashboard/my-tickets", label: "My tickets", icon: TicketsGlyph },
   { href: "/dashboard/attendance", label: "Attendance", icon: ClockGlyph },
   { href: "/dashboard/requests", label: "Requests", icon: SheetGlyph },
   { href: "/dashboard/profile", label: "Profile", icon: PersonGlyph },
@@ -138,7 +139,7 @@ export function EmployeeShell({
               {children}
             </div>
 
-            <nav className="border-n-200 bg-n-100 sticky bottom-0 grid grid-cols-5 gap-0.5 border-t px-3 pt-2.5 pb-4 sm:max-lg:rounded-b-[26px] lg:hidden">
+            <nav className="border-n-200 bg-n-100 sticky bottom-0 grid grid-cols-6 gap-0.5 border-t px-3 pt-2.5 pb-4 sm:max-lg:rounded-b-[26px] lg:hidden">
               {NAV.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(pathname, item.href);
@@ -194,6 +195,15 @@ function ClockGlyph() {
     <svg {...glyph} aria-hidden>
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+function TicketsGlyph() {
+  return (
+    <svg {...glyph} aria-hidden>
+      <path d="M4 7h16v10H4z" />
+      <path d="M8 11h8M8 14h5" />
     </svg>
   );
 }

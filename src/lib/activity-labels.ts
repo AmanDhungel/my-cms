@@ -41,6 +41,14 @@ export const ACTION_VERBS: Record<ActivityAction, string> = {
   quote_shared: "sent for review",
   quote_reviewed: "heard back on",
   quote_revoked: "withdrew the review link for",
+  login_succeeded: "signed in",
+  login_failed: "failed to sign in",
+  login_rate_limited: "was stopped from signing in (too many attempts)",
+  record_deleted: "deleted",
+  image_deleted: "removed a picture from",
+  role_changed: "changed the role of",
+  password_changed: "changed their password",
+  logo_changed: "changed the workspace logo",
 }
 
 /**
@@ -51,6 +59,11 @@ export const SUBJECTLESS: readonly ActivityAction[] = [
   "shift_started",
   "shift_ended",
   "member_joined",
+  "login_succeeded",
+  "login_failed",
+  "login_rate_limited",
+  "password_changed",
+  "logo_changed",
 ]
 
 /** Which dot colour a row gets, grouped the way the feed already is. */
@@ -89,6 +102,14 @@ export const ACTION_TONE: Record<ActivityAction, string> = {
   quote_shared: "bg-p-500",
   quote_reviewed: "bg-s-time",
   quote_revoked: "bg-n-400",
+  login_succeeded: "bg-n-400",
+  login_failed: "bg-s-overdue",
+  login_rate_limited: "bg-s-overdue",
+  record_deleted: "bg-s-overdue",
+  image_deleted: "bg-n-400",
+  role_changed: "bg-s-time",
+  password_changed: "bg-n-400",
+  logo_changed: "bg-n-400",
 }
 
 /** "in progress" — statuses are stored snake_case but never shown that way. */

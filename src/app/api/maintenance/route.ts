@@ -1,13 +1,14 @@
 import type { NextRequest } from "next/server"
 
 import { logActivity } from "@/lib/activity"
-import { handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { ownParty } from "@/lib/money-refs"
 import { connectToDatabase } from "@/lib/mongodb"
-import { uploadsConfigured } from "@/lib/s3"
+import { foreignPictures, uploadsConfigured } from "@/lib/s3"
 import { dayRangeInZone } from "@/lib/time"
 import { maintenanceSchema } from "@/lib/validations/maintenance"
+import { nextUploaders } from "@/lib/image-uploaders"
 import { getWorkspace } from "@/lib/workspace"
 import {
   MAINTENANCE_STATUSES,
@@ -53,7 +54,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("owner", "supervisor")
-    const values = maintenanceSchema.parse(await request.json())
+    const values = maintenanceSchema.parse(await readJson(request))
+
+    // A photo in our bucket must be this workspace's own maintenance photo.
+    // Once stored, dropping it on a later save would delete it — so another
+    // business's picture, or this one's site or product pictures, never get
+    // in. Addresses outside the bucket are left as they are.
+    if (foreignPictures(values.photos, viewer.businessId, "maintenance").length > 0) {
+      throw new HttpError(422, "Validation failed", {
+        photos: ["That picture isn't one of ours"],
+      })
+    }
 
     await connectToDatabase()
     const business = await getWorkspace(viewer.businessId)
@@ -75,6 +86,8 @@ export async function POST(request: Request) {
       cost: values.cost,
       assignee: values.assigneeId,
       photos: values.photos,
+      // Every photo on a new entry was added by whoever is saving it.
+      photoUploaders: nextUploaders(values.photos, [], [], viewer.id),
       note: values.note,
       createdBy: viewer.id,
     })

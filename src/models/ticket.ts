@@ -48,6 +48,23 @@ const shortageSchema = new Schema(
   { _id: false }
 )
 
+/**
+ * A photo of the finished work, taken by whoever did it. The key is derived
+ * on the server from the URL and must be this workspace's ticket picture.
+ */
+const photoSchema = new Schema(
+  {
+    key: { type: String, required: true, trim: true, maxlength: 600 },
+    url: { type: String, required: true, trim: true, maxlength: 600 },
+    uploadedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    uploadedAt: { type: Date, required: true },
+  },
+  { _id: false }
+)
+
+/** How many completion photos one person can put on one ticket. */
+export const MAX_TICKET_PHOTOS_EACH = 5
+
 const ticketSchema = new Schema(
   {
     business: { type: Schema.Types.ObjectId, ref: "Business", required: true },
@@ -149,6 +166,13 @@ const ticketSchema = new Schema(
     },
     /** The last departure by anyone, for "finished at" style readouts. */
     checkedOutAt: { type: Date },
+
+    /**
+     * Photos of the finished work, in the order they were added. Each person
+     * has up to MAX_TICKET_PHOTOS_EACH; an employee sending a ticket for
+     * review must have at least one. Absent on older tickets — no migration.
+     */
+    photos: { type: [photoSchema], default: [] },
   },
   { timestamps: true }
 )
@@ -205,6 +229,15 @@ export type TicketDTO = {
   checkedOutAt: string | null
   assignees: { id: string; name: string }[]
   project: { id: string; name: string } | null
+  /** Completion photos, in order. */
+  photos: {
+    url: string
+    uploadedById: string
+    uploadedByName: string
+    uploadedAt: string
+    /** Added by the viewer `toTicketDTO` was given — theirs to remove. */
+    byMe: boolean
+  }[]
 }
 
 /** A ref is either an id or, after `populate`, the document itself. */
@@ -287,5 +320,12 @@ export function toTicketDTO(
     checkedOutAt: ticket.checkedOutAt ? ticket.checkedOutAt.toISOString() : null,
     assignees,
     project: named(ticket.project as MaybePopulated),
+    photos: (ticket.photos ?? []).map((photo) => ({
+      url: photo.url,
+      uploadedById: String(photo.uploadedBy),
+      uploadedByName: byId.get(String(photo.uploadedBy)) ?? "",
+      uploadedAt: (photo.uploadedAt as Date).toISOString(),
+      byMe: viewerId !== undefined && String(photo.uploadedBy) === viewerId,
+    })),
   }
 }

@@ -85,6 +85,9 @@ const logoSchema = new Schema(
   {
     key: { type: String, required: true, trim: true },
     url: { type: String, required: true, trim: true },
+    /** Who added it and when — set by the server from the session, never the body. Absent on older pictures (owner-only to remove). */
+    uploadedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    uploadedAt: { type: Date },
   },
   { _id: false }
 )

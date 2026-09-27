@@ -23,9 +23,10 @@ const HEADLINES: { group: string; slug: string; heading: string }[] = [
   { group: "sales", slug: "sales-by-product", heading: "What is selling" },
 ]
 
-export function DashboardCharts() {
-  // Three groups rather than four requests: two headlines share finance.
-  const finance = useReportGroup("finance", {})
+export function DashboardCharts({ finance: showFinance = true }: { finance?: boolean }) {
+  // Three groups rather than four requests: two headlines share finance,
+  // which only the owner reads (lib/reports.ts).
+  const finance = useReportGroup("finance", {}, showFinance)
   const inventory = useReportGroup("inventory", {})
   const sales = useReportGroup("sales", {})
 
@@ -35,9 +36,12 @@ export function DashboardCharts() {
     sales,
   }
 
-  const loading = finance.isPending || inventory.isPending || sales.isPending
+  const loading =
+    (showFinance && finance.isPending) || inventory.isPending || sales.isPending
 
-  const cards = HEADLINES.map((headline) => ({
+  const cards = HEADLINES.filter(
+    (headline) => showFinance || headline.group !== "finance"
+  ).map((headline) => ({
     ...headline,
     card: byGroup[headline.group].data?.reports.find(
       (one) => one.slug === headline.slug

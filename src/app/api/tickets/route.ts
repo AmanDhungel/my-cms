@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server"
 import { Types } from "mongoose"
 
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole, requireUser } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
@@ -10,6 +10,7 @@ import { loadCrew } from "@/lib/tickets"
 import { getWorkspace } from "@/lib/workspace"
 import { logActivity } from "@/lib/activity"
 import { notifyUser } from "@/lib/notify"
+import { windowOverlaps } from "@/lib/ticket-window"
 import { Project } from "@/models/project"
 import { Ticket, toTicketDTO } from "@/models/ticket"
 
@@ -22,6 +23,7 @@ const SCOPES = [
   "upcoming",
   "done",
   "all",
+  "mine",
 ] as const
 type Scope = (typeof SCOPES)[number]
 
@@ -54,12 +56,20 @@ export async function GET(request: NextRequest) {
       filter.project = projectId
     }
 
-    if (scope === "today") {
+    if (scope === "mine") {
+      // The viewer's own assignments, whatever their dates: the crew's
+      // "My tickets" groups them into now / upcoming / past itself, with
+      // the same helper the API uses to lock past ones.
+      filter.assignees = viewer.id
+    } else if (scope === "today") {
+      // Every ticket whose window touches today — not only the ones that
+      // start today. A job running from the 9th to the 30th is today's
+      // work on every day in between.
       const { start, end } = dayRangeInZone(
         dayKeyInZone(new Date(), business.timeZone),
         business.timeZone
       )
-      filter.startAt = { $gte: start, $lt: end }
+      Object.assign(filter, windowOverlaps(start, end))
       filter.status = { $nin: ["cancelled"] }
     } else if (scope === "in_progress") {
       // Live work, whenever it was scheduled: an overrunning ticket from
@@ -75,7 +85,7 @@ export async function GET(request: NextRequest) {
     }
 
     const tickets = await Ticket.find(filter)
-      .sort(scope === "done" ? { startAt: -1 } : { startAt: 1 })
+      .sort(scope === "done" || scope === "mine" ? { startAt: -1 } : { startAt: 1 })
       .limit(200)
       .populate([
         { path: "assignees", select: "name" },
@@ -92,7 +102,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("owner", "supervisor")
-    const values = ticketSchema.parse(await request.json())
+    const values = ticketSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

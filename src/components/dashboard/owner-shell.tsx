@@ -190,11 +190,16 @@ export function OwnerShell({
       label: "Inventory reports",
       icon: StackIcon,
     },
-    {
-      href: "/dashboard/reports/finance",
-      label: "Finance reports",
-      icon: CoinsIcon,
-    },
+    // Payments and accounts are the owner's alone.
+    ...(viewer.role === "owner"
+      ? [
+          {
+            href: "/dashboard/reports/finance",
+            label: "Finance reports",
+            icon: CoinsIcon,
+          },
+        ]
+      : []),
     {
       href: "/dashboard/reports/employee",
       label: "Employee reports",

@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server"
 
 import { logActivity } from "@/lib/activity"
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { notifyUser } from "@/lib/notify"
 import { findQuoteByToken, toPublicQuote } from "@/lib/quote-review"
 import { clientReviewSchema } from "@/lib/validations/review"
@@ -45,7 +45,7 @@ export async function POST(
 ) {
   try {
     const { token } = await ctx.params
-    const values = clientReviewSchema.parse(await request.json())
+    const values = clientReviewSchema.parse(await readJson(request))
 
     const found = await findQuoteByToken(token)
     if (!found) throw new HttpError(404, "This link is no longer good")

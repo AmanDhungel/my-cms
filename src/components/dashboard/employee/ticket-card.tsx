@@ -9,6 +9,7 @@ import { EyeIcon, PinIcon } from "@/components/dashboard/nav-icons"
 import { TicketStatusBadge } from "@/components/dashboard/ticket-status-badge"
 import { TicketDetailDialog } from "@/components/dashboard/tickets/ticket-detail-dialog"
 import { formatDistance } from "@/lib/geo"
+import { FINISHED_STATUSES, isPastTicket } from "@/lib/ticket-window"
 import { CHECK_IN_OPENS_MIN } from "@/lib/work-constants"
 import type { TicketDTO } from "@/models/ticket"
 
@@ -25,7 +26,6 @@ export function EmployeeTicketCard({
   >(null)
 
   const checkedIn = Boolean(ticket.myCheckedInAt)
-  const closed = ticket.status === "done" || ticket.status === "cancelled"
 
   // The server refuses an early check-in; showing when it opens is kinder
   // than letting someone tap and be told no. The clock is read on a timer
@@ -45,8 +45,20 @@ export function EmployeeTicketCard({
   const opensAt = new Date(ticket.startAt).getTime() - CHECK_IN_OPENS_MIN * 60_000
   const tooEarly = !checkedIn && now !== null && now < opensAt
 
+  // Past (finished, or its last day is over) is view-only: the same helper
+  // the API uses to refuse check-ins and status changes on it. The status
+  // half is known at once; the date half waits for the clock.
+  const past =
+    FINISHED_STATUSES.includes(ticket.status) ||
+    (now !== null && isPastTicket(ticket, new Date(now), timeZone))
+  // Someone still checked in to a ticket that has just gone past can still
+  // leave it; nothing else is offered.
+  const closed = past && !checkedIn
+
   return (
     <div
+      data-ticket-card={ticket.id}
+      data-past={past ? "" : undefined}
       className={cn(
         "flex flex-col gap-3 rounded-[14px] border bg-white p-[15px]",
         checkedIn
@@ -109,7 +121,19 @@ export function EmployeeTicketCard({
         </span>
       ) : null}
 
-      {closed ? null : (
+      {closed ? (
+        <span data-view-only className="text-n-500 font-mono text-[10.5px] tracking-[0.06em]">
+          VIEW ONLY · {ticket.status === "in_review" ? "SENT FOR REVIEW" : ticket.status === "done" ? "SIGNED OFF" : ticket.status === "cancelled" ? "CANCELLED" : "ENDED"}
+        </span>
+      ) : past ? (
+        <button
+          type="button"
+          onClick={() => setDialog("out")}
+          className="bg-n-700 flex-1 rounded-md px-3 py-2.5 text-[13.5px] font-semibold text-white hover:brightness-[1.1]"
+        >
+          Check out
+        </button>
+      ) : (
         <div className="flex flex-wrap gap-2">
           {checkedIn ? (
             <button
@@ -157,13 +181,28 @@ export function EmployeeTicketCard({
         timeZone={timeZone}
         open={dialog === "detail"}
         onClose={() => setDialog(null)}
+        readOnly={past}
+        showHistory={past}
       />
     </div>
   )
 }
 
 function window_(ticket: TicketDTO, timeZone: string) {
+  const startDay = day(ticket.startAt, timeZone)
+  const endDay = day(ticket.endAt, timeZone)
+  // A job over several days shows its dates, or "09:00–17:00" on the 20th
+  // of a job that started on the 9th would read as today's hours.
+  if (startDay !== endDay) {
+    return `${startDay} ${clock(ticket.startAt, timeZone)} → ${endDay} ${clock(ticket.endAt, timeZone)}`
+  }
   return `${clock(ticket.startAt, timeZone)}–${clock(ticket.endAt, timeZone)}`
+}
+
+function day(iso: string, timeZone: string) {
+  return new Intl.DateTimeFormat("en-GB", { timeZone, day: "numeric", month: "short" })
+    .format(new Date(iso))
+    .toUpperCase()
 }
 
 function clock(iso: string, timeZone: string) {

@@ -50,6 +50,7 @@ import {
   type MaintenanceStatus,
 } from "@/lib/work-constants"
 import type { MaintenanceDTO } from "@/models/maintenance"
+import { useViewer } from "@/lib/use-viewer"
 
 const PER_PAGE = 10
 
@@ -81,6 +82,7 @@ const OPEN: MaintenanceStatus[] = [
  * mistake this page exists to prevent.
  */
 export function MaintenanceView({ today }: { today: string }) {
+  const { isOwner } = useViewer()
   const [open, setOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<MaintenanceDTO | null>(null)
   const [filter, setFilter] = React.useState<MaintenanceStatus | "open" | "all">(
@@ -325,7 +327,7 @@ export function MaintenanceView({ today }: { today: string }) {
                 >
                   Open
                 </button>
-                <RemoveButton row={row} />
+                {isOwner ? <RemoveButton row={row} /> : null}
               </div>
             </div>
           ))}
@@ -459,6 +461,7 @@ function Body({
   const [photos, setPhotos] = React.useState<ImageDraft[]>(() =>
     (editing?.photos ?? []).map((url) => emptyImage(url))
   )
+  const viewer = useViewer()
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const [uploading, setUploading] = React.useState(false)
 
@@ -622,6 +625,11 @@ function Body({
           onChange={setPhotos}
           enabled={uploads}
           limit={8}
+          canRemove={(draft) =>
+            viewer.mayRemovePicture(
+              draft.url ? editing?.photoUploaders[draft.url] : undefined
+            )
+          }
         />
 
         <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">

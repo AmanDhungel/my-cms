@@ -22,27 +22,46 @@ import { formatDistance } from "@/lib/geo"
 import { MaterialsDialog } from "@/components/dashboard/tickets/materials-dialog"
 import { money, quantity } from "@/lib/billing"
 import { BLOCKER_LABELS } from "@/lib/tickets-client"
+import { useTicket } from "@/lib/queries"
 import type { TicketDTO } from "@/models/ticket"
 
-/** Read-only view of everything the ticket already carries. Fetches nothing. */
+/**
+ * Read-only view of everything the ticket already carries. Fetches nothing,
+ * unless `showHistory` asks for the check-in history as well.
+ */
 export function TicketDetailDialog({
   ticket,
   timeZone,
   open,
   onClose,
+  readOnly = false,
+  showHistory = false,
 }: {
   ticket: TicketDTO
   timeZone: string
   open: boolean
   onClose: () => void
+  /** A past ticket for the crew: nothing on it can be changed. */
+  readOnly?: boolean
+  /** Also list who checked in and out, and when. */
+  showHistory?: boolean
 }) {
   const [materialsOpen, setMaterialsOpen] = React.useState(false)
+  // The completion photo open in the lightbox, by position.
+  const [viewing, setViewing] = React.useState<number | null>(null)
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
       <DialogContent
         overlayClassName={emsDialogOverlay}
         className={cn(emsDialogContent, "sm:max-w-[560px] p-5 sm:p-6")}
+        // Escape closes an open photo first, then the dialog.
+        onEscapeKeyDown={(event) => {
+          if (viewing !== null) {
+            event.preventDefault()
+            setViewing(null)
+          }
+        }}
       >
         <DialogHeader>
           <DialogTitle className="font-heading text-[19px] font-semibold">
@@ -54,16 +73,42 @@ export function TicketDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {open ? <Body ticket={ticket} timeZone={timeZone} /> : null}
+        {open ? (
+          <Body
+            ticket={ticket}
+            timeZone={timeZone}
+            showHistory={showHistory}
+            onView={setViewing}
+          />
+        ) : null}
+
+        {open && viewing !== null && ticket.photos[viewing] ? (
+          <Lightbox
+            photos={ticket.photos}
+            index={viewing}
+            timeZone={timeZone}
+            onIndex={setViewing}
+            onClose={() => setViewing(null)}
+          />
+        ) : null}
 
         <DialogFooter className="gap-2 sm:gap-2.5">
-          <button
-            type="button"
-            onClick={() => setMaterialsOpen(true)}
-            className="border-n-300 text-n-700 hover:bg-n-100 mr-auto rounded-md border bg-white px-4 py-2.5 text-sm font-semibold"
-          >
-            {ticket.materials.length > 0 ? "Edit materials" : "Materials used"}
-          </button>
+          {readOnly ? (
+            <span
+              data-view-only
+              className="text-n-500 mr-auto self-center font-mono text-[11px] tracking-[0.06em]"
+            >
+              VIEW ONLY
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setMaterialsOpen(true)}
+              className="border-n-300 text-n-700 hover:bg-n-100 mr-auto rounded-md border bg-white px-4 py-2.5 text-sm font-semibold"
+            >
+              {ticket.materials.length > 0 ? "Edit materials" : "Materials used"}
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -91,7 +136,17 @@ export function TicketDetailDialog({
   )
 }
 
-function Body({ ticket, timeZone }: { ticket: TicketDTO; timeZone: string }) {
+function Body({
+  ticket,
+  timeZone,
+  showHistory,
+  onView,
+}: {
+  ticket: TicketDTO
+  timeZone: string
+  showHistory: boolean
+  onView: (index: number) => void
+}) {
   return (
     <div className="flex max-h-[62vh] flex-col gap-3.5 overflow-auto pr-0.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -185,8 +240,19 @@ function Body({ ticket, timeZone }: { ticket: TicketDTO; timeZone: string }) {
 
       <div className="grid gap-2 sm:grid-cols-2">
         <Fact label="Window">
-          {clock(ticket.startAt, timeZone)}–{clock(ticket.endAt, timeZone)} ·{" "}
-          {dateLabel(ticket.startAt, timeZone)}
+          {dateLabel(ticket.startAt, timeZone) === dateLabel(ticket.endAt, timeZone) ? (
+            <>
+              {clock(ticket.startAt, timeZone)}–{clock(ticket.endAt, timeZone)} ·{" "}
+              {dateLabel(ticket.startAt, timeZone)}
+            </>
+          ) : (
+            // A job over several days says so, rather than showing only
+            // the day it started.
+            <>
+              {clock(ticket.startAt, timeZone)} {dateLabel(ticket.startAt, timeZone)} →{" "}
+              {clock(ticket.endAt, timeZone)} {dateLabel(ticket.endAt, timeZone)}
+            </>
+          )}
         </Fact>
         <Fact label="Check-in area">{formatDistance(ticket.radiusM)}</Fact>
       </div>
@@ -227,6 +293,28 @@ function Body({ ticket, timeZone }: { ticket: TicketDTO; timeZone: string }) {
         </div>
       </div>
 
+      {ticket.photos.length > 0 ? (
+        <div className="flex flex-col gap-1.5" data-ticket-photos>
+          <Label>Completion photos · {ticket.photos.length}</Label>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {ticket.photos.map((photo, index) => (
+              <button
+                key={photo.url}
+                type="button"
+                onClick={() => onView(index)}
+                aria-label={`Open photo ${index + 1}${photo.uploadedByName ? ` by ${photo.uploadedByName}` : ""}`}
+                className="border-n-200 hover:border-p-400 focus-visible:outline-p-500 aspect-square overflow-hidden rounded-md border bg-white focus-visible:outline-2"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.url} alt="" loading="lazy" className="size-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {showHistory ? <History ticketId={ticket.id} timeZone={timeZone} /> : null}
+
       <div className="flex flex-col gap-1.5">
         <Label>Where</Label>
         <MapPicker
@@ -236,6 +324,99 @@ function Body({ ticket, timeZone }: { ticket: TicketDTO; timeZone: string }) {
           onChange={() => {}}
         />
       </div>
+    </div>
+  )
+}
+
+/** One completion photo, large, with the ones either side a click away. */
+function Lightbox({
+  photos,
+  index,
+  timeZone,
+  onIndex,
+  onClose,
+}: {
+  photos: TicketDTO["photos"]
+  index: number
+  timeZone: string
+  onIndex: (index: number) => void
+  onClose: () => void
+}) {
+  const photo = photos[index]
+  const step = (delta: number) => onIndex((index + delta + photos.length) % photos.length)
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Photo ${index + 1} of ${photos.length}`}
+      data-photo-lightbox
+      onKeyDown={(event) => {
+        if (event.key === "ArrowRight") step(1)
+        if (event.key === "ArrowLeft") step(-1)
+      }}
+      className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-3 bg-black/85 p-4"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={photo.url}
+        alt={`Completion photo ${index + 1}`}
+        className="max-h-[78vh] max-w-full rounded-md object-contain"
+      />
+      <div className="flex flex-wrap items-center justify-center gap-2 text-[13px] text-white">
+        <span className="font-mono text-[12px] opacity-80">
+          {index + 1} / {photos.length}
+          {photo.uploadedByName ? ` · ${photo.uploadedByName}` : ""} · {clock(photo.uploadedAt, timeZone)}{" "}
+          {dateLabel(photo.uploadedAt, timeZone)}
+        </span>
+        {photos.length > 1 ? (
+          <>
+            <button type="button" onClick={() => step(-1)} className="rounded-md bg-white/15 px-3 py-1.5 font-semibold hover:bg-white/25">
+              Previous
+            </button>
+            <button type="button" onClick={() => step(1)} className="rounded-md bg-white/15 px-3 py-1.5 font-semibold hover:bg-white/25">
+              Next
+            </button>
+          </>
+        ) : null}
+        <button
+          type="button"
+          onClick={onClose}
+          autoFocus
+          className="rounded-md bg-white px-3 py-1.5 font-semibold text-black"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/** Who checked in and out, newest first. */
+function History({ ticketId, timeZone }: { ticketId: string; timeZone: string }) {
+  const query = useTicket(ticketId)
+  const history = query.data?.history ?? []
+  return (
+    <div className="flex flex-col gap-1.5" data-ticket-history>
+      <Label>History</Label>
+      {query.isPending ? (
+        <span className="text-n-400 text-[13px]">Loading…</span>
+      ) : history.length === 0 ? (
+        <span className="text-n-400 text-[13px]">Nobody checked in to this one.</span>
+      ) : (
+        <ul className="border-n-200 m-0 flex list-none flex-col divide-y rounded-md border bg-white p-0">
+          {history.map((entry) => (
+            <li key={entry.id} className="flex items-baseline justify-between gap-3 px-3 py-2 text-[12.5px]">
+              <span>
+                {entry.type === "in" ? "Checked in" : "Checked out"}
+                {entry.insideFence ? "" : ` · ${formatDistance(entry.distanceM)} away`}
+              </span>
+              <span className="text-n-500 font-mono text-[11.5px] tabular-nums">
+                {clock(entry.at, timeZone)} · {dateLabel(entry.at, timeZone)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

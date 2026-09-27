@@ -47,6 +47,7 @@ export type TicketScope =
   | "upcoming"
   | "done"
   | "all"
+  | "mine"
 
 /** One place for every key, so invalidation can't drift from the fetches. */
 export const keys = {
@@ -158,7 +159,7 @@ export function useCheckIn(ticketId: string) {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: (body: Fix & { reason?: string }) =>
+    mutationFn: (body: Fix & { reason?: string; overtimeReason?: string }) =>
       apiFetch<CheckInResponse>(`/api/tickets/${ticketId}/check-in`, {
         method: "POST",
         body: JSON.stringify(body),
@@ -171,7 +172,7 @@ export function useCheckOut(ticketId: string) {
   const client = useQueryClient()
 
   return useMutation({
-    mutationFn: (body: Fix & { reason?: string }) =>
+    mutationFn: (body: Fix & { reason?: string; overtimeReason?: string }) =>
       apiFetch<CheckInResponse>(`/api/tickets/${ticketId}/check-out`, {
         method: "POST",
         body: JSON.stringify(body),
@@ -204,6 +205,10 @@ export function useTicketStatus(ticketId: string) {
       blockerReason?: string
       /** What the job is short of, when the cause is material. */
       needs?: { name: string; qty?: number; unit?: string }[]
+      /** The sender's own completion photos, the whole list in order. */
+      photos?: { url: string }[]
+      /** When closing the visit counts as overtime (the server decides). */
+      overtimeReason?: string
     }) =>
       apiFetch<{ ticket: TicketDTO }>(`/api/tickets/${ticketId}/status`, {
         method: "PATCH",
@@ -872,6 +877,10 @@ export function useSite() {
     queryKey: keys.site(),
     queryFn: () =>
       apiFetch<{ site: SiteDTO; uploads: boolean }>("/api/site"),
+    // Coming back to the tab re-reads the site, so a save made in another
+    // tab is noticed (the builder decides what to do about it).
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   })
 }
 
@@ -1339,10 +1348,15 @@ type ReportGroupResponse = { group: string; reports: GroupReportCard[] }
  * per report would be eight round trips and eight chances for the cards to
  * disagree about the window they cover.
  */
-export function useReportGroup(group: string, filters: ReportFilters) {
+export function useReportGroup(
+  group: string,
+  filters: ReportFilters,
+  enabled = true
+) {
   const query = buildQueryString(filters)
 
   return useQuery({
+    enabled,
     queryKey: ["report-group", group, query],
     queryFn: () =>
       apiFetch<ReportGroupResponse>(`/api/report-groups/${group}${query}`),

@@ -1,5 +1,7 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
-import { requireRole } from "@/lib/auth/guards"
+import { logActivity } from "@/lib/activity"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
+import { requireRole, requireUser } from "@/lib/auth/guards"
+import { assertCanDeleteRecord } from "@/lib/auth/permissions"
 import { sameText } from "@/lib/inventory"
 import { connectToDatabase } from "@/lib/mongodb"
 import { customerSchema } from "@/lib/validations/customers"
@@ -14,7 +16,7 @@ export async function PATCH(
   try {
     const viewer = await requireRole("owner", "supervisor")
     const { id } = await ctx.params
-    const values = customerSchema.parse(await request.json())
+    const values = customerSchema.parse(await readJson(request))
 
     await connectToDatabase()
 
@@ -58,7 +60,9 @@ export async function DELETE(
   ctx: RouteContext<"/api/customers/[id]">
 ) {
   try {
-    const viewer = await requireRole("owner", "supervisor")
+    const viewer = await requireUser()
+    // Deleting a record is the owner's alone (lib/auth/permissions.ts).
+    assertCanDeleteRecord(viewer)
     const { id } = await ctx.params
 
     await connectToDatabase()
@@ -70,6 +74,15 @@ export async function DELETE(
 
     if (!customer) throw new HttpError(404, "That customer doesn't exist")
 
+    // Audit trail: every delete is recorded (never any secret).
+    void logActivity({
+      businessId: viewer.businessId,
+      action: "record_deleted",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: customer.name,
+      detail: "customer",
+    })
     return ok({ id: String(customer._id) })
   } catch (error) {
     return handleApiError(error)

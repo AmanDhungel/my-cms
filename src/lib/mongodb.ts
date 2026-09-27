@@ -21,6 +21,14 @@ const cached: MongooseCache = globalThis._mongooseCache ?? {
 
 globalThis._mongooseCache = cached;
 
+/*
+ * Query-operator injection ({"$ne": null} where a string was expected) is
+ * stopped at the edge instead of with mongoose's global `sanitizeFilter`:
+ * every JSON body goes through a Zod schema that types each field, and
+ * query-string values are always strings. `sanitizeFilter` is left off
+ * because it would also wrap the app's own deliberate operators ($in, $gte,
+ * $exists…) in $eq and silently break those queries.
+ */
 export async function connectToDatabase(): Promise<Mongoose> {
   if (cached.conn) return cached.conn;
 

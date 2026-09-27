@@ -28,6 +28,7 @@ import {
   type CategoryWithCount,
 } from "@/lib/queries"
 import type { ItemDTO } from "@/models/inventory-item"
+import { useViewer } from "@/lib/use-viewer"
 
 type Tab = "items" | "categories" | "purchases"
 
@@ -264,6 +265,7 @@ function ItemsPanel({
   onEdit: (item: ItemDTO) => void
   onDelete: (item: ItemDTO) => void
 }) {
+  const { isOwner } = useViewer()
   const shown = paginate(items, page, PER_PAGE)
 
   if (total === 0) {
@@ -385,13 +387,15 @@ function ItemsPanel({
             >
               Edit
             </button>
-            <button
-              type="button"
-              onClick={() => onDelete(item)}
-              className="border-n-300 text-s-overdue rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold hover:bg-[#fdecec]"
-            >
-              Delete
-            </button>
+            {isOwner ? (
+              <button
+                type="button"
+                onClick={() => onDelete(item)}
+                className="border-n-300 text-s-overdue rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold hover:bg-[#fdecec]"
+              >
+                Delete
+              </button>
+            ) : null}
           </div>
         </div>
       ))}
@@ -430,6 +434,7 @@ function CategoriesPanel({
   onDelete: (category: CategoryWithCount) => void
   onShowItems: (id: string) => void
 }) {
+  const { isOwner } = useViewer()
   if (categories.length === 0) {
     return (
       <EmptyState
@@ -474,13 +479,15 @@ function CategoriesPanel({
             >
               Edit
             </button>
-            <button
-              type="button"
-              onClick={() => onDelete(category)}
-              className="border-n-300 text-s-overdue rounded-md border bg-white px-3 py-2 text-[12.5px] font-semibold hover:bg-[#fdecec]"
-            >
-              Delete
-            </button>
+            {isOwner ? (
+              <button
+                type="button"
+                onClick={() => onDelete(category)}
+                className="border-n-300 text-s-overdue rounded-md border bg-white px-3 py-2 text-[12.5px] font-semibold hover:bg-[#fdecec]"
+              >
+                Delete
+              </button>
+            ) : null}
           </div>
         </Panel>
       ))}

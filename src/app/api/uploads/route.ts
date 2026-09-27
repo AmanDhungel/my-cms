@@ -1,19 +1,34 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { fail, handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import {
   MAX_UPLOAD_BYTES,
   deleteUploads,
   isBusinessKey,
+  uploaderOf,
   isUploadPurpose,
   keyFromUrl,
-  signUpload,
   sniffImageType,
   uploadFile,
 } from "@/lib/s3"
 import { assertMultipartLength } from "@/lib/storage/http"
-import { uploadSchema, deleteUploadSchema } from "@/lib/validations/uploads"
+import { isTenantRequest } from "@/lib/tenancy"
+import { deleteUploadSchema } from "@/lib/validations/uploads"
+import { logActivity } from "@/lib/activity"
+import { canDelete } from "@/lib/auth/permissions"
+import { referencesOf } from "@/lib/image-ownership"
+import { getWorkspace } from "@/lib/workspace"
+import type { UserRole } from "@/models/user"
+import { enforceLimit } from "@/lib/security/rate-limit"
+import { CROSS_ORIGIN_MESSAGE, isSameOrigin } from "@/lib/security/same-origin"
 
 export const runtime = "nodejs"
+
+/** Which upload folders each role may write to. */
+const PURPOSES_BY_ROLE: Record<UserRole, readonly string[]> = {
+  owner: ["site", "maintenance", "ticket", "products", "logo"],
+  supervisor: ["maintenance", "ticket", "products"],
+  employee: ["ticket"],
+}
 
 /**
  * Uploading, for whatever holds pictures.
@@ -22,16 +37,31 @@ export const runtime = "nodejs"
  * types, what size — are the same everywhere, and a second copy of them is a
  * second place for them to drift.
  *
- * Two bodies, told apart by Content-Type. JSON asks for a signature and the
- * browser PUTs to S3 itself; the signature is narrowed to a single key, one
- * content type and one size, and expires in five minutes, so it is worth
- * nothing to anyone else. Multipart carries the bytes here, where they are
- * read before they are stored: the type comes from the first bytes, not the
- * filename, so nothing but a picture ever lands in the bucket.
+ * One body: multipart, carrying the bytes here, where they are read before
+ * they are stored — the type comes from the first bytes, not the filename,
+ * so nothing but a picture ever lands in the bucket. The older JSON body,
+ * which asked for a presigned PUT and let the browser write to S3 unchecked,
+ * is retired: nothing calls it, and it now answers 410.
+ *
+ * Not reachable from a tenant site's host: the proxy is kept off this route
+ * (see proxy.ts), so the route turns such requests away itself.
  */
+/**
+ * Nothing is read from here. On a tenant host it is a 404 like every other
+ * /api path (the proxy is kept off this route); elsewhere, 405.
+ */
+export function GET(request: Request) {
+  if (isTenantRequest(request)) return fail("Not found", 404)
+  return fail("Method not allowed", 405, undefined, { Allow: "POST, DELETE" })
+}
+
 export async function POST(request: Request) {
+  if (isTenantRequest(request)) return fail("Not found", 404)
+  // The proxy is kept off this route, so it checks the origin itself (CSRF).
+  if (!isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
   try {
     const viewer = await requireRole("owner", "supervisor", "employee")
+    await enforceLimit("uploads", viewer.id)
 
     // Media types are case-insensitive; a client may well send
     // "Multipart/Form-Data" and still mean this branch.
@@ -49,6 +79,12 @@ export async function POST(request: Request) {
 
       if (!isUploadPurpose(purpose)) {
         throw new HttpError(400, "That isn't something pictures are kept for")
+      }
+      // Each role uploads only for what it can save a picture on: the crew
+      // for ticket photos, supervisors also for stock and the repair bench,
+      // the owner for everything (logo and site included).
+      if (!PURPOSES_BY_ROLE[viewer.role].includes(purpose)) {
+        throw new HttpError(403, "You can't add pictures there")
       }
       if (!(file instanceof File)) {
         throw new HttpError(400, "No file was sent")
@@ -78,6 +114,8 @@ export async function POST(request: Request) {
       const stored = await uploadFile(bytes, {
         businessId: viewer.businessId,
         folder: purpose,
+        // Recorded on the object, from the session.
+        uploadedBy: viewer.id,
         contentType: sniffed,
         fileName: file.name,
       })
@@ -85,16 +123,7 @@ export async function POST(request: Request) {
       return ok({ key: stored.key, url: stored.url }, 201)
     }
 
-    const values = uploadSchema.parse(await request.json())
-
-    const signed = await signUpload(
-      viewer.businessId,
-      values.purpose,
-      values.contentType,
-      values.size
-    )
-
-    return ok({ uploadUrl: signed.uploadUrl, url: signed.url })
+    return fail("Uploads now go through the form upload", 410)
   } catch (error) {
     return handleApiError(error)
   }
@@ -113,20 +142,68 @@ export async function POST(request: Request) {
  * has orphaned something and nothing else will notice.
  */
 export async function DELETE(request: Request) {
+  if (isTenantRequest(request)) return fail("Not found", 404)
+  if (!isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
   try {
     const viewer = await requireRole("owner", "supervisor", "employee")
-    const { urls } = deleteUploadSchema.parse(await request.json())
+    const { urls } = deleteUploadSchema.parse(await readJson(request))
 
     // Scoped on the parsed key, not the URL text: a query string is dropped
     // when the key is resolved, so matching the raw URL would let a
     // `?/<own-id>/` tail vouch for an object under someone else's prefix.
     // The fence is storage's own definition of the workspace's keys, so
     // nothing passes here only to be dropped, uncounted, by deleteUploads.
-    const own = urls.filter((url) => {
+    const inWorkspace = urls.filter((url) => {
       const key = keyFromUrl(url)
       return key !== null && isBusinessKey(key, viewer.businessId)
     })
+
+    /*
+     * The owner may delete any of the workspace's pictures. Anyone else only
+     * their own (lib/auth/permissions.ts): a picture a saved record points
+     * at must be recorded there as theirs (and, for an employee, not on a
+     * past ticket); one no record points at yet — a fresh upload left
+     * behind by a failed save — must carry their id in the object's own
+     * metadata. That second case is the system tidying up after the
+     * uploader, not a delete of anyone's saved work. Everything else is
+     * counted as refused.
+     */
+    const own: string[] = []
+    const audited: string[] = []
+    const business = await getWorkspace(viewer.businessId)
+    for (const url of inWorkspace) {
+      const key = keyFromUrl(url)!
+      const refs = await referencesOf(key, url, viewer.businessId, business.timeZone)
+      if (viewer.role === "owner") {
+        own.push(url)
+        if (refs.length > 0) audited.push(url)
+        continue
+      }
+      const allowed =
+        refs.length > 0
+          ? refs.every((ref) =>
+              canDelete(viewer, { kind: "image", uploadedBy: ref.uploadedBy, onPastTicket: ref.onPastTicket })
+            )
+          : (await uploaderOf(key)) === viewer.id
+      if (allowed) {
+        own.push(url)
+        if (refs.length > 0) audited.push(url)
+      }
+    }
     const result = await deleteUploads(own, viewer.businessId)
+
+    // A saved picture removed is a delete worth recording; tidying a fresh
+    // upload is not.
+    for (const url of audited) {
+      void logActivity({
+        businessId: viewer.businessId,
+        action: "image_deleted",
+        actorId: viewer.id,
+        actorName: viewer.name,
+        subject: keyFromUrl(url)?.split("/").slice(-2).join("/") ?? "picture",
+        targetKind: "image",
+      })
+    }
 
     return ok({ deleted: result.deleted, refused: urls.length - own.length })
   } catch (error) {

@@ -1,11 +1,13 @@
 import type { NextRequest } from "next/server"
 
 import { logActivity } from "@/lib/activity"
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
 import { money } from "@/lib/billing"
 import { connectToDatabase } from "@/lib/mongodb"
+import { PAST_TICKET_MESSAGE, isPastTicket } from "@/lib/ticket-window"
 import { ticketMaterialsSchema } from "@/lib/validations/work"
+import { getWorkspace } from "@/lib/workspace"
 import { InventoryItem } from "@/models/inventory-item"
 import { Ticket, toTicketDTO } from "@/models/ticket"
 
@@ -31,7 +33,7 @@ export async function PUT(
   try {
     const viewer = await requireUser()
     const { id } = await ctx.params
-    const values = ticketMaterialsSchema.parse(await request.json())
+    const values = ticketMaterialsSchema.parse(await readJson(request))
 
     await connectToDatabase()
 
@@ -46,6 +48,12 @@ export async function PUT(
     )
     if (viewer.role === "employee" && !mine) {
       throw new HttpError(403, "That isn't one of your tickets")
+    }
+    if (viewer.role === "employee") {
+      const business = await getWorkspace(viewer.businessId)
+      if (isPastTicket(ticket, new Date(), business.timeZone)) {
+        throw new HttpError(403, PAST_TICKET_MESSAGE)
+      }
     }
 
     /*

@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole, requireUser } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { logActivity } from "@/lib/activity"
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("employee", "supervisor")
-    const values = requestSchemaChecked.parse(await request.json())
+    const values = requestSchemaChecked.parse(await readJson(request))
 
     await connectToDatabase()
 

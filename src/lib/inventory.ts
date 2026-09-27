@@ -54,17 +54,33 @@ export async function assertItemIsNew(
  */
 export function itemImagesFrom(
   images: { url: string }[],
-  businessId: string
-): { key: string; url: string }[] {
+  businessId: string,
+  /** Who is saving: recorded on every picture new to this item. */
+  uploaderId?: string,
+  /** The item's pictures as stored, so kept ones keep their uploader. */
+  existing: readonly { url: string; uploadedBy?: unknown; uploadedAt?: Date | null }[] = []
+): { key: string; url: string; uploadedBy?: string; uploadedAt?: Date }[] {
   if (images.length > 3) {
     throw new HttpError(400, "Three pictures is the most an item can hold")
   }
 
+  const stored = new Map(existing.map((one) => [one.url, one]))
   return images.map(({ url }) => {
     const key = keyFromUrl(url)
     if (!key || !isBusinessKeyIn(key, businessId, "products")) {
       throw new HttpError(400, "That picture isn't one of ours")
     }
-    return { key, url }
+    const kept = stored.get(url)
+    if (kept) {
+      return {
+        key,
+        url,
+        ...(kept.uploadedBy ? { uploadedBy: String(kept.uploadedBy) } : {}),
+        ...(kept.uploadedAt ? { uploadedAt: kept.uploadedAt } : {}),
+      }
+    }
+    return uploaderId
+      ? { key, url, uploadedBy: uploaderId, uploadedAt: new Date() }
+      : { key, url }
   })
 }

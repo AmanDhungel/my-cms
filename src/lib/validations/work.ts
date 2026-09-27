@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { safeUrl } from "@/lib/security/safe-url"
 
 import { BLOCKER_REASONS } from "@/lib/work-constants"
 
@@ -57,6 +58,19 @@ export const checkInSchema = z.object({
   lng: z.number().min(-180).max(180),
   accuracyM: z.number().min(0).max(100_000).optional(),
   reason: z.string().trim().max(500).optional(),
+  /**
+   * Why this is happening outside the shift. Only required when the server
+   * decides it is (lib/overtime.ts); an empty value counts as not given.
+   */
+  overtimeReason: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z
+      .string()
+      .trim()
+      .min(3, "Say a little more about why")
+      .max(500, "Keep this under 500 characters")
+      .optional()
+  ),
 })
 
 export type CheckInValues = z.infer<typeof checkInSchema>
@@ -97,6 +111,28 @@ export const ticketStatusSchema = z
       )
       .max(15, "That is a lot of shortages")
       .optional(),
+    /**
+     * The sender's own completion photos on this ticket, the whole list in
+     * order: kept ones by their URL, new ones as just uploaded. Only the
+     * crew sends it; the server checks every one belongs to this workspace.
+     */
+    photos: z
+      .array(z.object({ url: safeUrl(600) }))
+      .max(5, "Five photos is the most you can add to a ticket")
+      .optional(),
+    /**
+     * Why, when handing work over closes a visit outside the shift. Only
+     * required when the server decides it is overtime.
+     */
+    overtimeReason: z.preprocess(
+      (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+      z
+        .string()
+        .trim()
+        .min(3, "Say a little more about why")
+        .max(500, "Keep this under 500 characters")
+        .optional()
+    ),
   })
   .refine(
     (values) =>

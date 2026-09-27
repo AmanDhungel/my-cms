@@ -38,6 +38,7 @@ import {
 } from "@/lib/queries"
 import type { BillDTO } from "@/models/bill"
 import type { CustomerDTO } from "@/models/customer"
+import { useViewer } from "@/lib/use-viewer"
 
 const PER_PAGE = 10
 
@@ -45,6 +46,7 @@ type Standing = { bills: number; billed: number; due: number }
 
 /** Everyone the workspace bills, and where each of them stands. */
 export function CustomersView() {
+  const { isOwner } = useViewer()
   const [search, setSearch] = React.useState("")
   const [page, setPage] = React.useState(1)
   const [open, setOpen] = React.useState(false)
@@ -237,13 +239,15 @@ export function CustomersView() {
                   >
                     Edit
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleting(customer)}
-                    className="border-n-300 text-s-overdue rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold hover:bg-[#fdecec]"
-                  >
-                    Delete
-                  </button>
+                  {isOwner ? (
+                    <button
+                      type="button"
+                      onClick={() => setDeleting(customer)}
+                      className="border-n-300 text-s-overdue rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold hover:bg-[#fdecec]"
+                    >
+                      Delete
+                    </button>
+                  ) : null}
                 </div>
               </div>
             )

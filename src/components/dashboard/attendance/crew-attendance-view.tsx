@@ -242,6 +242,25 @@ function CrewRow({
             &ldquo;{day.inNote}&rdquo;
           </span>
         ) : null}
+        {day?.overtime ? (
+          // Checked in or out of a ticket outside the shift; decided by the
+          // server (lib/overtime.ts). Days before overtime existed show nothing.
+          <span className="flex flex-wrap items-baseline gap-1.5" data-overtime>
+            <span className="w-fit rounded-full border border-[#e0b3f2] bg-[#f6ebfb] px-2 py-0.5 text-[10.5px] font-semibold tracking-[0.04em] text-[#7a2e9c] uppercase">
+              Overtime
+            </span>
+            {day.overtimeMinutes > 0 ? (
+              <span className="text-n-600 font-mono text-[11.5px]">
+                {formatMinutes(day.overtimeMinutes)} past shift
+              </span>
+            ) : null}
+            {day.overtimeReason ? (
+              <span className="text-n-500 text-[12px] italic">
+                &ldquo;{day.overtimeReason}&rdquo;
+              </span>
+            ) : null}
+          </span>
+        ) : null}
         {day?.outPlace ? (
           <span className="text-n-400 text-[11.5px]">
             Closed: {PLACE_LABELS[day.outPlace].toLowerCase()}

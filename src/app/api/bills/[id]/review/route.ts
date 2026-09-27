@@ -3,8 +3,9 @@ import { randomBytes } from "node:crypto"
 import type { NextRequest } from "next/server"
 
 import { logActivity } from "@/lib/activity"
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
-import { requireRole } from "@/lib/auth/guards"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
+import { requireRole, requireUser } from "@/lib/auth/guards"
+import { assertCanDeleteRecord } from "@/lib/auth/permissions"
 import { connectToDatabase } from "@/lib/mongodb"
 import { inviteReviewSchema } from "@/lib/validations/review"
 import { Bill, toBillDTO } from "@/models/bill"
@@ -38,7 +39,7 @@ export async function POST(
   try {
     const viewer = await requireRole("owner", "supervisor")
     const { id } = await ctx.params
-    const values = inviteReviewSchema.parse(await request.json())
+    const values = inviteReviewSchema.parse(await readJson(request))
 
     await connectToDatabase()
     const bill = await findQuotation(viewer.businessId, id)
@@ -94,7 +95,9 @@ export async function DELETE(
   ctx: RouteContext<"/api/bills/[id]/review">
 ) {
   try {
-    const viewer = await requireRole("owner", "supervisor")
+    const viewer = await requireUser()
+    // Deleting a record is the owner's alone (lib/auth/permissions.ts).
+    assertCanDeleteRecord(viewer)
     const { id } = await ctx.params
 
     await connectToDatabase()

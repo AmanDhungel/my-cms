@@ -1,6 +1,6 @@
 import type { HydratedDocument } from "mongoose"
 
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { logActivity } from "@/lib/activity"
@@ -24,7 +24,7 @@ export async function PATCH(
   try {
     const viewer = await requireRole("owner")
     const { id } = await ctx.params
-    const values = requestDecisionSchema.parse(await request.json())
+    const values = requestDecisionSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

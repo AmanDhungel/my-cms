@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { safeUrl } from "@/lib/security/safe-url"
 
 import { MAINTENANCE_STATUSES } from "@/lib/work-constants"
 
@@ -53,7 +54,7 @@ export const maintenanceSchema = z.object({
     .transform((value) => value || undefined),
 
   photos: z
-    .array(z.string().trim().url().max(600))
+    .array(safeUrl(600))
     .max(8, "Eight pictures is plenty"),
 
   note: line(1000),

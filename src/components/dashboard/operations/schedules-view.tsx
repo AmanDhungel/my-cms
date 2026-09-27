@@ -38,6 +38,7 @@ import {
 import { scheduleSchema } from "@/lib/validations/operations"
 import { SCHEDULE_KINDS, type ScheduleKind } from "@/lib/work-constants"
 import type { ScheduleDTO } from "@/models/schedule"
+import { useViewer } from "@/lib/use-viewer"
 
 type Cell = { member: CrewMember; day: string; entry: ScheduleDTO | null }
 
@@ -279,6 +280,7 @@ function ScheduleDialog({
 }
 
 function ScheduleBody({ cell, onClose }: { cell: Cell; onClose: () => void }) {
+  const { isOwner } = useViewer()
   // What the repeating week already says about this day, so opening a cell
   // starts from the standing rule rather than from nothing.
   const planned = planFor(cell.member.week, cell.day)
@@ -402,7 +404,7 @@ function ScheduleBody({ cell, onClose }: { cell: Cell; onClose: () => void }) {
       </div>
 
       <DialogFooter className="gap-2 sm:gap-2.5">
-        {cell.entry ? (
+        {cell.entry && isOwner ? (
           <button
             type="button"
             onClick={() => {

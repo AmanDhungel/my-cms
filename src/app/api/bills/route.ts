@@ -1,6 +1,6 @@
 import mongoose from "mongoose"
 
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { holdsStock, quantity, totalsOf } from "@/lib/billing"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -43,7 +43,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("owner", "supervisor")
-    const values = billSchema.parse(await request.json())
+    const values = billSchema.parse(await readJson(request))
 
     await connectToDatabase()
 

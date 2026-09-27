@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { safeUrl } from "@/lib/security/safe-url"
 
 import { ITEM_UNITS } from "@/lib/work-constants"
 
@@ -42,7 +43,7 @@ export const itemSchema = z.object({
    * are", so a caller that knows nothing about pictures can't wipe them.
    */
   images: z
-    .array(z.object({ url: z.string().trim().url() }))
+    .array(z.object({ url: safeUrl(600) }))
     .max(3, "Three pictures is the most an item can hold")
     .optional(),
 })

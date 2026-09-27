@@ -1207,13 +1207,23 @@ async function attendanceReport(s: Scope): Promise<ReportPayload> {
 
   const buckets = new Map<
     string,
-    { present: number; late: number; leave: number; lateMin: number; away: number; hours: number }
+    { present: number; late: number; leave: number; lateMin: number; away: number; hours: number; otDays: number; otMin: number; otReason: string; otDay: string }
   >()
 
   for (const row of records) {
     const key = String(row.user)
     const at = buckets.get(key) ?? {
-      present: 0, late: 0, leave: 0, lateMin: 0, away: 0, hours: 0,
+      present: 0, late: 0, leave: 0, lateMin: 0, away: 0, hours: 0, otDays: 0, otMin: 0, otReason: "", otDay: "",
+    }
+    // Overtime (lib/overtime.ts), on the days that have it; older days
+    // carry no flag and count as none.
+    if (row.overtime) {
+      at.otDays += 1
+      at.otMin += row.overtimeMinutes ?? 0
+      if (row.day >= at.otDay) {
+        at.otDay = row.day
+        at.otReason = row.overtimeReason ?? at.otReason
+      }
     }
     if (row.status === "leave") at.leave += 1
     else if (row.inAt) {
@@ -1230,7 +1240,7 @@ async function attendanceReport(s: Scope): Promise<ReportPayload> {
 
   const rows = crew.map((member) => {
     const at = buckets.get(String(member._id)) ?? {
-      present: 0, late: 0, leave: 0, lateMin: 0, away: 0, hours: 0,
+      present: 0, late: 0, leave: 0, lateMin: 0, away: 0, hours: 0, otDays: 0, otMin: 0, otReason: "", otDay: "",
     }
     return {
       person: member.name,
@@ -1241,6 +1251,9 @@ async function attendanceReport(s: Scope): Promise<ReportPayload> {
       leave: at.leave,
       away: at.away,
       hours: round2(at.hours),
+      overtimeDays: at.otDays,
+      overtimeMinutes: at.otMin,
+      overtimeReason: at.otReason,
       // Rest days across the window, so "days worked" can be read against
       // what they were actually due rather than against the calendar.
       rest: restDaysIn(weekFor(member, business), from, to),
@@ -1259,6 +1272,9 @@ async function attendanceReport(s: Scope): Promise<ReportPayload> {
       { key: "rest", label: "Rest days", align: "right", format: "number" },
       { key: "away", label: "Opened away", align: "right", format: "number" },
       { key: "hours", label: "Hours", align: "right", format: "number" },
+      { key: "overtimeDays", label: "Overtime days", align: "right", format: "number" },
+      { key: "overtimeMinutes", label: "Overtime minutes", align: "right", format: "number" },
+      { key: "overtimeReason", label: "Last overtime reason" },
     ],
     rows,
     stats: [

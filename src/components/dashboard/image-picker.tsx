@@ -151,6 +151,7 @@ export function ImagePickerList({
   enabled = true,
   limit = 8,
   compact = false,
+  canRemove,
 }: {
   label: string
   hint?: string
@@ -163,6 +164,11 @@ export function ImagePickerList({
    * is full — for short lists, where a tile vanishing reads as a glitch.
    */
   compact?: boolean
+  /**
+   * Whether a saved picture may be taken off. A picture picked in this form
+   * and not yet saved can always go; without this, every one can.
+   */
+  canRemove?: (draft: ImageDraft) => boolean
 }) {
   const [busy, setBusy] = React.useState(false)
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -231,21 +237,23 @@ export function ImagePickerList({
                 className="size-full object-cover"
               />
             ) : null}
-            <button
-              type="button"
-              aria-label={`Remove picture ${index + 1}`}
-              // Not while a pick is being prepared: that one will be added to
-              // the list as it stood when it was picked, bringing back
-              // anything removed in the meantime.
-              disabled={busy}
-              onClick={() => {
-                clearImage(draft)
-                onChange(values.filter((_, i) => i !== index))
-              }}
-              className="text-n-700 absolute top-1 right-1 rounded-md bg-white/90 px-1.5 text-[13px] leading-tight shadow-sm"
-            >
-              ×
-            </button>
+            {draft.file || !canRemove || canRemove(draft) ? (
+              <button
+                type="button"
+                aria-label={`Remove picture ${index + 1}`}
+                // Not while a pick is being prepared: that one will be added to
+                // the list as it stood when it was picked, bringing back
+                // anything removed in the meantime.
+                disabled={busy}
+                onClick={() => {
+                  clearImage(draft)
+                  onChange(values.filter((_, i) => i !== index))
+                }}
+                className="text-n-700 absolute top-1 right-1 rounded-md bg-white/90 px-1.5 text-[13px] leading-tight shadow-sm"
+              >
+                ×
+              </button>
+            ) : null}
           </figure>
         ))}
 

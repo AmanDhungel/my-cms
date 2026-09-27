@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { safeUrl } from "@/lib/security/safe-url"
 
 import { PATTERN_KINDS } from "@/lib/work-constants"
 
@@ -139,6 +140,12 @@ export const signupSchema = z.object({
    * the deployment can open the first workspace; the route enforces the rest.
    */
   invite: z.string().trim().optional(),
+  /**
+   * Opening the first workspace without an invite: only with the
+   * deployment's SUPER_ADMIN_BOOTSTRAP_TOKEN, and only for an address in
+   * SUPER_ADMIN_EMAILS. Never sent by the sign-up page.
+   */
+  bootstrapToken: z.string().max(200).optional(),
   business: z.string().trim().min(2, "Business name is required"),
   name: z.string().trim().min(2, "Your name is required"),
   phone: z.string().trim().min(7, "Enter a contact number"),
@@ -203,7 +210,7 @@ export const businessSettingsSchema = z.object({
    * Absent leaves the logo alone, null removes it, `{ url }` sets it. Only
    * the URL travels: the server works out the key and checks it is ours.
    */
-  logo: z.object({ url: z.string().trim().url() }).nullable().optional(),
+  logo: z.object({ url: safeUrl(600) }).nullable().optional(),
 })
 
 export type BusinessSettingsValues = z.infer<typeof businessSettingsSchema>

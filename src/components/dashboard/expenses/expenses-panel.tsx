@@ -40,6 +40,7 @@ import {
 } from "@/lib/queries"
 import type { ExpenseDTO } from "@/models/expense"
 import type { ExpenseKind } from "@/lib/work-constants"
+import { useViewer } from "@/lib/use-viewer"
 
 const PER_PAGE = 10
 
@@ -68,6 +69,7 @@ export function ExpensesPanel({
    */
   revenue?: number
 }) {
+  const { isOwner } = useViewer()
   const [open, setOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<ExpenseDTO | null>(null)
   const [deleting, setDeleting] = React.useState<ExpenseDTO | null>(null)
@@ -329,14 +331,16 @@ export function ExpensesPanel({
                 >
                   Edit
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleting(expense)}
-                  aria-label={`Delete the ${money(expense.amount)} to ${expense.payee}`}
-                  className="border-n-300 text-n-500 hover:text-s-overdue hover:border-s-overdue/40 rounded-md border bg-white px-2 py-1.5 text-[12.5px] font-semibold"
-                >
-                  ×
-                </button>
+                {isOwner ? (
+                  <button
+                    type="button"
+                    onClick={() => setDeleting(expense)}
+                    aria-label={`Delete the ${money(expense.amount)} to ${expense.payee}`}
+                    className="border-n-300 text-n-500 hover:text-s-overdue hover:border-s-overdue/40 rounded-md border bg-white px-2 py-1.5 text-[12.5px] font-semibold"
+                  >
+                    ×
+                  </button>
+                ) : null}
               </div>
             </div>
           ))}

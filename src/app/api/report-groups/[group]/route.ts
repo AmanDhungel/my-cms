@@ -8,6 +8,7 @@ import {
   reportsIn,
   type ReportGroup,
   type ReportPayload,
+  canReadReportGroup,
 } from "@/lib/reports"
 import { buildReport, scopeFrom } from "@/lib/report-runner"
 import { getWorkspace } from "@/lib/workspace"
@@ -33,6 +34,9 @@ export async function GET(
 
     if (!REPORT_GROUPS.includes(group as ReportGroup)) {
       throw new HttpError(404, "There's no such group of reports")
+    }
+    if (!canReadReportGroup(group, viewer.role)) {
+      throw new HttpError(403, "You don't have access to that")
     }
 
     await connectToDatabase()

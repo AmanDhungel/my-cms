@@ -25,8 +25,10 @@ import {
   surface,
   useAnchor,
   usePictureShown,
+  useShowsList,
 } from "@/components/sites/parts"
 import { Extra, ProseText, Text } from "@/components/sites/slots"
+import { telHref } from "@/lib/security/safe-url"
 import type { SiteContent } from "@/models/site"
 
 /**
@@ -145,9 +147,8 @@ function heroCta(content: SiteContent) {
   const label = content.hero.ctaLabel
   const href =
     content.hero.ctaHref ??
-    (content.contact.phone
-      ? `tel:${content.contact.phone.replace(/\s+/g, "")}`
-      : "#contact")
+    telHref(content.contact.phone) ??
+    "#contact"
 
   return label ? (
     <Button href={href}>
@@ -162,13 +163,14 @@ const showContact = (sections: string[], content: SiteContent) =>
 // ---------------------------------------------------------------- spotlight
 
 export function Spotlight({ content, sections }: LayoutProps) {
+  const shows = useShowsList()
   const heroPicture = usePictureShown(content.hero.image)
 
   return (
     <>
       <SiteNav content={content} sections={sections} />
 
-      <Section id="top" className="pt-16 text-center sm:pt-24">
+      <Section id="top" className="pt-16 text-center @min-[40rem]:pt-24">
         <Wrap className="flex flex-col items-center gap-6">
           <Tagline content={content} />
           <Title as="h1" className="max-w-[900px]">
@@ -199,7 +201,7 @@ export function Spotlight({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "services") && content.services.length > 0 ? (
+      {has(sections, "services") && shows(content.services) ? (
         <Section id="services">
           <Wrap className="flex flex-col gap-10">
             <Head
@@ -213,7 +215,7 @@ export function Spotlight({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "products") && content.products.length > 0 ? (
+      {has(sections, "products") && shows(content.products) ? (
         <Section id="products" tone="soft">
           <Wrap className="flex flex-col gap-10">
             <Head section="products" eyebrow="What we sell" title="Our range" />
@@ -222,7 +224,7 @@ export function Spotlight({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "faq") && content.faq.length > 0 ? (
+      {has(sections, "faq") && shows(content.faq) ? (
         <Section id="faq">
           <Wrap className="flex flex-col gap-10">
             <Head section="faq" title="Questions we get asked" />
@@ -248,6 +250,7 @@ export function Spotlight({ content, sections }: LayoutProps) {
 // -------------------------------------------------------------------- split
 
 export function Split({ content, sections }: LayoutProps) {
+  const shows = useShowsList()
   const heroPicture = usePictureShown(content.hero.image)
   const aboutPicture = usePictureShown(content.about.image)
 
@@ -255,11 +258,11 @@ export function Split({ content, sections }: LayoutProps) {
     <>
       <SiteNav content={content} sections={sections} />
 
-      <Section id="top" className="pt-12 sm:pt-16">
+      <Section id="top" className="pt-12 @min-[40rem]:pt-16">
         <Wrap
           className={cn(
             "grid items-center gap-10",
-            heroPicture && "lg:grid-cols-2"
+            heroPicture && "@min-[64rem]:grid-cols-2"
           )}
         >
           <div className={cn("flex flex-col gap-5", !heroPicture && "max-w-[760px]")}>
@@ -286,7 +289,7 @@ export function Split({ content, sections }: LayoutProps) {
           <Wrap
             className={cn(
               "grid items-center gap-10",
-              aboutPicture && "lg:grid-cols-2"
+              aboutPicture && "@min-[64rem]:grid-cols-2"
             )}
           >
             {/* Mirrored, so the page alternates rather than marching. */}
@@ -295,13 +298,13 @@ export function Split({ content, sections }: LayoutProps) {
                 src={content.about.image}
                 alt={content.about.title ?? "About us"}
                 ratio="4/3"
-                className="lg:order-2"
+                className="@min-[64rem]:order-2"
                 slot="about.image"
               />
             ) : null}
             <div
               className={cn(
-                "flex flex-col gap-4 lg:order-1",
+                "flex flex-col gap-4 @min-[64rem]:order-1",
                 !aboutPicture && "max-w-[720px]"
               )}
             >
@@ -314,7 +317,7 @@ export function Split({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "services") && content.services.length > 0 ? (
+      {has(sections, "services") && shows(content.services) ? (
         <Section id="services">
           <Wrap className="flex flex-col gap-10">
             <Head section="services" eyebrow="What we do" title="Our services" />
@@ -323,7 +326,7 @@ export function Split({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "products") && content.products.length > 0 ? (
+      {has(sections, "products") && shows(content.products) ? (
         <Section id="products" tone="soft">
           <Wrap className="flex flex-col gap-10">
             <Head section="products" eyebrow="What we sell" title="Our range" />
@@ -332,7 +335,7 @@ export function Split({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "faq") && content.faq.length > 0 ? (
+      {has(sections, "faq") && shows(content.faq) ? (
         <Section id="faq">
           <Wrap width="narrow" className="flex flex-col gap-9">
             <Title>{heading("faq", "Questions we get asked")}</Title>
@@ -358,12 +361,13 @@ export function Split({ content, sections }: LayoutProps) {
 // ---------------------------------------------------------------- catalogue
 
 export function Catalogue({ content, sections }: LayoutProps) {
+  const shows = useShowsList()
   return (
     <>
       <SiteNav content={content} sections={sections} />
 
       {/* Deliberately short: the goods are the point, so they start high. */}
-      <Section id="top" className="py-9 sm:py-12">
+      <Section id="top" className="py-9 @min-[40rem]:py-12">
         <Wrap className="flex flex-wrap items-end justify-between gap-5">
           <div className="flex max-w-[560px] flex-col gap-2">
             <Title as="h1">
@@ -375,7 +379,7 @@ export function Catalogue({ content, sections }: LayoutProps) {
         </Wrap>
       </Section>
 
-      {has(sections, "products") && content.products.length > 0 ? (
+      {has(sections, "products") && shows(content.products) ? (
         <Section id="products" className="pt-0">
           <Wrap>
             <ProductGrid products={content.products} columns={4} ratio="1/1" />
@@ -383,7 +387,7 @@ export function Catalogue({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "services") && content.services.length > 0 ? (
+      {has(sections, "services") && shows(content.services) ? (
         <Section id="services" tone="soft">
           <Wrap className="flex flex-col gap-9">
             <Head section="services" title="We also do" />
@@ -392,7 +396,7 @@ export function Catalogue({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "faq") && content.faq.length > 0 ? (
+      {has(sections, "faq") && shows(content.faq) ? (
         <Section id="faq">
           <Wrap className="flex flex-col gap-9">
             <Head section="faq" title="Before you order" />
@@ -418,13 +422,14 @@ export function Catalogue({ content, sections }: LayoutProps) {
 // ----------------------------------------------------------------- services
 
 export function Services({ content, sections }: LayoutProps) {
+  const shows = useShowsList()
   const aboutPicture = usePictureShown(content.about.image)
 
   return (
     <>
       <SiteNav content={content} sections={sections} />
 
-      <Section id="top" className="pt-14 sm:pt-20">
+      <Section id="top" className="pt-14 @min-[40rem]:pt-20">
         <Wrap className="flex flex-col gap-5">
           <Tagline content={content} />
           <Title as="h1" className="max-w-[860px]">
@@ -436,7 +441,7 @@ export function Services({ content, sections }: LayoutProps) {
       </Section>
 
       {/* The list is the page, so it is numbered and given room. */}
-      {has(sections, "services") && content.services.length > 0 ? (
+      {has(sections, "services") && shows(content.services) ? (
         <Section id="services" tone="soft">
           <Wrap className="flex flex-col gap-10">
             <Head section="services" eyebrow="What we take on" title="The work we do" />
@@ -450,7 +455,7 @@ export function Services({ content, sections }: LayoutProps) {
           <Wrap
             className={cn(
               "grid items-start gap-10",
-              aboutPicture && "lg:grid-cols-[1.2fr_1fr]"
+              aboutPicture && "@min-[64rem]:grid-cols-[1.2fr_1fr]"
             )}
           >
             <div className={cn("flex flex-col gap-4", !aboutPicture && "max-w-[720px]")}>
@@ -471,7 +476,7 @@ export function Services({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "faq") && content.faq.length > 0 ? (
+      {has(sections, "faq") && shows(content.faq) ? (
         <Section id="faq" tone="soft">
           <Wrap className="flex flex-col gap-9">
             <Head section="faq" title="Questions we get asked" />
@@ -497,12 +502,13 @@ export function Services({ content, sections }: LayoutProps) {
 // ------------------------------------------------------------------- ledger
 
 export function Ledger({ content, sections }: LayoutProps) {
+  const shows = useShowsList()
   return (
     <>
       <SiteNav content={content} sections={sections} />
 
       {/* One column the whole way down. No pictures at all, by design. */}
-      <Section id="top" className="pt-16 sm:pt-24">
+      <Section id="top" className="pt-16 @min-[40rem]:pt-24">
         <Wrap width="narrow" className="flex flex-col gap-5">
           <Tagline content={content} />
           <Title as="h1">
@@ -527,7 +533,7 @@ export function Ledger({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "services") && content.services.length > 0 ? (
+      {has(sections, "services") && shows(content.services) ? (
         <Section id="services" className="pt-0">
           <Wrap width="narrow" className="flex flex-col gap-6">
             <div className="h-px w-full bg-[var(--site-border)]" />
@@ -539,7 +545,7 @@ export function Ledger({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "faq") && content.faq.length > 0 ? (
+      {has(sections, "faq") && shows(content.faq) ? (
         <Section id="faq" className="pt-0">
           <Wrap width="narrow" className="flex flex-col gap-6">
             <div className="h-px w-full bg-[var(--site-border)]" />
@@ -571,6 +577,7 @@ export function Ledger({ content, sections }: LayoutProps) {
 // --------------------------------------------------------------- storefront
 
 export function Storefront({ content, sections }: LayoutProps) {
+  const shows = useShowsList()
   const top = useAnchor("top")
   const heroPicture = usePictureShown(content.hero.image)
   const aboutPicture = usePictureShown(content.about.image)
@@ -593,7 +600,7 @@ export function Storefront({ content, sections }: LayoutProps) {
         <div className="border-b border-[var(--site-border)] bg-[var(--site-surface)]">
           <Wrap className="flex flex-wrap items-center justify-between gap-5 py-7">
             <div className="flex max-w-[620px] flex-col gap-2">
-              <Title as="h1" className="text-[clamp(1.7rem,4vw,2.6rem)]">
+              <Title as="h1" className="text-[clamp(1.7rem,4cqw,2.6rem)]">
                 <Headline content={content} />
               </Title>
               <Sub content={content} />
@@ -610,7 +617,7 @@ export function Storefront({ content, sections }: LayoutProps) {
         </div>
       </section>
 
-      {has(sections, "products") && content.products.length > 0 ? (
+      {has(sections, "products") && shows(content.products) ? (
         <Section id="products">
           <Wrap className="flex flex-col gap-9">
             <Head section="products" eyebrow="In the shop" title="What we stock" />
@@ -624,7 +631,7 @@ export function Storefront({ content, sections }: LayoutProps) {
           <Wrap
             className={cn(
               "grid items-center gap-10",
-              aboutPicture && "lg:grid-cols-2"
+              aboutPicture && "@min-[64rem]:grid-cols-2"
             )}
           >
             <div className={cn("flex flex-col gap-4", !aboutPicture && "max-w-[720px]")}>
@@ -662,7 +669,7 @@ export function Storefront({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "faq") && content.faq.length > 0 ? (
+      {has(sections, "faq") && shows(content.faq) ? (
         <Section id="faq" tone="soft">
           <Wrap className="flex flex-col gap-9">
             <Head section="faq" title="Good to know" />
@@ -679,6 +686,7 @@ export function Storefront({ content, sections }: LayoutProps) {
 // ------------------------------------------------------------------ atelier
 
 export function Atelier({ content, sections }: LayoutProps) {
+  const shows = useShowsList()
   const heroPicture = usePictureShown(content.hero.image)
 
   return (
@@ -686,7 +694,7 @@ export function Atelier({ content, sections }: LayoutProps) {
       <SiteNav content={content} sections={sections} />
 
       {/* Very few words, and they sit in a lot of space. */}
-      <Section id="top" className="pt-20 pb-10 sm:pt-28">
+      <Section id="top" className="pt-20 pb-10 @min-[40rem]:pt-28">
         <Wrap width="narrow" className="flex flex-col items-center gap-5 text-center">
           <Title as="h1">
             <Headline content={content} />
@@ -696,7 +704,7 @@ export function Atelier({ content, sections }: LayoutProps) {
       </Section>
 
       {heroPicture ? (
-        <Wrap width="full" className="px-0 sm:px-0">
+        <Wrap width="full" className="px-0 @min-[40rem]:px-0">
           <Picture
             src={content.hero.image}
             alt={content.name}
@@ -707,7 +715,7 @@ export function Atelier({ content, sections }: LayoutProps) {
         </Wrap>
       ) : null}
 
-      {has(sections, "gallery") && content.gallery.length > 0 ? (
+      {has(sections, "gallery") && shows(content.gallery) ? (
         <Section id="gallery">
           <Wrap width="full">
             <Gallery pictures={content.gallery} columns={3} />
@@ -726,7 +734,7 @@ export function Atelier({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "products") && content.products.length > 0 ? (
+      {has(sections, "products") && shows(content.products) ? (
         <Section id="products">
           <Wrap className="flex flex-col gap-9">
             <Head section="products" title="Available now" />
@@ -752,12 +760,13 @@ export function Atelier({ content, sections }: LayoutProps) {
 // ----------------------------------------------------------------- bulletin
 
 export function Bulletin({ content, sections }: LayoutProps) {
+  const shows = useShowsList()
   const faqAnchor = useAnchor("faq")
   const contactAnchor = useAnchor("contact")
   const heroPicture = usePictureShown(content.hero.image)
   const contactCard = showContact(sections, content)
   const showAbout = has(sections, "about") && Boolean(content.about.body)
-  const showFaq = has(sections, "faq") && content.faq.length > 0
+  const showFaq = has(sections, "faq") && shows(content.faq)
 
   return (
     <>
@@ -768,14 +777,14 @@ export function Bulletin({ content, sections }: LayoutProps) {
         <Wrap
           className={cn(
             "grid gap-8",
-            (contactCard || heroPicture) && "lg:grid-cols-[1.6fr_1fr]"
+            (contactCard || heroPicture) && "@min-[64rem]:grid-cols-[1.6fr_1fr]"
           )}
         >
           <div
             className={cn(
               "flex flex-col gap-4",
               (contactCard || heroPicture) &&
-                "border-b border-[var(--site-border)] pb-7 lg:border-r lg:border-b-0 lg:pr-8 lg:pb-0"
+                "border-b border-[var(--site-border)] pb-7 @min-[64rem]:border-r @min-[64rem]:border-b-0 @min-[64rem]:pr-8 @min-[64rem]:pb-0"
             )}
           >
             <Tagline content={content} />
@@ -793,7 +802,7 @@ export function Bulletin({ content, sections }: LayoutProps) {
             <aside className="flex flex-col gap-5">
               {contactCard ? (
                 <div className={cn(radius, surface, "border p-5")}>
-                  <ContactCard contact={content.contact} className="sm:grid-cols-1" />
+                  <ContactCard contact={content.contact} className="@min-[40rem]:grid-cols-1" />
                 </div>
               ) : null}
               {heroPicture ? (
@@ -809,7 +818,7 @@ export function Bulletin({ content, sections }: LayoutProps) {
         </Wrap>
       </Section>
 
-      {has(sections, "services") && content.services.length > 0 ? (
+      {has(sections, "services") && shows(content.services) ? (
         <Section id="services" tone="soft" className="py-10">
           <Wrap className="flex flex-col gap-7">
             <Head section="services" title="What we do" />
@@ -818,7 +827,7 @@ export function Bulletin({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "products") && content.products.length > 0 ? (
+      {has(sections, "products") && shows(content.products) ? (
         <Section id="products" className="py-10">
           <Wrap className="flex flex-col gap-7">
             <Head section="products" title="What we sell" />
@@ -830,7 +839,7 @@ export function Bulletin({ content, sections }: LayoutProps) {
       {/* About and the questions share a band, but either can stand alone. */}
       {showAbout || showFaq ? (
         <Section tone="soft" className="py-10">
-          <Wrap className={cn("grid gap-8", showAbout && showFaq && "lg:grid-cols-2")}>
+          <Wrap className={cn("grid gap-8", showAbout && showFaq && "@min-[64rem]:grid-cols-2")}>
             {showAbout ? (
               <div className="flex flex-col gap-3">
                 <Title as="h3" className="text-[20px]">
@@ -860,6 +869,7 @@ export function Bulletin({ content, sections }: LayoutProps) {
 // ------------------------------------------------------------------- beacon
 
 export function Beacon({ content, sections }: LayoutProps) {
+  const shows = useShowsList()
   const phone = content.contact.phone
 
   return (
@@ -871,7 +881,7 @@ export function Beacon({ content, sections }: LayoutProps) {
         standing next to the problem, so the one thing they need is enormous
         and above everything else.
       */}
-      <Section id="top" className="py-16 text-center sm:py-24">
+      <Section id="top" className="py-16 text-center @min-[40rem]:py-24">
         <Wrap className="flex flex-col items-center gap-6">
           <Tagline content={content} />
           <Title as="h1" className="max-w-[820px]">
@@ -881,10 +891,10 @@ export function Beacon({ content, sections }: LayoutProps) {
 
           {phone ? (
             <SiteLink
-              href={`tel:${phone.replace(/\s+/g, "")}`}
+              href={telHref(phone)}
               className={cn(
                 display,
-                "mt-2 text-[clamp(2.2rem,8vw,4.5rem)] leading-none font-bold tracking-[-0.03em] text-[var(--site-accent)] no-underline tabular-nums"
+                "mt-2 text-[clamp(2.2rem,8cqw,4.5rem)] leading-none font-bold tracking-[-0.03em] text-[var(--site-accent)] no-underline tabular-nums"
               )}
             >
               <Text id="contact.phone" value={phone} />
@@ -909,7 +919,7 @@ export function Beacon({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "services") && content.services.length > 0 ? (
+      {has(sections, "services") && shows(content.services) ? (
         <Section id="services">
           <Wrap className="flex flex-col gap-9">
             <Head section="services" title="What we come out for" />
@@ -929,7 +939,7 @@ export function Beacon({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "faq") && content.faq.length > 0 ? (
+      {has(sections, "faq") && shows(content.faq) ? (
         <Section id="faq">
           <Wrap className="flex flex-col gap-9">
             <Head section="faq" title="Before you call" />
@@ -946,6 +956,7 @@ export function Beacon({ content, sections }: LayoutProps) {
 // ------------------------------------------------------------------ gallery
 
 export function GalleryLayout({ content, sections }: LayoutProps) {
+  const shows = useShowsList()
   const heroPicture = usePictureShown(content.hero.image)
 
   return (
@@ -957,12 +968,12 @@ export function GalleryLayout({ content, sections }: LayoutProps) {
         <Wrap
           className={cn(
             "grid gap-8",
-            heroPicture && "lg:grid-cols-[1fr_2fr] lg:items-end"
+            heroPicture && "@min-[64rem]:grid-cols-[1fr_2fr] @min-[64rem]:items-end"
           )}
         >
           <div className={cn("flex flex-col gap-3", !heroPicture && "max-w-[760px]")}>
             <Tagline content={content} />
-            <Title as="h1" className="text-[clamp(1.8rem,4vw,2.8rem)]">
+            <Title as="h1" className="text-[clamp(1.8rem,4cqw,2.8rem)]">
               <Headline content={content} />
             </Title>
             <Sub content={content} />
@@ -981,7 +992,7 @@ export function GalleryLayout({ content, sections }: LayoutProps) {
         </Wrap>
       </Section>
 
-      {has(sections, "gallery") && content.gallery.length > 0 ? (
+      {has(sections, "gallery") && shows(content.gallery) ? (
         <Section id="gallery" className="pt-0">
           <Wrap width="full">
             <Gallery pictures={content.gallery} columns={4} />
@@ -989,7 +1000,7 @@ export function GalleryLayout({ content, sections }: LayoutProps) {
         </Section>
       ) : null}
 
-      {has(sections, "products") && content.products.length > 0 ? (
+      {has(sections, "products") && shows(content.products) ? (
         <Section id="products" tone="soft">
           <Wrap className="flex flex-col gap-9">
             <Head section="products" title="For sale" />

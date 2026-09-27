@@ -8,6 +8,12 @@ import {
   useSlotRenderer,
 } from "@/components/sites/site-mode"
 import { Items, Text } from "@/components/sites/slots"
+import {
+  mailtoHref,
+  safeHref,
+  safeImageSrc,
+  telHref,
+} from "@/lib/security/safe-url"
 import type { SiteContent } from "@/models/site"
 
 /**
@@ -51,7 +57,7 @@ export function Wrap({
   return (
     <div
       className={cn(
-        "mx-auto w-full px-5 sm:px-8",
+        "mx-auto w-full px-5 @min-[40rem]:px-8",
         width === "narrow" && "max-w-[720px]",
         width === "wide" && "max-w-[1120px]",
         width === "full" && "max-w-[1440px]",
@@ -80,7 +86,7 @@ export function Section({
     <section
       id={anchor}
       className={cn(
-        "py-14 sm:py-20",
+        "py-14 @min-[40rem]:py-20",
         tone === "soft" && "bg-[var(--site-soft)]",
         tone === "surface" && "bg-[var(--site-surface)]",
         className
@@ -114,8 +120,8 @@ export function Title({
         display,
         "m-0 leading-[1.12] font-bold tracking-[-0.02em] text-balance",
         Tag === "h1"
-          ? "text-[clamp(2rem,5.5vw,3.6rem)]"
-          : "text-[clamp(1.5rem,3vw,2.2rem)]",
+          ? "text-[clamp(2rem,5.5cqw,3.6rem)]"
+          : "text-[clamp(1.5rem,3cqw,2.2rem)]",
         className
       )}
     >
@@ -178,6 +184,9 @@ export function SiteLink({
   children: React.ReactNode
 }) {
   const mode = useSiteMode()
+  // Whatever is stored, only a web address, an anchor on this page or a
+  // tel:/mailto: rebuilt from its digits or address is ever a link.
+  href = siteHref(href)
   if (!href || !linksAreLive(mode)) {
     return <span className={className}>{children}</span>
   }
@@ -186,6 +195,19 @@ export function SiteLink({
       {children}
     </a>
   )
+}
+
+/**
+ * A link target safe to render on a public site, or null. javascript:,
+ * data:, vbscript: and //host never get through (lib/security/safe-url.ts).
+ */
+export function siteHref(value: string | null | undefined): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (/^#[\w-]*$/.test(trimmed)) return trimmed
+  if (/^tel:/i.test(trimmed)) return telHref(trimmed.slice(4))
+  if (/^mailto:/i.test(trimmed)) return mailtoHref(trimmed.slice(7))
+  return safeHref(trimmed)
 }
 
 export function Button({
@@ -287,6 +309,8 @@ export function Picture({
 }) {
   const mode = useSiteMode()
   const renderer = useSlotRenderer()
+  // A stored javascript: or data: address renders as no picture at all.
+  src = safeImageSrc(src)
 
   if (mode === "editor" && renderer && slot) {
     return (
@@ -333,6 +357,16 @@ export function usePictureShown(src: string | null) {
   return Boolean(src) || mode === "editor" || mode === "thumbnail"
 }
 
+/**
+ * Whether a list's section is drawn. Outside the editor, only with rows in
+ * it. In the editor always — a list whose samples were all dismissed still
+ * needs its section on screen, because that is where its Add button is.
+ */
+export function useShowsList() {
+  const mode = useSiteMode()
+  return (rows: readonly unknown[]) => rows.length > 0 || mode === "editor"
+}
+
 export function ServiceList({
   services,
   numbered = false,
@@ -342,14 +376,15 @@ export function ServiceList({
   numbered?: boolean
   columns?: 1 | 2 | 3
 }) {
-  if (services.length === 0) return null
+  const shows = useShowsList()
+  if (!shows(services)) return null
 
   return (
     <div
       className={cn(
         "grid gap-x-8 gap-y-7",
-        columns === 3 && "sm:grid-cols-2 lg:grid-cols-3",
-        columns === 2 && "sm:grid-cols-2"
+        columns === 3 && "@min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3",
+        columns === 2 && "@min-[40rem]:grid-cols-2"
       )}
     >
       <Items id="services">
@@ -389,15 +424,16 @@ export function ProductGrid({
   columns?: 2 | 3 | 4
   ratio?: string
 }) {
-  if (products.length === 0) return null
+  const shows = useShowsList()
+  if (!shows(products)) return null
 
   return (
     <div
       className={cn(
         "grid gap-5",
-        columns === 2 && "sm:grid-cols-2",
-        columns === 3 && "sm:grid-cols-2 lg:grid-cols-3",
-        columns === 4 && "sm:grid-cols-2 lg:grid-cols-4"
+        columns === 2 && "@min-[40rem]:grid-cols-2",
+        columns === 3 && "@min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3",
+        columns === 4 && "@min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-4"
       )}
     >
       <Items id="products">
@@ -454,10 +490,11 @@ export function FaqList({
   faq: SiteContent["faq"]
   columns?: 1 | 2
 }) {
-  if (faq.length === 0) return null
+  const shows = useShowsList()
+  if (!shows(faq)) return null
 
   return (
-    <div className={cn("grid gap-7", columns === 2 && "sm:grid-cols-2")}>
+    <div className={cn("grid gap-7", columns === 2 && "@min-[40rem]:grid-cols-2")}>
       <Items id="faq">
         {faq.map((entry, index) => (
           <div key={index} data-list-item className="flex flex-col gap-1.5">
@@ -494,7 +531,7 @@ export function ContactCard({
           id: "contact.phone",
           label: "Phone",
           value: contact.phone,
-          href: `tel:${contact.phone.replace(/\s+/g, "")}`,
+          href: telHref(contact.phone),
         }
       : null,
     contact.email
@@ -502,7 +539,7 @@ export function ContactCard({
           id: "contact.email",
           label: "Email",
           value: contact.email,
-          href: `mailto:${contact.email}`,
+          href: mailtoHref(contact.email),
         }
       : null,
     contact.address
@@ -526,7 +563,7 @@ export function ContactCard({
   if (rows.length === 0) return null
 
   return (
-    <dl className={cn("m-0 grid gap-5 sm:grid-cols-2", className)}>
+    <dl className={cn("m-0 grid gap-5 @min-[40rem]:grid-cols-2", className)}>
       {rows.map((row) => (
         <div key={row.label} className="flex flex-col gap-1">
           <dt className="m-0 text-[10.5px] font-semibold tracking-[0.12em] text-[var(--site-muted)] uppercase">
@@ -557,15 +594,16 @@ export function Gallery({
   pictures: SiteContent["gallery"]
   columns?: 2 | 3 | 4
 }) {
-  if (pictures.length === 0) return null
+  const shows = useShowsList()
+  if (!shows(pictures)) return null
 
   return (
     <div
       className={cn(
         "grid gap-3",
-        columns === 2 && "sm:grid-cols-2",
-        columns === 3 && "sm:grid-cols-2 lg:grid-cols-3",
-        columns === 4 && "grid-cols-2 lg:grid-cols-4"
+        columns === 2 && "@min-[40rem]:grid-cols-2",
+        columns === 3 && "@min-[40rem]:grid-cols-2 @min-[64rem]:grid-cols-3",
+        columns === 4 && "grid-cols-2 @min-[64rem]:grid-cols-4"
       )}
     >
       <Items id="gallery">

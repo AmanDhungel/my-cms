@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
+import { z } from "zod"
 
-import { handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { Notification, toNotificationDTO } from "@/models/notification"
@@ -19,6 +20,7 @@ export async function GET(request: NextRequest) {
     if (params.get("count") === "1") {
       return ok({
         unread: await Notification.countDocuments({
+          business: viewer.businessId,
           user: viewer.id,
           readAt: { $exists: false },
         }),
@@ -26,12 +28,21 @@ export async function GET(request: NextRequest) {
     }
 
     const unreadOnly = params.get("unread") === "1"
-    const filter: Record<string, unknown> = { user: viewer.id }
+    // Scoped to the workspace as well as the person: notifications from a
+    // workspace they have since left stay behind there.
+    const filter: Record<string, unknown> = {
+      business: viewer.businessId,
+      user: viewer.id,
+    }
     if (unreadOnly) filter.readAt = { $exists: false }
 
     const [entries, unread] = await Promise.all([
       Notification.find(filter).sort({ createdAt: -1 }).limit(100),
-      Notification.countDocuments({ user: viewer.id, readAt: { $exists: false } }),
+      Notification.countDocuments({
+        business: viewer.businessId,
+        user: viewer.id,
+        readAt: { $exists: false },
+      }),
     ])
 
     return ok({ notifications: entries.map(toNotificationDTO), unread })
@@ -40,15 +51,29 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/** One id, or nothing for "all of them". A string, never a query operator. */
+const markSchema = z.object({
+  id: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/, "That isn't a notification")
+    .optional(),
+})
+
 /** Marks one notification read, or all of them when no id is given. */
 export async function POST(request: Request) {
   try {
     const viewer = await requireUser()
-    const body = (await request.json().catch(() => ({}))) as { id?: string }
+    // An empty body means "all"; an oversized one is still refused.
+    const raw = await readJson(request).catch((error: unknown) => {
+      if (error instanceof HttpError && error.status === 413) throw error
+      return {}
+    })
+    const body = markSchema.parse(raw ?? {})
 
     await connectToDatabase()
 
     const filter: Record<string, unknown> = {
+      business: viewer.businessId,
       user: viewer.id,
       readAt: { $exists: false },
     }
@@ -59,6 +84,7 @@ export async function POST(request: Request) {
     })
 
     const unread = await Notification.countDocuments({
+      business: viewer.businessId,
       user: viewer.id,
       readAt: { $exists: false },
     })

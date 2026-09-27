@@ -1,16 +1,19 @@
+import { NextResponse } from "next/server"
+import { Error as MongooseError } from "mongoose"
+
 import { logActivity } from "@/lib/activity"
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import {
-  isBusinessKeyIn,
-  keyFromUrl,
+  foreignPictures,
   reconcileUploads,
   uploadsConfigured,
 } from "@/lib/s3"
 import { loadOrStartSite, picturesIn, slugIsFree } from "@/lib/site-server"
 import { siteSchema } from "@/lib/validations/site"
-import { toSiteContent, toSiteDTO } from "@/models/site"
+import { nextUploaders } from "@/lib/image-uploaders"
+import { Site, toSiteContent, toSiteDTO } from "@/models/site"
 
 export const runtime = "nodejs"
 
@@ -44,10 +47,22 @@ export async function GET() {
  * entire site in its form state, and half-applied content is how a page ends
  * up with a heading from one draft and a body from another.
  */
+/** The answer to a save made from a version that is no longer current. */
+function stale(updatedAt: Date | undefined) {
+  return NextResponse.json(
+    {
+      error: "This site was changed in another tab.",
+      code: "stale",
+      updatedAt: updatedAt ? updatedAt.toISOString() : null,
+    },
+    { status: 409 }
+  )
+}
+
 export async function PUT(request: Request) {
   try {
     const viewer = await requireRole("owner")
-    const values = siteSchema.parse(await request.json())
+    const values = siteSchema.parse(await readJson(request))
 
     /*
      * A picture in our bucket has to be this workspace's own site picture.
@@ -62,15 +77,17 @@ export async function PUT(request: Request) {
       ...values.content.products.map((one) => one.image),
       ...values.content.gallery.map((one) => one.url),
     ].filter((url): url is string => Boolean(url))
-    for (const url of incoming) {
-      const key = keyFromUrl(url)
-      if (key && !isBusinessKeyIn(key, viewer.businessId, "site")) {
-        throw new HttpError(400, "That picture isn't one of ours")
-      }
+    if (foreignPictures(incoming, viewer.businessId, "site").length > 0) {
+      throw new HttpError(400, "That picture isn't one of ours")
     }
 
     await connectToDatabase()
     const site = await loadOrStartSite(viewer.businessId)
+    const loadedAt = site.updatedAt as Date | undefined
+
+    if (values.updatedAt && loadedAt && loadedAt.toISOString() !== values.updatedAt) {
+      return stale(loadedAt)
+    }
 
     if (values.slug !== site.slug) {
       if (!(await slugIsFree(values.slug, viewer.businessId))) {
@@ -88,6 +105,12 @@ export async function PUT(request: Request) {
     site.slug = values.slug
     site.template = values.template
     site.set("content", values.content)
+    // Who added each picture now in the content (the image fields are plain
+    // URLs; this list sits beside them). Kept ones keep their entry.
+    site.set(
+      "siteImageUploaders",
+      nextUploaders(picturesIn(toSiteContent(site.content)), before, site.siteImageUploaders ?? [], viewer.id)
+    )
     if (values.extraSlots) {
       site.set(
         "extraSlots",
@@ -95,7 +118,18 @@ export async function PUT(request: Request) {
       )
     }
     site.updatedBy = viewer.id as never
-    await site.save()
+    // The check above and this write must not be split by another save:
+    // the write only matches the version that was checked.
+    if (values.updatedAt && loadedAt) site.$where = { updatedAt: loadedAt }
+    try {
+      await site.save()
+    } catch (error) {
+      if (error instanceof MongooseError.DocumentNotFoundError) {
+        const current = await Site.findById(site._id).select("updatedAt").lean()
+        return stale(current?.updatedAt as Date | undefined)
+      }
+      throw error
+    }
 
     /*
      * Tidying happens here rather than in the browser because a closed tab
@@ -126,7 +160,7 @@ export async function PUT(request: Request) {
 export async function POST(request: Request) {
   try {
     const viewer = await requireRole("owner")
-    const body = (await request.json()) as { published?: unknown }
+    const body = (await readJson(request)) as { published?: unknown }
 
     if (typeof body.published !== "boolean") {
       throw new HttpError(400, "Say whether to publish or unpublish")

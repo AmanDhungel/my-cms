@@ -34,7 +34,7 @@ export async function requireUser(): Promise<SessionUser> {
   // the second query is the price of a block that takes effect at once
   // rather than whenever a cascade last ran.
   const member = await User.findById(claims.id)
-    .select("name email role business status blockedAt")
+    .select("name email role business status blockedAt sessionsValidAfter")
     .populate<{ business: { _id: unknown; blockedAt?: Date } }>(
       "business",
       "blockedAt"
@@ -46,6 +46,10 @@ export async function requireUser(): Promise<SessionUser> {
 
   if (member.blockedAt || member.business?.blockedAt) {
     throw new HttpError(403, "This account has been blocked")
+  }
+
+  if (isStaleSession(claims.signedInAt, member.sessionsValidAfter)) {
+    throw new HttpError(401, "Sign in to continue")
   }
 
   return {
@@ -71,6 +75,16 @@ export async function requireRole(
   }
 
   return user
+}
+
+/**
+ * A session signed in before the account's sessionsValidAfter (set when a
+ * removed account is adopted) no longer counts. A token from before the
+ * stamp existed has no signedInAt and counts as stale once one is set.
+ */
+export function isStaleSession(signedInAt: number | undefined, validAfter: Date | null | undefined) {
+  if (!validAfter) return false
+  return !signedInAt || signedInAt < validAfter.getTime()
 }
 
 export type SuperAdmin = { id: string; name: string; email: string }

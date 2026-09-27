@@ -2,7 +2,10 @@ import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 
 import { SiteRenderer } from "@/components/sites/site-renderer"
+import { safeHref } from "@/lib/security/safe-url"
 import { findPublishedSite } from "@/lib/site-server"
+import { publishedContent } from "@/lib/site-slots"
+import { sectionsOf } from "@/lib/site-templates"
 import { toExtraSlots, toSiteContent } from "@/models/site"
 
 /**
@@ -25,6 +28,8 @@ export async function generateMetadata({
   if (!site) return { title: "Not found" }
 
   const content = toSiteContent(site.content)
+  // Only an absolute http(s) picture is ever named in the share preview.
+  const shareImage = safeHref(content.hero.image)
 
   return {
     title: content.tagline ? `${content.name} — ${content.tagline}` : content.name,
@@ -33,7 +38,7 @@ export async function generateMetadata({
     openGraph: {
       title: content.name,
       description: content.description ?? content.hero.sub ?? undefined,
-      images: content.hero.image ? [content.hero.image] : undefined,
+      images: shareImage ? [shareImage] : undefined,
     },
     // A tenant site is its own thing; nothing here should read as EMS.
     robots: { index: true, follow: true },
@@ -53,7 +58,12 @@ export default async function TenantSitePage({
   return (
     <SiteRenderer
       template={site.template}
-      content={toSiteContent(site.content)}
+      // Only what this template shows: the renderer's props are serialised
+      // into the HTML, so anything else would be readable in the source.
+      content={publishedContent(
+        toSiteContent(site.content),
+        sectionsOf(site.template)
+      )}
       extraSlots={toExtraSlots(site.extraSlots)}
       mode="published"
       className="min-h-screen"

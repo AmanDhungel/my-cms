@@ -1,11 +1,13 @@
 import type { NextRequest } from "next/server"
 
 import { logActivity } from "@/lib/activity"
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
-import { requireRole } from "@/lib/auth/guards"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
+import { requireRole, requireUser } from "@/lib/auth/guards"
+import { assertCanDeleteRecord, assertCanRemoveImages } from "@/lib/auth/permissions"
+import { nextUploaders, removedPictures } from "@/lib/image-uploaders"
 import { ownParty } from "@/lib/money-refs"
 import { connectToDatabase } from "@/lib/mongodb"
-import { deleteUploads, reconcileUploads } from "@/lib/s3"
+import { deleteUploads, foreignPictures, reconcileUploads } from "@/lib/s3"
 import { dayRangeInZone } from "@/lib/time"
 import { maintenanceSchema } from "@/lib/validations/maintenance"
 import { getWorkspace } from "@/lib/workspace"
@@ -27,7 +29,17 @@ export async function PATCH(
   try {
     const viewer = await requireRole("owner", "supervisor")
     const { id } = await ctx.params
-    const values = maintenanceSchema.parse(await request.json())
+    const values = maintenanceSchema.parse(await readJson(request))
+
+    // A photo in our bucket must be this workspace's own maintenance photo.
+    // Once stored, dropping it on a later save would delete it — so another
+    // business's picture, or this one's site or product pictures, never get
+    // in. Addresses outside the bucket are left as they are.
+    if (foreignPictures(values.photos, viewer.businessId, "maintenance").length > 0) {
+      throw new HttpError(422, "Validation failed", {
+        photos: ["That picture isn't one of ours"],
+      })
+    }
 
     await connectToDatabase()
     const business = await getWorkspace(viewer.businessId)
@@ -51,7 +63,11 @@ export async function PATCH(
     row.returnedAt = values.returnedAt ? day(values.returnedAt) : undefined
     row.cost = values.cost
     row.assignee = values.assigneeId as never
+    // Dropping or replacing a saved photo is deleting it: each must be the
+    // viewer's to delete (lib/auth/permissions.ts), or nothing is saved.
+    assertCanRemoveImages(viewer, removedPictures(before, values.photos, row.photoUploaders ?? []))
     row.set("photos", values.photos)
+    row.set("photoUploaders", nextUploaders(values.photos, before, row.photoUploaders ?? [], viewer.id))
     row.note = values.note
     await row.save()
 
@@ -93,7 +109,9 @@ export async function DELETE(
   ctx: RouteContext<"/api/maintenance/[id]">
 ) {
   try {
-    const viewer = await requireRole("owner", "supervisor")
+    const viewer = await requireUser()
+    // Deleting a record is the owner's alone (lib/auth/permissions.ts).
+    assertCanDeleteRecord(viewer)
     const { id } = await ctx.params
 
     await connectToDatabase()

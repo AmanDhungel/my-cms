@@ -1,6 +1,8 @@
-import { HttpError, handleApiError, ok } from "@/lib/api-response"
-import { requireRole } from "@/lib/auth/guards"
+import { logActivity } from "@/lib/activity"
+import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
+import { requireRole, requireUser } from "@/lib/auth/guards"
 import { assertItemIsNew, itemImagesFrom } from "@/lib/inventory"
+import { assertCanDeleteRecord, assertCanRemoveImages } from "@/lib/auth/permissions"
 import { connectToDatabase } from "@/lib/mongodb"
 import { deleteUploads } from "@/lib/s3"
 import { itemSchema } from "@/lib/validations/inventory"
@@ -39,7 +41,7 @@ export async function PATCH(
   try {
     const viewer = await requireRole("owner", "supervisor")
     const { id } = await ctx.params
-    const values = itemSchema.parse(await request.json())
+    const values = itemSchema.parse(await readJson(request))
 
     await connectToDatabase()
 
@@ -78,7 +80,18 @@ export async function PATCH(
     // ones dropped can be cleared out once the save has landed.
     const before = (item.images ?? []).map((one) => one.url)
     if (values.images !== undefined) {
-      item.set("images", itemImagesFrom(values.images, viewer.businessId))
+      const next = itemImagesFrom(values.images, viewer.businessId, viewer.id, item.images ?? [])
+      // Dropping or replacing a saved picture is deleting it: each one has
+      // to be the viewer's to delete (lib/auth/permissions.ts), or nothing
+      // is saved.
+      const keep = new Set(next.map((one) => one.url))
+      assertCanRemoveImages(
+        viewer,
+        (item.images ?? [])
+          .filter((one) => !keep.has(one.url))
+          .map((one) => ({ uploadedBy: one.uploadedBy ? String(one.uploadedBy) : null }))
+      )
+      item.set("images", next)
     }
     await item.save()
 
@@ -113,7 +126,9 @@ export async function DELETE(
   ctx: RouteContext<"/api/inventory/items/[id]">
 ) {
   try {
-    const viewer = await requireRole("owner", "supervisor")
+    const viewer = await requireUser()
+    // Deleting a record is the owner's alone (lib/auth/permissions.ts).
+    assertCanDeleteRecord(viewer)
     const { id } = await ctx.params
 
     await connectToDatabase()
@@ -133,6 +148,15 @@ export async function DELETE(
         .catch(() => undefined)
     }
 
+    // Audit trail: every delete is recorded (never any secret).
+    void logActivity({
+      businessId: viewer.businessId,
+      action: "record_deleted",
+      actorId: viewer.id,
+      actorName: viewer.name,
+      subject: item.name,
+      detail: "inventory item",
+    })
     return ok({ id: String(item._id) })
   } catch (error) {
     return handleApiError(error)

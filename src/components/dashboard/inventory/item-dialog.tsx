@@ -37,6 +37,7 @@ import { useRevokeOnUnmount, useUnsavedGuard } from "@/lib/use-unsaved-guard"
 import { itemSchema } from "@/lib/validations/inventory"
 import { ITEM_UNITS, type ItemUnit } from "@/lib/work-constants"
 import type { ItemDTO } from "@/models/inventory-item"
+import { useViewer } from "@/lib/use-viewer"
 
 /** Kept in step with MAX_ITEM_IMAGES on the model and the schema's cap. */
 const MAX_IMAGES = 3
@@ -104,6 +105,7 @@ function Body({
   mayCloseRef: React.RefObject<() => boolean>
 }) {
   const [form, setForm] = React.useState(() => blank(item))
+  const viewer = useViewer()
   /*
    * Pictures are drafts until Save: picking one previews it from memory and
    * uploads nothing, so closing the dialog leaves nothing in the bucket.
@@ -430,6 +432,11 @@ function Body({
             enabled={uploads}
             limit={MAX_IMAGES}
             compact
+            canRemove={(draft) =>
+              viewer.mayRemovePicture(
+                item?.images.find((one) => one.url === draft.url)?.uploadedById
+              )
+            }
           />
           <FieldError message={errors.images} />
         </div>
