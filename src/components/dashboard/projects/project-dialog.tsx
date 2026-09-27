@@ -22,7 +22,7 @@ import {
   useCreateProject,
   useUpdateProject,
 } from "@/lib/queries"
-import { projectSchema } from "@/lib/validations/work"
+import { loadWorkSchemas } from "@/lib/lazy-schemas"
 import type { ProjectDTO } from "@/models/project"
 
 type Errors = Partial<Record<string, string>>
@@ -84,9 +84,26 @@ function Body({
   const create = useCreateProject()
   const update = useUpdateProject(project?.id ?? "")
   const mutation = project ? update : create
+  // Zod comes with the form, not the page (lib/lazy-schemas.ts).
+  React.useEffect(() => {
+    void loadWorkSchemas().catch(() => {})
+  }, [])
+  const checking = React.useRef(false)
 
-  function submit() {
+  async function submit() {
     if (mutation.isPending) return
+    if (checking.current) return
+    checking.current = true
+    let schemas: Awaited<ReturnType<typeof loadWorkSchemas>>
+    try {
+      schemas = await loadWorkSchemas()
+    } catch {
+      toast.error("That form didn't finish loading. Check your connection and try again.")
+      return
+    } finally {
+      checking.current = false
+    }
+    const { projectSchema } = schemas
 
     const parsed = projectSchema.safeParse({
       name,
@@ -172,7 +189,7 @@ function Body({
         </button>
         <button
           type="button"
-          onClick={submit}
+          onClick={() => void submit()}
           disabled={mutation.isPending}
           className="bg-p-500 rounded-md px-[18px] py-2.5 text-sm font-semibold text-white hover:brightness-[1.06] disabled:opacity-60"
         >
