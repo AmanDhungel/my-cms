@@ -85,6 +85,16 @@ export function hasBearer(headers: Headers) {
   return /^bearer\s/i.test(headers.get("authorization") ?? "")
 }
 
+/**
+ * For the routes that check the origin themselves (the uploads route is
+ * outside the proxy): whether a Bearer token was claimed, and if so whether
+ * it is genuine. A claimed-but-bad token is the caller's cue to answer 401.
+ */
+export async function readBearer(headers: Headers) {
+  if (!hasBearer(headers)) return { claimed: false as const, claims: null }
+  return { claimed: true as const, claims: await verifyAccessToken(bearerToken(headers) ?? "") }
+}
+
 /** The token from `Authorization: Bearer <token>`, or null. */
 export function bearerToken(headers: Headers) {
   const match = (headers.get("authorization") ?? "").match(/^bearer\s+(\S+)\s*$/i)

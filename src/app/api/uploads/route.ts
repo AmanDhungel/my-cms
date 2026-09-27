@@ -20,6 +20,7 @@ import { getWorkspace } from "@/lib/workspace"
 import { UPLOAD_PURPOSES_BY_ROLE as PURPOSES_BY_ROLE } from "@/lib/auth/upload-purposes"
 import { enforceLimit } from "@/lib/security/rate-limit"
 import { CROSS_ORIGIN_MESSAGE, isSameOrigin } from "@/lib/security/same-origin"
+import { readBearer } from "@/lib/auth/mobile-tokens"
 
 export const runtime = "nodejs"
 
@@ -50,8 +51,13 @@ export function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (isTenantRequest(request)) return fail("Not found", 404)
-  // The proxy is kept off this route, so it checks the origin itself (CSRF).
-  if (!isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
+  // The proxy is kept off this route, so it checks the origin itself (CSRF),
+  // with the proxy's rule: a genuine Bearer token stands in for the origin
+  // check (CSRF rides on cookies, and a Bearer request is authenticated by
+  // its token alone); a claimed-but-bad token is 401.
+  const bearer = await readBearer(request.headers)
+  if (bearer.claimed && !bearer.claims) return fail("Sign in to continue", 401)
+  if (!bearer.claims && !isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
   try {
     const viewer = await requireRole("owner", "supervisor", "employee")
     await enforceLimit("uploads", viewer.id)
@@ -136,7 +142,13 @@ export async function POST(request: Request) {
  */
 export async function DELETE(request: Request) {
   if (isTenantRequest(request)) return fail("Not found", 404)
-  if (!isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
+  // The proxy is kept off this route, so it applies the same rule itself:
+  // a genuine Bearer token stands in for the origin check (CSRF rides on
+  // cookies, and a Bearer request is authenticated by its token alone); a
+  // claimed-but-bad token is 401.
+  const bearer = await readBearer(request.headers)
+  if (bearer.claimed && !bearer.claims) return fail("Sign in to continue", 401)
+  if (!bearer.claims && !isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
   try {
     const viewer = await requireRole("owner", "supervisor", "employee")
     const { urls } = deleteUploadSchema.parse(await readJson(request))
