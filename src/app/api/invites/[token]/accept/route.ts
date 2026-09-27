@@ -3,6 +3,7 @@ import { Types } from "mongoose"
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { findPendingInvite } from "@/lib/auth/invites"
 import { hashPassword } from "@/lib/auth/password"
+import { revokeMobileAccess } from "@/lib/auth/mobile-sessions"
 import { isSuperAdmin, SUPER_ADMIN_ADDRESS_MESSAGE } from "@/lib/auth/super-admin"
 import { connectToDatabase } from "@/lib/mongodb"
 import { logActivity } from "@/lib/activity"
@@ -97,6 +98,9 @@ export async function POST(
     }
 
     const user = await User.findById(userId).orFail()
+    // An adopted account starts clean: tokens from its old life stop here,
+    // as its old web sessions do through sessionsValidAfter.
+    if (existing) await revokeMobileAccess([userId])
 
     // The new member is their own actor here — nobody else pressed anything.
     await logActivity({

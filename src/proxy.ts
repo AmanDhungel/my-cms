@@ -34,6 +34,13 @@ const gate = NextAuth(authConfig).auth as unknown as (
   event: NextFetchEvent
 ) => Promise<Response | undefined> | Response | undefined
 
+/** Mobile sign-in, refresh and sign-out: exact paths, no cookies involved. */
+const MOBILE_AUTH_PATHS = new Set([
+  "/api/mobile/auth/login",
+  "/api/mobile/auth/refresh",
+  "/api/mobile/auth/logout",
+])
+
 /** The paths that need a session. Kept in step with the auth matcher below. */
 const GATED = ["/dashboard", "/admin", "/choose"]
 
@@ -116,8 +123,12 @@ export default async function proxy(
   // A public site has no API.
   if (slug && isApi) return json(404, "Not found")
 
-  // CSRF: an API write must come from this app's own pages.
-  if (isApi && !isSameOrigin(request.method, request.headers)) {
+  // CSRF: an API write must come from this app's own pages. The mobile
+  // sign-in endpoints are the exception: their credential is in the body
+  // (a password or a refresh token), they neither read nor set a cookie, and
+  // a cross-site page can't read what they answer — there is nothing for a
+  // forged request to borrow.
+  if (isApi && !MOBILE_AUTH_PATHS.has(path) && !isSameOrigin(request.method, request.headers)) {
     return json(403, CROSS_ORIGIN_MESSAGE)
   }
 

@@ -14,6 +14,7 @@ const MEMBER_FIELDS = {
   status: 1,
   blockedAt: 1,
   sessionsValidAfter: 1,
+  tokenVersion: 1,
 } as const
 
 /**

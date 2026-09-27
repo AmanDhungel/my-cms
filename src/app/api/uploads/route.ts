@@ -17,18 +17,11 @@ import { logActivity } from "@/lib/activity"
 import { canDelete } from "@/lib/auth/permissions"
 import { referencesOf } from "@/lib/image-ownership"
 import { getWorkspace } from "@/lib/workspace"
-import type { UserRole } from "@/models/user"
+import { UPLOAD_PURPOSES_BY_ROLE as PURPOSES_BY_ROLE } from "@/lib/auth/upload-purposes"
 import { enforceLimit } from "@/lib/security/rate-limit"
 import { CROSS_ORIGIN_MESSAGE, isSameOrigin } from "@/lib/security/same-origin"
 
 export const runtime = "nodejs"
-
-/** Which upload folders each role may write to. */
-const PURPOSES_BY_ROLE: Record<UserRole, readonly string[]> = {
-  owner: ["site", "maintenance", "ticket", "products", "logo"],
-  supervisor: ["maintenance", "ticket", "products"],
-  employee: ["ticket"],
-}
 
 /**
  * Uploading, for whatever holds pictures.
