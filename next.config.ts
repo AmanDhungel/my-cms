@@ -1,6 +1,26 @@
 import type { NextConfig } from "next"
 
 /**
+ * Test accounts belong in a test database only.
+ *
+ * The harness signs in a super admin at @emstest.local and creates dozens of
+ * workspaces a run. A server started with such an address in
+ * SUPER_ADMIN_EMAILS against a database whose name doesn't end in "_test"
+ * would scatter that data through the real one — so it refuses to start.
+ */
+function assertTestAccountsStayInTestDatabase() {
+  const admins = process.env.SUPER_ADMIN_EMAILS ?? ""
+  const database = process.env.MONGODB_DB ?? ""
+  if (/@emstest\.local/i.test(admins) && !database.endsWith("_test")) {
+    throw new Error(
+      `Refusing to start: SUPER_ADMIN_EMAILS contains a test account (@emstest.local) but MONGODB_DB is "${database}". ` +
+        `Point a test server at a database whose name ends in "_test".`
+    )
+  }
+}
+assertTestAccountsStayInTestDatabase()
+
+/**
  * Headers every response carries — pages, API, static files and the public
  * tenant sites. The Content-Security-Policy for pages is per request (it
  * carries a nonce) and is set in src/proxy.ts; the API routes the proxy
