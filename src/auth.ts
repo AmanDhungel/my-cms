@@ -2,12 +2,7 @@ import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 
 import { authConfig } from "@/auth.config"
-import { isSuperAdmin } from "@/lib/auth/super-admin"
-import { DUMMY_HASH, verifyPassword } from "@/lib/auth/password"
-import { connectToDatabase } from "@/lib/mongodb"
-import { credentialsSchema } from "@/lib/validations/auth"
-import { Business } from "@/models/business"
-import { User } from "@/models/user"
+import { verifyCredentials } from "@/lib/auth/verify-credentials"
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -17,46 +12,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
-        const parsed = credentialsSchema.safeParse(credentials)
-        if (!parsed.success) return null
-
-        await connectToDatabase()
-
-        const email = parsed.data.email.toLowerCase()
-        const user = await User.findOne({ email }).select("+passwordHash")
-
-        // Always compare, even with no account, so response time doesn't
-        // reveal which emails are registered.
-        const valid = await verifyPassword(
-          parsed.data.password,
-          user?.passwordHash ?? DUMMY_HASH
-        )
-        if (!user || !valid) return null
-
-        // Removed members keep their row so history resolves, but they get no
-        // way back in until another workspace's invite re-activates them.
-        if (user.status === "removed") return null
-
-        // A block shuts the door here rather than at the first guard, so a
-        // blocked account never gets a session cookie at all.
-        if (user.blockedAt) return null
-
-        const business = await Business.findById(user.business).select(
-          "blockedAt"
-        )
-        if (business?.blockedAt) return null
-
-        return {
-          id: String(user._id),
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          businessId: String(user.business),
-          // A hint for the UI only; every admin route re-checks the email.
-          superAdmin: isSuperAdmin(user.email),
-        }
-      },
+      // The password check lives in lib/auth/verify-credentials.ts, shared
+      // with the mobile token login so there is only ever one copy of it.
+      authorize: (credentials) => verifyCredentials(credentials),
     }),
   ],
 })
