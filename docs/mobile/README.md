@@ -59,7 +59,7 @@ node --experimental-strip-types --no-warnings docs/mobile/tools/generate-openapi
    — skip it only for Bearer-authenticated requests.
 3. **No `GET /api/me`** — role, workspace time zone, office, shift, logo are all server-loaded into
    pages (`src/app/dashboard/layout.tsx:32-58`); plus 7 more read endpoints for parity.
-4. **Uploads require `Content-Length`** or 411 (`src/lib/storage/http.ts:30-45`) — RN multipart may be
+4. *(Done on `feature/mobile-api` — counted read, no 411.)* **Uploads required `Content-Length`** or 411 (`src/lib/storage/http.ts:30-45`) — RN multipart may be
    chunked on Android; upload from disk with `expo-file-system` and add a counted-read fallback.
 5. **`mutation` rate limit falls back to IP** without a cookie (`src/proxy.ts:99-106`) — every app user
    behind one carrier NAT would share 300 writes / 10 min; key it by the Bearer token.

@@ -729,9 +729,9 @@ op("post", "/api/invites/{token}/accept", {
 op("post", "/api/uploads", {
   tag: "uploads", summary: "Upload one picture (multipart)", operationId: "upload",
   source: "src/app/api/uploads/route.ts:58-130", roles: ALL, body: ["UploadForm", uploadForm, "multipart/form-data"],
-  ok: { 201: ["UploadResponse", R.uploaded] }, errors: [400, 401, 403, 404, 410, 411, 413, 415, 429, 500, 503],
+  ok: { 201: ["UploadResponse", R.uploaded] }, errors: [400, 401, 403, 404, 410, 413, 415, 429, 500, 503],
   rateLimit: "uploads 60 / 10 min per user (route.ts:64). Not in the proxy matcher: no mutation limit.",
-  note: "Roles per purpose (route.ts:27-31): owner site|maintenance|ticket|products|logo; supervisor maintenance|ticket|products; employee ticket. Content-Length required (411) and <= 1,000,000 + 64 KiB (413) before reading (src/lib/storage/http.ts:30-45).",
+  note: "Roles per purpose (route.ts:27-31): owner site|maintenance|ticket|products|logo; supervisor maintenance|ticket|products; employee ticket. A declared Content-Length over 1,000,000 + 64 KiB is 413 before reading; the body is then counted while it streams and dropped with 413 past that cap, so no Content-Length is required (src/lib/storage/http.ts). With a genuine Bearer token no Origin is needed; a bad Bearer is 401.",
   sideEffects: ["S3 PutObject businesses/{businessId}/{purpose}/{uuid}.{ext}, Cache-Control immutable (src/lib/storage/s3.ts:58,273-301)"],
 })
 op("delete", "/api/uploads", {

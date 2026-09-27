@@ -282,10 +282,12 @@ Origin check and rate limit.
   employee `ticket`. Wrong purpose for role → 403 *"You can't add pictures there"* (`:86-88`).
 - **multipart/form-data** fields: `purpose` (one of the five, else 400 `:80-82`) and `file`
   (else 400 *"No file was sent"* `:89-91`). RN: `form.append("file", { uri, name, type } as any)`.
-- Size gates: `Content-Length` must be all digits → else **411** *"Send the picture with its size"*;
-  declared > 1,000,000 + 64 KiB → **413** (`src/lib/storage/http.ts:30-45`); file > 1,000,000
-  bytes → 413 *"Pictures are compressed under 1 MB before uploading"* (`:92-105`,
-  `MAX_UPLOAD_BYTES` `src/lib/storage/types.ts:18`).
+- Size gates (`src/lib/storage/http.ts`): a declared `Content-Length` > 1,000,000 + 64 KiB → **413**
+  before reading; then the body is read with a running byte count and abandoned with **413** the
+  moment it passes that cap — **no `Content-Length` is needed** (the old 411 rule is gone on
+  `feature/mobile-api`, so chunked multipart from React Native works). File > 1,000,000 bytes → 413
+  *"Pictures are compressed under 1 MB before uploading"* (`MAX_UPLOAD_BYTES`
+  `src/lib/storage/types.ts:18`).
 - Type by magic bytes, not the declared type: JPEG/PNG/WebP/AVIF else **415** *"Images only —
   JPEG, PNG, WebP or AVIF"* (`:109-112`, `src/lib/storage/types.ts:24-29`).
 - 201 `{ key, url }` (`:123`). Non-multipart body → **410** *"Uploads now go through the form

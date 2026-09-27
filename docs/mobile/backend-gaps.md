@@ -14,7 +14,7 @@ CSRF bypass for Bearer, `GET /api/me`, and the upload length fallback (the last 
 | 1 | Token auth (login/refresh/logout, Bearer in guards, password change, invalidation) | 🔴 yes |
 | 2 | Origin/Referer CSRF check on every mutation | 🔴 yes |
 | 3 | Server-loaded pages with no API (12 gaps → 8 endpoints) | 🔴 yes for `/api/me`; others for parity |
-| 4 | Uploads from RN (Content-Length / 411) | 🔴 likely on Android — must be tested |
+| 4 | Uploads from RN (Content-Length / 411) | ✅ done on `feature/mobile-api`: the 411 is replaced by a counted read |
 | 5 | IP-keyed rate limits vs mobile NAT | 🟠 degrades under load |
 | 6 | Sync/version counters + push notifications | 🟠 parity (web polls) |
 | 7 | Image URLs | 🟢 works as-is |

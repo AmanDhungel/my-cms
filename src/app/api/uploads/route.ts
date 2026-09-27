@@ -10,7 +10,7 @@ import {
   sniffImageType,
   uploadFile,
 } from "@/lib/s3"
-import { assertMultipartLength } from "@/lib/storage/http"
+import { assertMultipartLength, readCappedBody } from "@/lib/storage/http"
 import { isTenantRequest } from "@/lib/tenancy"
 import { deleteUploadSchema } from "@/lib/validations/uploads"
 import { logActivity } from "@/lib/activity"
@@ -66,13 +66,17 @@ export async function POST(request: Request) {
     // "Multipart/Form-Data" and still mean this branch.
     const contentType = request.headers.get("content-type")?.toLowerCase()
     if (contentType?.includes("multipart/form-data")) {
-      // A cheap first gate on the declared length, before the body is read:
-      // formData() buffers the whole thing, and the checks below only run
-      // once it has. The header can lie, so the measured checks after
-      // parsing still decide.
+      // A cheap first gate on the declared length, when there is one, before
+      // the body is read. Then the body is read with a running count and
+      // dropped with a 413 the moment it passes the cap — so a request with
+      // no Content-Length (a native client streaming it) is bounded too.
+      // The measured checks after parsing still decide.
       assertMultipartLength(request.headers)
+      const body = await readCappedBody(request)
 
-      const form = await request.formData()
+      const form = await new Response(body, {
+        headers: { "content-type": request.headers.get("content-type") ?? "" },
+      }).formData()
       const purpose = form.get("purpose")
       const file = form.get("file")
 

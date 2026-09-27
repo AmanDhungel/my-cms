@@ -10025,16 +10025,6 @@
               }
             }
           },
-          "411": {
-            "description": "Length required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
           "413": {
             "description": "Body too large",
             "content": {
@@ -10100,7 +10090,7 @@
         "x-side-effects": [
           "S3 PutObject businesses/{businessId}/{purpose}/{uuid}.{ext}, Cache-Control immutable (src/lib/storage/s3.ts:58,273-301)"
         ],
-        "description": "Roles per purpose (route.ts:27-31): owner site|maintenance|ticket|products|logo; supervisor maintenance|ticket|products; employee ticket. Content-Length required (411) and <= 1,000,000 + 64 KiB (413) before reading (src/lib/storage/http.ts:30-45)."
+        "description": "Roles per purpose (route.ts:27-31): owner site|maintenance|ticket|products|logo; supervisor maintenance|ticket|products; employee ticket. A declared Content-Length over 1,000,000 + 64 KiB is 413 before reading; the body is then counted while it streams and dropped with 413 past that cap, so no Content-Length is required (src/lib/storage/http.ts). With a genuine Bearer token no Origin is needed; a bad Bearer is 401."
       },
       "delete": {
         "tags": [
