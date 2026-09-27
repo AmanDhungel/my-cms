@@ -1,6 +1,8 @@
 /**
- * Finds every stored picture address that still points at the old bucket
- * (AWS_LEGACY_BUCKET_NAME) and, when asked, moves it to the new one.
+ * Finds every stored picture address that is still a direct S3 URL — into
+ * the old bucket (AWS_LEGACY_BUCKET_NAME), or in S3 form into the current
+ * one — and, when asked, rewrites it to the CDN address (copying legacy
+ * objects across first with --copy).
  *
  *   node scripts/migrate-legacy-urls.mjs                 # report only
  *   node scripts/migrate-legacy-urls.mjs --write         # rewrite links whose
@@ -64,8 +66,8 @@ if (copy && !write) {
 
 const S3_HOST = /^s3(?:[.-](?:dualstack\.)?[a-z0-9-]+)?\.amazonaws\.com$/
 
-/** The key behind an address into the legacy bucket, or null. */
-function legacyKey(url) {
+/** The key behind a direct S3 address into `bucket` (any S3 URL form), or null. */
+function keyIn(url, bucket) {
   if (typeof url !== "string" || !url) return null
   let parsed
   try {
@@ -80,11 +82,11 @@ function legacyKey(url) {
   } catch {
     return null
   }
-  if (host.startsWith(`${LEGACY}.`) && S3_HOST.test(host.slice(LEGACY.length + 1))) {
+  if (host.startsWith(`${bucket}.`) && S3_HOST.test(host.slice(bucket.length + 1))) {
     return path.slice(1) || null
   }
-  if (S3_HOST.test(host) && path.startsWith(`/${LEGACY}/`)) {
-    return path.slice(LEGACY.length + 2) || null
+  if (S3_HOST.test(host) && path.startsWith(`/${bucket}/`)) {
+    return path.slice(bucket.length + 2) || null
   }
   return null
 }
@@ -120,25 +122,37 @@ const SOURCES = [
   ["tickets", "ticket photos", (doc) => (doc.photos ?? []).map((one, i) => [`photos.${i}.url`, one?.url])],
 ]
 
-const found = [] // { coll, id, path, url, key }
+/*
+ * Two kinds of stored link are found: any S3 form into the legacy bucket
+ * (the object may still need copying), and a direct S3 form into the current
+ * bucket (the object is there; only the stored spelling is not the CDN one).
+ * The app serves both through the CDN at read time either way.
+ */
+const found = [] // { coll, id, path, url, key, bucket: "legacy" | "current" }
 const perSource = []
+const CURRENT = BUCKET.toLowerCase()
 for (const [coll, label, fieldsOf] of SOURCES) {
-  const pattern = new RegExp(`(^https?://${LEGACY.replace(/[.*+?^${}()|[\]\\]/g, (c) => `\\${c}`)}\\.s3[.-])|(amazonaws\\.com/${LEGACY}/)`, "i")
-  let count = 0
+  const counts = { legacy: 0, current: 0 }
   const docs = db.collection(coll).find({})
   for await (const doc of docs) {
     for (const [path, url] of fieldsOf(doc)) {
-      if (typeof url !== "string" || !pattern.test(url)) continue
-      const key = legacyKey(url)
+      if (typeof url !== "string" || !/amazonaws\.com/i.test(url)) continue
+      const legacy = keyIn(url, LEGACY)
+      const current = legacy ? null : keyIn(url, CURRENT)
+      const key = legacy ?? current
       if (!key) continue
-      found.push({ coll, id: doc._id, path, url, key })
-      count++
+      const bucket = legacy ? "legacy" : "current"
+      found.push({ coll, id: doc._id, path, url, key, bucket })
+      counts[bucket]++
     }
   }
-  perSource.push([label, count])
+  perSource.push([label, counts])
 }
 
+const legacyFound = found.filter((one) => one.bucket === "legacy")
+const currentFound = found.filter((one) => one.bucket === "current")
 const keys = [...new Set(found.map((one) => one.key))]
+const legacyKeys = [...new Set(legacyFound.map((one) => one.key))]
 const present = new Set()
 for (const key of keys) {
   try {
@@ -148,17 +162,18 @@ for (const key of keys) {
     // Not in the new bucket (or unreadable): counted as missing.
   }
 }
-const outsideScope = keys.filter((key) => !key.startsWith("businesses/"))
+const outsideScope = legacyKeys.filter((key) => !key.startsWith("businesses/"))
 
 console.log(`Legacy bucket: ${LEGACY}  →  new bucket: ${BUCKET}, served from ${BASE}`)
 console.log(`Mode: ${write ? (copy ? "COPY + WRITE" : "WRITE (present objects only)") : "report only (nothing is written)"}`)
 console.log("")
-console.log("Stored links still pointing at the legacy bucket:")
-for (const [label, count] of perSource) console.log(`  ${label.padEnd(40)} ${count}`)
-console.log(`  ${"total links".padEnd(40)} ${found.length}`)
-console.log(`  ${"distinct objects".padEnd(40)} ${keys.length}`)
-console.log(`  ${"  already in the new bucket".padEnd(40)} ${present.size}`)
-console.log(`  ${"  missing from the new bucket".padEnd(40)} ${keys.length - present.size}  (served as broken images until copied)`)
+console.log(`Stored links that are direct S3 URLs (${LEGACY} | ${BUCKET}):`)
+for (const [label, counts] of perSource) console.log(`  ${label.padEnd(40)} ${String(counts.legacy).padStart(4)} | ${String(counts.current).padStart(4)}`)
+console.log(`  ${"total links".padEnd(40)} ${String(legacyFound.length).padStart(4)} | ${String(currentFound.length).padStart(4)}`)
+console.log(`  ${"distinct objects behind legacy links".padEnd(40)} ${legacyKeys.length}`)
+console.log(`  ${"  already in the new bucket".padEnd(40)} ${legacyKeys.filter((key) => present.has(key)).length}`)
+console.log(`  ${"  missing from the new bucket".padEnd(40)} ${legacyKeys.filter((key) => !present.has(key)).length}  (served as broken images until copied)`)
+console.log(`  ${"direct links into the new bucket".padEnd(40)} ${currentFound.length}  (object present: ${currentFound.filter((one) => present.has(one.key)).length}; --write rewrites them to the CDN form)`)
 console.log(`  ${"  keys outside businesses/".padEnd(40)} ${outsideScope.length}  (the OAC policy covers businesses/* only)`)
 if (found.length) {
   console.log("")
@@ -172,7 +187,7 @@ if (found.length) {
 if (write) {
   let copied = 0
   if (copy) {
-    for (const key of keys.filter((k) => !present.has(k))) {
+    for (const key of legacyKeys.filter((k) => !present.has(k))) {
       try {
         const head = await s3.send(new HeadObjectCommand({ Bucket: LEGACY, Key: key }))
         await s3.send(new CopyObjectCommand({
