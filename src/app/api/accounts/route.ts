@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     const values = accountSchema.parse(await readJson(request))
 
     await connectToDatabase()
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
 
     const clash = await Account.findOne({
       business: viewer.businessId,

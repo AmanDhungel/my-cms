@@ -4,6 +4,7 @@ import { MaintenanceView } from "@/components/dashboard/maintenance/maintenance-
 import { requirePageRole } from "@/lib/auth/page-guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone } from "@/lib/time"
+import { rememberedWorkspace } from "@/lib/auth/membership"
 import { Business } from "@/models/business"
 
 export const metadata: Metadata = { title: "Maintenance · EMS" }
@@ -18,7 +19,7 @@ export default async function MaintenancePage() {
   const viewer = await requirePageRole("owner", "supervisor")
 
   await connectToDatabase()
-  const business = await Business.findById(viewer.businessId).orFail()
+  const business = await (rememberedWorkspace(viewer) ?? Business.findById(viewer.businessId).orFail())
 
   // "Past due" is measured against the workspace's calendar, not the browser's.
   return <MaintenanceView today={dayKeyInZone(new Date(), business.timeZone)} />

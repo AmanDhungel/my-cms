@@ -20,7 +20,7 @@ import {
   toTicketDTO,
   type TicketStatus,
 } from "@/models/ticket"
-import { deleteUploads, isBusinessKeyIn, keyFromUrl } from "@/lib/s3"
+import { deleteUploads, isBusinessKeyIn, keyFromUrl, servedUrl } from "@/lib/s3"
 import { OVERTIME_REASON_MESSAGE, classifyOvertime, shiftToday } from "@/lib/overtime"
 import { User } from "@/models/user"
 
@@ -64,7 +64,7 @@ export async function PATCH(
     // Past tickets are view-only for the crew. Owners and supervisors keep
     // every move they had, including reopening one.
     if (!isReviewer) {
-      const business = await getWorkspace(viewer.businessId)
+      const business = await getWorkspace(viewer)
       if (isPastTicket(ticket, new Date(), business.timeZone)) {
         throw new HttpError(403, PAST_TICKET_MESSAGE)
       }
@@ -97,11 +97,13 @@ export async function PATCH(
     if (!isReviewer && (values.photos !== undefined || values.status === "in_review")) {
       const all = ticket.photos ?? []
       const mine = all.filter((photo) => String(photo.uploadedBy) === viewer.id)
+      // Every comparison is by served address: a photo saved under an old
+      // bucket link comes back from the app as its CDN address.
       const othersUrls = new Set(
-        all.filter((photo) => String(photo.uploadedBy) !== viewer.id).map((photo) => photo.url)
+        all.filter((photo) => String(photo.uploadedBy) !== viewer.id).map((photo) => servedUrl(photo.url))
       )
       const wanted = [
-        ...new Set((values.photos ?? mine.map((photo) => ({ url: photo.url }))).map((one) => one.url)),
+        ...new Set((values.photos ?? mine.map((photo) => ({ url: photo.url }))).map((one) => servedUrl(one.url))),
       ]
       const refuse = (message: string) =>
         new HttpError(422, "Validation failed", { photos: [message] })
@@ -109,7 +111,7 @@ export async function PATCH(
       if (wanted.length > MAX_TICKET_PHOTOS_EACH) {
         throw refuse(`Five photos is the most you can add to a ticket`)
       }
-      const keptUrls = new Set(mine.map((photo) => photo.url))
+      const keptUrls = new Set(mine.map((photo) => servedUrl(photo.url)))
       const added: { key: string; url: string; uploadedBy: string; uploadedAt: Date }[] = []
       for (const url of wanted) {
         if (othersUrls.has(url)) throw refuse("That photo was added by someone else")
@@ -129,7 +131,7 @@ export async function PATCH(
         throw refuse("Add at least one photo of the finished work")
       }
       const keep = new Set(wanted)
-      removedPhotos = mine.filter((photo) => !keep.has(photo.url)).map((photo) => photo.url)
+      removedPhotos = mine.filter((photo) => !keep.has(servedUrl(photo.url))).map((photo) => photo.url)
       // Everything already there stays where it was; new ones go on the end.
       ticket.set("photos", [
         ...all.filter((photo) => !removedPhotos.includes(photo.url)),
@@ -174,7 +176,7 @@ export async function PATCH(
     if (CLOSES_THE_VISIT.includes(values.status) && myVisit) {
       const at = new Date()
       const [business, me] = await Promise.all([
-        getWorkspace(viewer.businessId),
+        getWorkspace(viewer),
         User.findById(viewer.id).select("shift week"),
       ])
 

@@ -8,6 +8,7 @@ import {
 } from "mongoose"
 
 import { ITEM_UNITS, type ItemUnit } from "@/lib/work-constants"
+import { servedUrl } from "@/lib/storage/urls"
 
 export { ITEM_UNITS, type ItemUnit }
 
@@ -84,6 +85,8 @@ inventoryItemSchema.index(
   { unique: true, partialFilterExpression: { sku: { $type: "string" } } }
 )
 inventoryItemSchema.index({ business: 1, category: 1 })
+// Category counts and the in-use check look items up by category alone.
+inventoryItemSchema.index({ category: 1 })
 
 export type InventoryItemDocument = InferSchemaType<typeof inventoryItemSchema>
 
@@ -140,7 +143,8 @@ export function toItemDTO(
     location: item.location ?? null,
     images: (item.images ?? []).map((one) => ({
       key: one.key,
-      url: one.url,
+      // Served from the CDN, old bucket links included (lib/storage/urls.ts).
+      url: servedUrl(one.url),
       uploadedById: one.uploadedBy ? String(one.uploadedBy) : null,
     })),
     category: named(item.category as MaybePopulated),

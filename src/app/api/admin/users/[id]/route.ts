@@ -2,6 +2,7 @@ import { z } from "zod"
 
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { revokeMobileAccess } from "@/lib/auth/mobile-sessions"
 import { isSuperAdmin } from "@/lib/auth/super-admin"
 import { connectToDatabase } from "@/lib/mongodb"
 import { User, toUserDTO } from "@/models/user"
@@ -39,6 +40,9 @@ export async function PATCH(
       user.set("blockedAt", undefined)
     }
     await user.save()
+    // A block ends the account's mobile tokens at once (web sessions are
+    // already refused by the guard's blockedAt check).
+    if (blocked) await revokeMobileAccess([user._id])
 
     return ok({ user: toUserDTO(user) })
   } catch (error) {

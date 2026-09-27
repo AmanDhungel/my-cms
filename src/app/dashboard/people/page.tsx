@@ -16,7 +16,7 @@ export default async function PeoplePage() {
   await connectToDatabase()
 
   const [business, members, invites] = await Promise.all([
-    getWorkspace(viewer.businessId),
+    getWorkspace(viewer),
     // Removed people are listed too, greyed out, so the record of who was
     // here doesn't just vanish from the owner's view.
     User.find({ business: viewer.businessId }).sort({ status: 1, createdAt: 1 }),

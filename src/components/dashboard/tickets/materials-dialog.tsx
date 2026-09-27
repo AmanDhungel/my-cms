@@ -23,7 +23,7 @@ import {
   useInventoryItems,
   useTicketMaterials,
 } from "@/lib/queries"
-import { ticketMaterialsSchema } from "@/lib/validations/work"
+import { loadWorkSchemas } from "@/lib/lazy-schemas"
 import type { TicketDTO } from "@/models/ticket"
 
 /** A line being typed, where every number is still a string. */
@@ -105,6 +105,11 @@ function Body({
 
   const stock = useInventoryItems()
   const mutation = useTicketMaterials(ticket.id)
+  // Zod comes with the form, not the page (lib/lazy-schemas.ts).
+  React.useEffect(() => {
+    void loadWorkSchemas().catch(() => {})
+  }, [])
+  const checking = React.useRef(false)
   const available = stock.data?.items ?? []
 
   function addFromStock(itemId: string) {
@@ -143,8 +148,20 @@ function Body({
     0
   )
 
-  function submit() {
+  async function submit() {
     if (mutation.isPending) return
+    if (checking.current) return
+    checking.current = true
+    let schemas: Awaited<ReturnType<typeof loadWorkSchemas>>
+    try {
+      schemas = await loadWorkSchemas()
+    } catch {
+      toast.error("That form didn't finish loading. Check your connection and try again.")
+      return
+    } finally {
+      checking.current = false
+    }
+    const { ticketMaterialsSchema } = schemas
 
     const parsed = ticketMaterialsSchema.safeParse({
       materials: lines.map((line) => ({
@@ -339,7 +356,7 @@ function Body({
         </button>
         <button
           type="button"
-          onClick={submit}
+          onClick={() => void submit()}
           disabled={mutation.isPending}
           className="bg-p-500 rounded-md px-4 py-2.5 text-[13.5px] font-semibold text-white hover:brightness-[1.06] disabled:opacity-60"
         >

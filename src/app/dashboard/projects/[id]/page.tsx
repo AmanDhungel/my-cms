@@ -24,7 +24,7 @@ export default async function ProjectPage({
   // Scoped to the workspace, so a guessed id can't reach another org's job.
   const [project, business] = await Promise.all([
     Project.findOne({ _id: id, business: viewer.businessId }),
-    getWorkspace(viewer.businessId),
+    getWorkspace(viewer),
   ])
 
   if (!project) notFound()

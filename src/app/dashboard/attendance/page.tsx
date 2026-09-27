@@ -20,7 +20,7 @@ export default async function AttendancePage() {
 
   // Only the crew view needs it — it goes on the sheets they download.
   await connectToDatabase()
-  const business = await getWorkspace(viewer.businessId)
+  const business = await getWorkspace(viewer)
 
   return <CrewAttendanceView businessName={business.name} />
 }

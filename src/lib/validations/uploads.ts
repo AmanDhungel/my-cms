@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { safeUrl } from "@/lib/security/safe-url"
+import { safeUrl } from "@/lib/security/safe-url-schema"
 
 import {
   MAX_UPLOAD_BYTES,

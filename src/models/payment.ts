@@ -84,6 +84,8 @@ paymentSchema.index({ business: 1, party: 1 })
 paymentSchema.index({ business: 1, partyRef: 1, paidOn: -1 })
 // What a bank or wallet has seen, for its running balance.
 paymentSchema.index({ business: 1, account: 1 })
+// A bill's own payments (the bill page and syncBillPayment).
+paymentSchema.index({ bill: 1, direction: 1 })
 
 export type PaymentDocument = InferSchemaType<typeof paymentSchema>
 

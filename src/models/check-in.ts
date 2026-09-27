@@ -45,6 +45,8 @@ const checkInSchema = new Schema(
 
 checkInSchema.index({ ticket: 1, at: -1 })
 checkInSchema.index({ user: 1, at: -1 })
+// The day's visits and the employee-activity report read by workspace.
+checkInSchema.index({ business: 1, at: -1 })
 
 export type CheckInDocument = InferSchemaType<typeof checkInSchema>
 

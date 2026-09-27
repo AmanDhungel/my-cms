@@ -222,8 +222,22 @@ export async function autoCloseFinishedShifts({
   fallbackShift?: string | null
   timeZone: string
 }) {
+  await autoCloseFinishedShiftsFor([{ userId, fallbackShift }], timeZone)
+}
+
+/**
+ * The same, for a whole crew at once: one read for everyone's open days
+ * instead of one per person (the crew view used to make one per member).
+ */
+export async function autoCloseFinishedShiftsFor(
+  people: { userId: string | Types.ObjectId; fallbackShift?: string | null }[],
+  timeZone: string
+) {
+  if (people.length === 0) return
+  const fallbackOf = new Map(people.map((one) => [String(one.userId), one.fallbackShift]))
+
   const open = await Attendance.find({
-    user: userId,
+    user: people.length === 1 ? people[0].userId : { $in: people.map((one) => one.userId) },
     inAt: { $ne: null },
     outAt: { $exists: false },
   })
@@ -233,7 +247,7 @@ export async function autoCloseFinishedShifts({
   for (const record of open) {
     // The row's own snapshot wins: editing someone's shift shouldn't rewrite
     // how a day that already happened gets closed.
-    const parsed = parseShift(record.shift ?? fallbackShift)
+    const parsed = parseShift(record.shift ?? fallbackOf.get(String(record.user)))
     if (!parsed) continue
 
     const { start } = dayRangeInZone(record.day, timeZone)

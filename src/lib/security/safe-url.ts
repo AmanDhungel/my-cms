@@ -1,5 +1,3 @@
-import { z } from "zod"
-
 /**
  * URLs that came from a user, made safe before they are stored or rendered.
  *
@@ -9,7 +7,8 @@ import { z } from "zod"
  * tel: and mailto: are never taken from input; they are built here from a
  * validated phone number or email address.
  *
- * Client-safe: the renderers use the same checks as the API.
+ * Client-safe: the renderers use the same checks as the API. The Zod schema
+ * lives in safe-url-schema.ts, so pages that only render links don't ship Zod.
  */
 
 /** Absolute http(s) with a host, and nothing a browser would reinterpret. */
@@ -72,6 +71,3 @@ export function safeCallbackPath(value: unknown, fallback = "/dashboard"): strin
 
 export const UNSAFE_URL_MESSAGE = "Use a web address starting with https://"
 
-/** Zod: a required safe http(s) URL. */
-export const safeUrl = (max = 600) =>
-  z.string().trim().max(max).refine(isSafeHttpUrl, UNSAFE_URL_MESSAGE)

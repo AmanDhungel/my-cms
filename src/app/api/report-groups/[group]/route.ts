@@ -40,7 +40,7 @@ export async function GET(
     }
 
     await connectToDatabase()
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     const scope = scopeFrom(request.nextUrl.searchParams, {
       businessId: viewer.businessId,
       zone: business.timeZone,

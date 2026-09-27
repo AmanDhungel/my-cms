@@ -14,6 +14,7 @@ import {
   PATTERN_KINDS,
 } from "@/lib/work-constants"
 import type { WeekPattern } from "@/lib/week"
+import { servedUrl } from "@/lib/storage/urls"
 
 /**
  * Where the office is, and how far from it a shift may be opened. Absent on
@@ -183,7 +184,7 @@ export function toBusinessDTO(
     pan: business.pan ?? null,
     vatRate: business.vatRate,
     logo: business.logo
-      ? { key: business.logo.key, url: business.logo.url }
+      ? { key: business.logo.key, url: servedUrl(business.logo.url) }
       : null,
     blockedAt: business.blockedAt ? business.blockedAt.toISOString() : null,
     ownerId: String(business.owner),

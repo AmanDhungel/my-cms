@@ -50,7 +50,7 @@ export async function PUT(
       throw new HttpError(403, "That isn't one of your tickets")
     }
     if (viewer.role === "employee") {
-      const business = await getWorkspace(viewer.businessId)
+      const business = await getWorkspace(viewer)
       if (isPastTicket(ticket, new Date(), business.timeZone)) {
         throw new HttpError(403, PAST_TICKET_MESSAGE)
       }

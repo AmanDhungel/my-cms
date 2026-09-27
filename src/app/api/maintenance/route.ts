@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   try {
     const viewer = await requireRole("owner", "supervisor")
     await connectToDatabase()
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
 
     const filter: Record<string, unknown> = { business: viewer.businessId }
     const status = request.nextUrl.searchParams.get("status")
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     }
 
     await connectToDatabase()
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     const day = (key: string) => dayRangeInZone(key, business.timeZone).start
 
     const row = await MaintenanceItem.create({

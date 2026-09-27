@@ -94,9 +94,21 @@ const userSchema = new Schema(
      * old sessions can't walk into the new one.
      */
     sessionsValidAfter: { type: Date },
+    /**
+     * Mobile access tokens carry the value current when they were issued; a
+     * token with an older one is refused (lib/auth/guards.ts). Bumped by
+     * lib/auth/mobile-sessions.ts `revokeMobileAccess` on a block, a role
+     * change, a removal or a password change. Absent reads as 0. The web's
+     * cookie sessions don't read it.
+     */
+    tokenVersion: { type: Number, min: 0 },
   },
   { timestamps: true }
 )
+
+// Every people list, crew view and member count reads a workspace's users
+// by status, sorted by name. Without it each one scanned all accounts.
+userSchema.index({ business: 1, status: 1, name: 1 })
 
 export type UserDocument = InferSchemaType<typeof userSchema>
 

@@ -22,7 +22,7 @@ import {
   useCreateCategory,
   useUpdateCategory,
 } from "@/lib/queries"
-import { categorySchema } from "@/lib/validations/inventory"
+import { loadInventorySchemas } from "@/lib/lazy-schemas"
 import type { CategoryDTO } from "@/models/inventory-category"
 
 type Errors = Partial<Record<string, string>>
@@ -85,9 +85,26 @@ function Body({
   const create = useCreateCategory()
   const update = useUpdateCategory(category?.id ?? "")
   const mutation = category ? update : create
+  // Zod comes with the form, not the page (lib/lazy-schemas.ts).
+  React.useEffect(() => {
+    void loadInventorySchemas().catch(() => {})
+  }, [])
+  const checking = React.useRef(false)
 
-  function submit() {
+  async function submit() {
     if (mutation.isPending) return
+    if (checking.current) return
+    checking.current = true
+    let schemas: Awaited<ReturnType<typeof loadInventorySchemas>>
+    try {
+      schemas = await loadInventorySchemas()
+    } catch {
+      toast.error("That form didn't finish loading. Check your connection and try again.")
+      return
+    } finally {
+      checking.current = false
+    }
+    const { categorySchema } = schemas
 
     const parsed = categorySchema.safeParse({
       name,
@@ -160,7 +177,7 @@ function Body({
         </button>
         <button
           type="button"
-          onClick={submit}
+          onClick={() => void submit()}
           disabled={mutation.isPending}
           className="bg-p-500 rounded-md px-[18px] py-2.5 text-sm font-semibold text-white hover:brightness-[1.06] disabled:opacity-60"
         >

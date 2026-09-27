@@ -27,7 +27,7 @@ import {
   useProjects,
   useUpdateTicket,
 } from "@/lib/queries"
-import { ticketSchema } from "@/lib/validations/work"
+import { loadWorkSchemas } from "@/lib/lazy-schemas"
 import { DEFAULT_RADIUS_M, TICKET_PRIORITIES } from "@/lib/work-constants"
 import type { TicketDTO } from "@/models/ticket"
 
@@ -106,6 +106,11 @@ function Body({
   const create = useCreateTicket()
   const update = useUpdateTicket(ticket?.id ?? "")
   const mutation = ticket ? update : create
+  // Zod comes with the form, not the page (lib/lazy-schemas.ts).
+  React.useEffect(() => {
+    void loadWorkSchemas().catch(() => {})
+  }, [])
+  const checking = React.useRef(false)
 
   const assignable = (people.data?.members ?? []).filter(
     (member) => member.role !== "owner"
@@ -145,7 +150,7 @@ function Body({
 
   const radiusM = Number(form.radiusM) || DEFAULT_RADIUS_M
 
-  function submit() {
+  async function submit() {
     if (mutation.isPending) return
 
     if (!pin) {
@@ -153,6 +158,18 @@ function Body({
       return
     }
 
+    if (checking.current) return
+    checking.current = true
+    let schemas: Awaited<ReturnType<typeof loadWorkSchemas>>
+    try {
+      schemas = await loadWorkSchemas()
+    } catch {
+      toast.error("That form didn't finish loading. Check your connection and try again.")
+      return
+    } finally {
+      checking.current = false
+    }
+    const { ticketSchema } = schemas
     const parsed = ticketSchema.safeParse({
       ...form,
       lat: pin.lat,
@@ -385,7 +402,7 @@ function Body({
         </button>
         <button
           type="button"
-          onClick={submit}
+          onClick={() => void submit()}
           disabled={mutation.isPending}
           className="bg-p-500 rounded-md px-[18px] py-2.5 text-sm font-semibold text-white hover:brightness-[1.06] disabled:opacity-60"
         >

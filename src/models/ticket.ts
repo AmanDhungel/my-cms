@@ -15,6 +15,7 @@ import {
   type TicketStatus,
 } from "@/lib/work-constants"
 import { BLOCKER_REASONS, type BlockerReason } from "@/lib/work-constants"
+import { servedUrl } from "@/lib/storage/urls"
 
 export {
   DEFAULT_RADIUS_M,
@@ -181,6 +182,14 @@ const ticketSchema = new Schema(
 ticketSchema.index({ assignees: 1, startAt: 1 })
 ticketSchema.index({ business: 1, startAt: -1 })
 ticketSchema.index({ project: 1, startAt: -1 })
+// Status scopes (in progress, in review, done) and the dashboard counts.
+ticketSchema.index({ business: 1, status: 1, startAt: 1 })
+// "Today": tickets still running, bounded by their end rather than every
+// ticket that ever started before tonight.
+ticketSchema.index({ business: 1, endAt: 1 })
+// The photo-reuse check and "still checked in?" before removing someone.
+ticketSchema.index({ "photos.key": 1 }, { sparse: true })
+ticketSchema.index({ "openCheckIns.user": 1 }, { sparse: true })
 
 export type TicketDocument = InferSchemaType<typeof ticketSchema>
 
@@ -321,7 +330,7 @@ export function toTicketDTO(
     assignees,
     project: named(ticket.project as MaybePopulated),
     photos: (ticket.photos ?? []).map((photo) => ({
-      url: photo.url,
+      url: servedUrl(photo.url),
       uploadedById: String(photo.uploadedBy),
       uploadedByName: byId.get(String(photo.uploadedBy)) ?? "",
       uploadedAt: (photo.uploadedAt as Date).toISOString(),

@@ -4,6 +4,7 @@ import { SalesView } from "@/components/dashboard/sales/sales-view"
 import { requirePageRole } from "@/lib/auth/page-guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone } from "@/lib/time"
+import { rememberedWorkspace } from "@/lib/auth/membership"
 import { Business } from "@/models/business"
 
 export const metadata: Metadata = { title: "Sales · EMS" }
@@ -13,7 +14,7 @@ export default async function SalesPage() {
   const viewer = await requirePageRole("owner", "supervisor")
 
   await connectToDatabase()
-  const business = await Business.findById(viewer.businessId).orFail()
+  const business = await (rememberedWorkspace(viewer) ?? Business.findById(viewer.businessId).orFail())
 
   return (
     <SalesView

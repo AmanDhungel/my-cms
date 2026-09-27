@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     const viewer = await requireUser()
     await connectToDatabase()
 
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     const params = request.nextUrl.searchParams
 
     const today = dayKeyInZone(new Date(), business.timeZone)
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
     await connectToDatabase()
 
     const [business, me] = await Promise.all([
-      getWorkspace(viewer.businessId),
+      getWorkspace(viewer),
       User.findById(viewer.id).select("shift week"),
     ])
 

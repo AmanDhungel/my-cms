@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { safeUrl } from "@/lib/security/safe-url"
+import { safeUrl } from "@/lib/security/safe-url-schema"
 
 import { ITEM_UNITS } from "@/lib/work-constants"
 

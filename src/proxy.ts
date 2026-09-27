@@ -7,6 +7,7 @@ import {
 } from "next/server"
 
 import { authConfig } from "@/auth.config"
+import { bearerToken, hasBearer, verifyAccessToken } from "@/lib/auth/mobile-tokens"
 import { clientIp } from "@/lib/security/client-ip"
 import { limitBy, tooManyMessage } from "@/lib/security/rate-limit"
 import { CROSS_ORIGIN_MESSAGE, isMutating, isSameOrigin } from "@/lib/security/same-origin"
@@ -34,23 +35,40 @@ const gate = NextAuth(authConfig).auth as unknown as (
   event: NextFetchEvent
 ) => Promise<Response | undefined> | Response | undefined
 
+/** Mobile sign-in, refresh and sign-out: exact paths, no cookies involved. */
+const MOBILE_AUTH_PATHS = new Set([
+  "/api/mobile/auth/login",
+  "/api/mobile/auth/refresh",
+  "/api/mobile/auth/logout",
+])
+
 /** The paths that need a session. Kept in step with the auth matcher below. */
 const GATED = ["/dashboard", "/admin", "/choose"]
 
-/** Origins pictures may load from: our bucket, a configured CDN, map tiles. */
+/**
+ * Origins pictures may load from: the CDN (AWS_PUBLIC_BASE_URL) when one is
+ * configured — the bucket behind it is private, and every stored address is
+ * served through the CDN (lib/storage/urls.ts) — otherwise the public
+ * bucket itself; and the map tiles.
+ */
 function imageOrigins() {
   const origins = new Set<string>()
-  const bucket = process.env.AWS_BUCKET_NAME
-  const region = process.env.AWS_REGION
-  if (bucket && region) origins.add(`https://${bucket}.s3.${region}.amazonaws.com`)
-  if (bucket) origins.add(`https://${bucket}.s3.amazonaws.com`)
   const base = process.env.AWS_PUBLIC_BASE_URL
+  let cdn: string | null = null
   if (base) {
     try {
-      origins.add(new URL(base).origin)
+      cdn = new URL(base).origin
     } catch {
       // A malformed base adds nothing.
     }
+  }
+  if (cdn) {
+    origins.add(cdn)
+  } else {
+    const bucket = process.env.AWS_BUCKET_NAME
+    const region = process.env.AWS_REGION
+    if (bucket && region) origins.add(`https://${bucket}.s3.${region}.amazonaws.com`)
+    if (bucket) origins.add(`https://${bucket}.s3.amazonaws.com`)
   }
   // The map picker's tiles (Leaflet + OpenStreetMap).
   origins.add("https://tile.openstreetmap.org")
@@ -106,18 +124,43 @@ export default async function proxy(
   // A public site has no API.
   if (slug && isApi) return json(404, "Not found")
 
-  // CSRF: an API write must come from this app's own pages.
-  if (isApi && !isSameOrigin(request.method, request.headers)) {
+  // A mobile request authenticates with `Authorization: Bearer` alone
+  // (lib/auth/guards.ts). Its token is checked here — signature, expiry, typ;
+  // no database — so the checks below know whether it is genuine. Whether
+  // it is still current (tokenVersion, membership) is the guard's call.
+  const mobileAuthPath = MOBILE_AUTH_PATHS.has(path)
+  const bearer =
+    isApi && hasBearer(request.headers)
+      ? await verifyAccessToken(bearerToken(request.headers) ?? "")
+      : null
+  if (isApi && isMutating(request.method) && !mobileAuthPath && hasBearer(request.headers) && !bearer) {
+    // A write that claims a token but can't show a good one is refused as
+    // unauthenticated — never waved on to the cookie path.
+    return json(401, "Sign in to continue")
+  }
+
+  // CSRF: an API write must come from this app's own pages. Two
+  // exceptions, neither of which rides on a cookie:
+  //  - a genuine Bearer token: a browser can't attach Authorization to a
+  //    cross-site request without a CORS preflight, which this server never
+  //    grants (no CORS headers are sent), and the guard ignores cookies on
+  //    such a request;
+  //  - the mobile sign-in endpoints: their credential is in the body (a
+  //    password or a refresh token), they neither read nor set a cookie, and
+  //    a cross-site page can't read what they answer.
+  if (isApi && !bearer && !mobileAuthPath && !isSameOrigin(request.method, request.headers)) {
     return json(403, CROSS_ORIGIN_MESSAGE)
   }
 
-  // Rate limits. Public pages per IP; every other signed-in write per session.
+  // Rate limits. Public pages per IP; every other signed-in write per
+  // session — per user for a Bearer request, so app users sharing a mobile
+  // network's IP don't share a budget.
   const publicPage =
     Boolean(slug) || path.startsWith("/quote/") || path.startsWith("/api/quote/")
   if (publicPage || (isApi && isMutating(request.method))) {
     const result = publicPage
       ? await limitBy("publicPage", clientIp(request.headers))
-      : await limitBy("mutation", sessionKey(request))
+      : await limitBy("mutation", bearer ? `user:${bearer.sub}` : sessionKey(request))
     if (!result.ok) {
       const headers = { "Retry-After": String(result.retryAfter) }
       return isApi

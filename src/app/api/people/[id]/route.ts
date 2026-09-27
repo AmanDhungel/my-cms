@@ -1,6 +1,7 @@
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole, requireUser } from "@/lib/auth/guards"
 import { assertCanDeleteRecord } from "@/lib/auth/permissions"
+import { revokeMobileAccess } from "@/lib/auth/mobile-sessions"
 import { logActivity } from "@/lib/activity"
 import { cleanWeek } from "@/lib/week-server"
 import { connectToDatabase } from "@/lib/mongodb"
@@ -25,7 +26,7 @@ export async function PATCH(
 
     const [member, business] = await Promise.all([
       User.findOne({ _id: id, business: viewer.businessId }),
-      getWorkspace(viewer.businessId),
+      getWorkspace(viewer),
     ])
 
     if (!member || member.status === "removed") {
@@ -73,6 +74,8 @@ export async function PATCH(
     })
 
     if (roleBefore !== member.role) {
+      // Mobile tokens carry the role they were issued with; end them.
+      await revokeMobileAccess([member._id])
       // Audit trail: a role change is recorded on its own.
       void logActivity({
         businessId: viewer.businessId,
@@ -113,7 +116,7 @@ export async function DELETE(
 
     const [member, business] = await Promise.all([
       User.findOne({ _id: id, business: viewer.businessId }),
-      getWorkspace(viewer.businessId),
+      getWorkspace(viewer),
     ])
 
     if (!member) {
@@ -146,6 +149,7 @@ export async function DELETE(
     member.status = "removed"
     member.removedAt = new Date()
     await member.save()
+    await revokeMobileAccess([member._id])
 
     // Work nobody has started goes back on the shelf; anything in progress or
     // finished stays as it is, because it is history now.

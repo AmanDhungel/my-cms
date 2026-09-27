@@ -34,7 +34,7 @@ import {
   type ImageDraft,
 } from "@/lib/upload-client"
 import { useRevokeOnUnmount, useUnsavedGuard } from "@/lib/use-unsaved-guard"
-import { itemSchema } from "@/lib/validations/inventory"
+import { loadInventorySchemas } from "@/lib/lazy-schemas"
 import { ITEM_UNITS, type ItemUnit } from "@/lib/work-constants"
 import type { ItemDTO } from "@/models/inventory-item"
 import { useViewer } from "@/lib/use-viewer"
@@ -150,6 +150,11 @@ function Body({
   const create = useCreateItem()
   const update = useUpdateItem(item?.id ?? "")
   const mutation = item ? update : create
+  // Zod comes with the form, not the page (lib/lazy-schemas.ts).
+  React.useEffect(() => {
+    void loadInventorySchemas().catch(() => {})
+  }, [])
+  const checking = React.useRef(false)
 
   const list = categories.data?.categories ?? []
   const noCategories = !categories.isPending && list.length === 0
@@ -179,6 +184,18 @@ function Body({
       return
     }
 
+    if (checking.current) return
+    checking.current = true
+    let schemas: Awaited<ReturnType<typeof loadInventorySchemas>>
+    try {
+      schemas = await loadInventorySchemas()
+    } catch {
+      toast.error("That form didn't finish loading. Check your connection and try again.")
+      return
+    } finally {
+      checking.current = false
+    }
+    const { itemSchema } = schemas
     // Checked before anything is uploaded, so a typo costs no bandwidth.
     const check = itemSchema.safeParse(fields())
     if (!check.success) {

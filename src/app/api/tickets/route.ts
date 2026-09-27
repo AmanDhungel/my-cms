@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     const viewer = await requireUser()
     await connectToDatabase()
 
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     const params = request.nextUrl.searchParams
     const scope = asScope(params.get("scope"))
 

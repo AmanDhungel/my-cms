@@ -2,8 +2,10 @@ import { z } from "zod"
 
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireSuperAdmin } from "@/lib/auth/guards"
+import { revokeMobileAccess } from "@/lib/auth/mobile-sessions"
 import { connectToDatabase } from "@/lib/mongodb"
 import { Business, toBusinessDTO } from "@/models/business"
+import { User } from "@/models/user"
 
 export const runtime = "nodejs"
 
@@ -34,6 +36,11 @@ export async function PATCH(
       business.set("blockedAt", undefined)
     }
     await business.save()
+    // Blocking the workspace ends every member's mobile tokens at once.
+    if (blocked) {
+      const members = await User.find({ business: business._id }).select("_id").lean()
+      await revokeMobileAccess(members.map((member) => member._id))
+    }
 
     return ok({ business: toBusinessDTO(business) })
   } catch (error) {

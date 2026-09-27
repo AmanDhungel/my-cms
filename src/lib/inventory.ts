@@ -1,5 +1,5 @@
 import { HttpError } from "@/lib/api-response"
-import { isBusinessKeyIn, keyFromUrl } from "@/lib/s3"
+import { isBusinessKeyIn, keyFromUrl, servedUrl } from "@/lib/s3"
 import { InventoryItem } from "@/models/inventory-item"
 
 /**
@@ -64,13 +64,15 @@ export function itemImagesFrom(
     throw new HttpError(400, "Three pictures is the most an item can hold")
   }
 
-  const stored = new Map(existing.map((one) => [one.url, one]))
+  // By served address, so an old bucket link sent back as its CDN address
+  // is recognised as the picture already there.
+  const stored = new Map(existing.map((one) => [servedUrl(one.url), one]))
   return images.map(({ url }) => {
     const key = keyFromUrl(url)
     if (!key || !isBusinessKeyIn(key, businessId, "products")) {
       throw new HttpError(400, "That picture isn't one of ours")
     }
-    const kept = stored.get(url)
+    const kept = stored.get(servedUrl(url))
     if (kept) {
       return {
         key,

@@ -5,6 +5,7 @@ import { OwnerShell } from "@/components/dashboard/owner-shell";
 import { loadViewer } from "@/lib/auth/page-guards";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
 import { Bill } from "@/models/bill";
+import { rememberedWorkspace } from "@/lib/auth/membership";
 import { Business } from "@/models/business";
 import { Customer } from "@/models/customer";
 import { InventoryItem } from "@/models/inventory-item";
@@ -17,6 +18,7 @@ import { Project } from "@/models/project";
 import { WorkRequest } from "@/models/request";
 import { Ticket } from "@/models/ticket";
 import { User } from "@/models/user";
+import { servedUrl } from "@/lib/storage/urls"
 
 /** Sessions are per-request; nothing under /dashboard may be cached. */
 export const dynamic = "force-dynamic";
@@ -29,7 +31,9 @@ export default async function DashboardLayout({
   // still-valid token can't outlive being removed.
   const me = await loadViewer();
 
-  const business = await Business.findById(me.businessId);
+  // Already read with the membership check (lib/auth/membership.ts).
+  const business =
+    rememberedWorkspace(me) ?? (await Business.findById(me.businessId));
 
   if (!business) {
     redirect("/login");
@@ -40,7 +44,7 @@ export default async function DashboardLayout({
     email: me.email,
     role: me.role,
     businessName: business.name,
-    businessLogo: business.logo?.url ?? null,
+    businessLogo: servedUrl(business.logo?.url ?? null),
     superAdmin: isSuperAdmin(me.email),
   };
 

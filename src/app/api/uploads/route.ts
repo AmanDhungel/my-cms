@@ -10,25 +10,19 @@ import {
   sniffImageType,
   uploadFile,
 } from "@/lib/s3"
-import { assertMultipartLength } from "@/lib/storage/http"
+import { assertMultipartLength, readCappedBody } from "@/lib/storage/http"
 import { isTenantRequest } from "@/lib/tenancy"
 import { deleteUploadSchema } from "@/lib/validations/uploads"
 import { logActivity } from "@/lib/activity"
 import { canDelete } from "@/lib/auth/permissions"
 import { referencesOf } from "@/lib/image-ownership"
 import { getWorkspace } from "@/lib/workspace"
-import type { UserRole } from "@/models/user"
+import { UPLOAD_PURPOSES_BY_ROLE as PURPOSES_BY_ROLE } from "@/lib/auth/upload-purposes"
 import { enforceLimit } from "@/lib/security/rate-limit"
 import { CROSS_ORIGIN_MESSAGE, isSameOrigin } from "@/lib/security/same-origin"
+import { readBearer } from "@/lib/auth/mobile-tokens"
 
 export const runtime = "nodejs"
-
-/** Which upload folders each role may write to. */
-const PURPOSES_BY_ROLE: Record<UserRole, readonly string[]> = {
-  owner: ["site", "maintenance", "ticket", "products", "logo"],
-  supervisor: ["maintenance", "ticket", "products"],
-  employee: ["ticket"],
-}
 
 /**
  * Uploading, for whatever holds pictures.
@@ -57,8 +51,13 @@ export function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (isTenantRequest(request)) return fail("Not found", 404)
-  // The proxy is kept off this route, so it checks the origin itself (CSRF).
-  if (!isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
+  // The proxy is kept off this route, so it checks the origin itself (CSRF),
+  // with the proxy's rule: a genuine Bearer token stands in for the origin
+  // check (CSRF rides on cookies, and a Bearer request is authenticated by
+  // its token alone); a claimed-but-bad token is 401.
+  const bearer = await readBearer(request.headers)
+  if (bearer.claimed && !bearer.claims) return fail("Sign in to continue", 401)
+  if (!bearer.claims && !isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
   try {
     const viewer = await requireRole("owner", "supervisor", "employee")
     await enforceLimit("uploads", viewer.id)
@@ -67,13 +66,17 @@ export async function POST(request: Request) {
     // "Multipart/Form-Data" and still mean this branch.
     const contentType = request.headers.get("content-type")?.toLowerCase()
     if (contentType?.includes("multipart/form-data")) {
-      // A cheap first gate on the declared length, before the body is read:
-      // formData() buffers the whole thing, and the checks below only run
-      // once it has. The header can lie, so the measured checks after
-      // parsing still decide.
+      // A cheap first gate on the declared length, when there is one, before
+      // the body is read. Then the body is read with a running count and
+      // dropped with a 413 the moment it passes the cap — so a request with
+      // no Content-Length (a native client streaming it) is bounded too.
+      // The measured checks after parsing still decide.
       assertMultipartLength(request.headers)
+      const body = await readCappedBody(request)
 
-      const form = await request.formData()
+      const form = await new Response(body, {
+        headers: { "content-type": request.headers.get("content-type") ?? "" },
+      }).formData()
       const purpose = form.get("purpose")
       const file = form.get("file")
 
@@ -143,7 +146,13 @@ export async function POST(request: Request) {
  */
 export async function DELETE(request: Request) {
   if (isTenantRequest(request)) return fail("Not found", 404)
-  if (!isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
+  // The proxy is kept off this route, so it applies the same rule itself:
+  // a genuine Bearer token stands in for the origin check (CSRF rides on
+  // cookies, and a Bearer request is authenticated by its token alone); a
+  // claimed-but-bad token is 401.
+  const bearer = await readBearer(request.headers)
+  if (bearer.claimed && !bearer.claims) return fail("Sign in to continue", 401)
+  if (!bearer.claims && !isSameOrigin(request.method, request.headers)) return fail(CROSS_ORIGIN_MESSAGE, 403)
   try {
     const viewer = await requireRole("owner", "supervisor", "employee")
     const { urls } = deleteUploadSchema.parse(await readJson(request))
@@ -170,7 +179,7 @@ export async function DELETE(request: Request) {
      */
     const own: string[] = []
     const audited: string[] = []
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     for (const url of inWorkspace) {
       const key = keyFromUrl(url)!
       const refs = await referencesOf(key, url, viewer.businessId, business.timeZone)

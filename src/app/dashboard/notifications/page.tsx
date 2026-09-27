@@ -11,7 +11,7 @@ export default async function NotificationsPage() {
   const viewer = await requirePageRole("owner", "supervisor")
 
   await connectToDatabase()
-  const business = await getWorkspace(viewer.businessId)
+  const business = await getWorkspace(viewer)
 
   return (
     <NotificationsView

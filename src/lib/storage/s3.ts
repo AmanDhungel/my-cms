@@ -15,6 +15,7 @@ import {
   isUploadContentType,
   type UploadPurpose,
 } from "@/lib/storage/types"
+import { classifyUrl, keyFromUrl, publicUrlFor, servedUrl } from "@/lib/storage/urls"
 
 export {
   MAX_UPLOAD_BYTES,
@@ -26,6 +27,13 @@ export {
   type UploadPurpose,
 } from "@/lib/storage/types"
 export { sniffImageType } from "@/lib/storage/sniff"
+export {
+  classifyUrl,
+  keyFromUrl,
+  publicUrlFor,
+  servedUrl,
+  type StorageAddress,
+} from "@/lib/storage/urls"
 
 /**
  * Every file the app stores, in one place.
@@ -46,6 +54,8 @@ export { sniffImageType } from "@/lib/storage/sniff"
  */
 
 const REGION = process.env.AWS_REGION
+/** Every object is written once under a new key and never changed. */
+const IMMUTABLE = "public, max-age=31536000, immutable"
 const BUCKET = process.env.AWS_BUCKET_NAME
 
 /**
@@ -221,6 +231,9 @@ export async function signUpload(
     new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,
+      // Keys are fresh UUIDs and never overwritten, so an object can be cached
+      // for good — by CloudFront and by the browser.
+      CacheControl: IMMUTABLE,
       ContentType: contentType,
       // Signed in, so a signature can't be reused for a different-sized body.
       ContentLength: size,
@@ -283,6 +296,9 @@ export async function uploadFile(
     new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,
+      // Keys are fresh UUIDs and never overwritten, so an object can be cached
+      // for good — by CloudFront and by the browser.
+      CacheControl: IMMUTABLE,
       Body: input,
       ContentType: opts.contentType,
       ContentLength: input.byteLength,
@@ -391,114 +407,6 @@ export async function replaceFile(
 }
 
 /**
- * The address a browser will read the file from.
- *
- * The plain bucket URL, unless a CDN or custom domain is configured — in
- * which case that wins, because serving an image from the bucket directly is
- * the slowest way to serve it.
- */
-export function publicUrlFor(key: string) {
-  const base = process.env.AWS_PUBLIC_BASE_URL?.replace(/\/+$/, "")
-  if (base) return `${base}/${key}`
-  return `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`
-}
-
-/**
- * What an address points at, as far as our storage is concerned.
- *
- * - "bucket": it reaches an object in our bucket, and `key` is that object.
- * - "invalid": it reaches our bucket (or can't even be read as an address)
- *   but no key can be read from it — a bad percent-escape, no path. Callers
- *   refuse it: it is ours in form and unreadable in content.
- * - "external": a genuinely different host. Nothing we store or delete.
- */
-export type StorageAddress =
-  | { kind: "bucket"; key: string }
-  | { kind: "invalid" }
-  | { kind: "external" }
-
-/**
- * S3's own hostnames, with and without a region, in the dotted, the older
- * dashed and the dual-stack spellings: s3.amazonaws.com,
- * s3.eu-north-1.amazonaws.com, s3-eu-north-1.amazonaws.com,
- * s3.dualstack.eu-north-1.amazonaws.com.
- */
-const S3_HOST = /^s3(?:[.-](?:dualstack\.)?[a-z0-9-]+)?\.amazonaws\.com$/
-
-/**
- * Read any form of an address into our bucket down to its object key.
- *
- * Every question about "is this one of our files, and whose" goes through
- * here, so the site save, maintenance, the uploads DELETE and deleteUploads
- * cannot disagree about which addresses count. It recognises:
- *   - AWS_PUBLIC_BASE_URL (a CDN or custom domain), when set
- *   - virtual-hosted: <bucket>.s3[.<region>].amazonaws.com/<key>
- *   - path-style:     s3[.<region>].amazonaws.com/<bucket>/<key>
- * with the host compared case-insensitively, the query and fragment ignored,
- * and the path percent-decoded — a malformed escape is "invalid", never a
- * thrown error. Any region counts: bucket names are global, so our bucket's
- * name under any regional host is still our bucket.
- */
-export function classifyUrl(url: string): StorageAddress {
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    return { kind: "invalid" }
-  }
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    return { kind: "external" }
-  }
-
-  const host = parsed.hostname.toLowerCase().replace(/\.$/, "")
-  const bucket = (BUCKET ?? "").toLowerCase()
-  // The path as S3 will read it: escapes decoded. WHATWG URL parsing has
-  // already resolved any `.`/`..` segments, the same way a browser would.
-  let path: string
-  try {
-    path = decodeURIComponent(parsed.pathname)
-  } catch {
-    path = "\u0000"
-  }
-
-  const keyAfter = (prefix: string): StorageAddress => {
-    if (path === "\u0000") return { kind: "invalid" }
-    const key = path.slice(prefix.length)
-    return key ? { kind: "bucket", key } : { kind: "invalid" }
-  }
-
-  const base = process.env.AWS_PUBLIC_BASE_URL?.trim()
-  if (base) {
-    try {
-      const configured = new URL(base)
-      const basePath = configured.pathname.replace(/\/+$/, "")
-      if (
-        configured.host.toLowerCase() === parsed.host.toLowerCase() &&
-        (path === "\u0000" || path.startsWith(`${basePath}/`))
-      ) {
-        return keyAfter(`${basePath}/`)
-      }
-    } catch {
-      // A misconfigured base is simply not a form an address can take.
-    }
-  }
-
-  if (bucket) {
-    if (host.startsWith(`${bucket}.`) && S3_HOST.test(host.slice(bucket.length + 1))) {
-      return keyAfter("/")
-    }
-    if (S3_HOST.test(host)) {
-      if (path === "\u0000") return { kind: "invalid" }
-      if (path.startsWith(`/${bucket}/`)) return keyAfter(`/${bucket}/`)
-      // Another bucket on S3 is someone else's storage, not ours.
-      return { kind: "external" }
-    }
-  }
-
-  return { kind: "external" }
-}
-
-/**
  * The user id recorded on an object when it was uploaded, or null (no such
  * object, an upload from before uploaders were recorded, or storage
  * unavailable).
@@ -513,19 +421,6 @@ export async function uploaderOf(key: string): Promise<string | null> {
   }
 }
 
-/**
- * The object key behind one of our URLs, or null if it isn't one of ours.
- *
- * Both layouts come back intact:
- *   <any form>/businesses/<id>/site/<uuid>.jpg  ->  businesses/<id>/site/<uuid>.jpg
- *   <any form>/site/<id>/<uuid>.jpg             ->  site/<id>/<uuid>.jpg
- * An external address, and one into our bucket that can't be read, are both
- * null here; a caller that must tell them apart uses `classifyUrl`.
- */
-export function keyFromUrl(url: string): string | null {
-  const address = classifyUrl(url)
-  return address.kind === "bucket" ? address.key : null
-}
 
 /**
  * The pictures in a request that a workspace may not point a record at.
@@ -629,8 +524,10 @@ export async function reconcileUploads(
   after: string[],
   businessId: string
 ) {
-  const kept = new Set(after)
-  const orphans = before.filter((url) => url && !kept.has(url))
+  // By the address it is served from: an old bucket link kept as its CDN
+  // address is the same picture, not an orphan.
+  const kept = new Set(after.map(servedUrl))
+  const orphans = before.filter((url) => url && !kept.has(servedUrl(url)))
   if (orphans.length === 0) return { deleted: 0, failed: [] }
   return deleteUploads(orphans, businessId)
 }

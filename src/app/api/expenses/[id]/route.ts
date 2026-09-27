@@ -65,7 +65,7 @@ export async function PATCH(
 
     await connectToDatabase()
 
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     const expense = await findOwn(viewer.businessId, viewer.role, id)
     const { start } = dayRangeInZone(values.spentOn, business.timeZone)
 

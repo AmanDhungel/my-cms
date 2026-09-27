@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server"
 
 import { handleApiError, ok } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
-import { autoCloseFinishedShifts } from "@/lib/attendance"
+import { autoCloseFinishedShiftsFor } from "@/lib/attendance"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone } from "@/lib/time"
 import { restsOn, weekFor } from "@/lib/week-server"
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const viewer = await requireRole("owner", "supervisor")
     await connectToDatabase()
 
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     const today = dayKeyInZone(new Date(), business.timeZone)
     const day = normaliseDay(request.nextUrl.searchParams.get("day"), today)
 
@@ -37,14 +37,9 @@ export async function GET(request: NextRequest) {
 
     // A day nobody closed is closed here first, so the owner isn't reading
     // shifts that appear to still be running days later.
-    await Promise.all(
-      members.map((member) =>
-        autoCloseFinishedShifts({
-          userId: member._id,
-          fallbackShift: member.shift,
-          timeZone: business.timeZone,
-        })
-      )
+    await autoCloseFinishedShiftsFor(
+      members.map((member) => ({ userId: member._id, fallbackShift: member.shift })),
+      business.timeZone
     )
 
     const records = await Attendance.find({

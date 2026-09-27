@@ -38,7 +38,7 @@ import {
   usePeople,
   useUpdateExpense,
 } from "@/lib/queries"
-import { expenseSchema } from "@/lib/validations/expenses"
+import { loadExpenseSchemas } from "@/lib/lazy-schemas"
 import type { ExpenseDTO } from "@/models/expense"
 import {
   PAYMENT_METHODS,
@@ -175,6 +175,11 @@ function Body({
   const update = useUpdateExpense(editing?.id ?? "")
   const fallbackAccount = useDefaultAccountId()
   const mutation = editing ? update : create
+  // Zod comes with the form, not the page (lib/lazy-schemas.ts).
+  React.useEffect(() => {
+    void loadExpenseSchemas().catch(() => {})
+  }, [])
+  const checking = React.useRef(false)
 
   const available = stock.data?.items ?? []
   const crew = (people.data?.members ?? []).filter(
@@ -231,8 +236,20 @@ function Body({
   }))
   const total = buying ? linesTotal(priced) : Number(amount) || 0
 
-  function submit() {
+  async function submit() {
     if (mutation.isPending) return
+    if (checking.current) return
+    checking.current = true
+    let schemas: Awaited<ReturnType<typeof loadExpenseSchemas>>
+    try {
+      schemas = await loadExpenseSchemas()
+    } catch {
+      toast.error("That form didn't finish loading. Check your connection and try again.")
+      return
+    } finally {
+      checking.current = false
+    }
+    const { expenseSchema } = schemas
 
     const parsed = expenseSchema.safeParse({
       kind,
@@ -506,7 +523,7 @@ function Body({
         </button>
         <button
           type="button"
-          onClick={submit}
+          onClick={() => void submit()}
           disabled={mutation.isPending}
           className="bg-p-500 rounded-md px-4 py-2.5 text-[13.5px] font-semibold text-white hover:brightness-[1.06] disabled:opacity-60"
         >

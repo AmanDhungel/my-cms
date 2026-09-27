@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation"
+import { cache } from "react"
 
 import { auth } from "@/auth"
 import { isStaleSession } from "@/lib/auth/guards"
+import { loadMembership, rememberWorkspace } from "@/lib/auth/membership"
 import { connectToDatabase } from "@/lib/mongodb"
-import { User, type UserRole } from "@/models/user"
+import type { UserRole } from "@/models/user"
 
 export type PageViewer = {
   id: string
@@ -32,7 +34,13 @@ export async function requirePageRole(
 }
 
 /** The membership check on its own, for pages that serve every role. */
-export async function loadViewer(): Promise<PageViewer> {
+/**
+ * Once per render: a layout and its page both ask, and share one answer
+ * (React cache is scoped to the request).
+ */
+export const loadViewer = cache(loadViewerUncached)
+
+async function loadViewerUncached(): Promise<PageViewer> {
   const session = await auth()
 
   if (!session?.user?.id) {
@@ -41,13 +49,11 @@ export async function loadViewer(): Promise<PageViewer> {
 
   await connectToDatabase()
 
-  // The workspace rides along so a blocked one shuts out everyone in it.
-  const member = await User.findById(session.user.id)
-    .select("name email role business status blockedAt sessionsValidAfter")
-    .populate<{ business: { _id: unknown; blockedAt?: Date } }>(
-      "business",
-      "blockedAt"
-    )
+  // The workspace rides along so a blocked one shuts out everyone in it —
+  // in the same round trip as the account (lib/auth/membership.ts).
+  const found = await loadMembership(session.user.id)
+  const member = found?.member
+  const business = found?.business
 
   if (!member) {
     redirect("/login")
@@ -57,19 +63,25 @@ export async function loadViewer(): Promise<PageViewer> {
     redirect("/removed")
   }
 
-  if (member.blockedAt || member.business?.blockedAt) {
+  if (member.blockedAt || business?.blockedAt) {
     redirect("/blocked")
+  }
+
+  if (!business) {
+    throw new Error("The account's workspace no longer exists")
   }
 
   if (isStaleSession(session.user.signedInAt, member.sessionsValidAfter)) {
     redirect("/login")
   }
 
-  return {
+  const viewer: PageViewer = {
     id: String(member._id),
     name: member.name,
     email: member.email,
     role: member.role,
-    businessId: String(member.business._id),
+    businessId: String(business._id),
   }
+  rememberWorkspace(viewer, business)
+  return viewer
 }
