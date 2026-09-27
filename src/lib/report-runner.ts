@@ -42,6 +42,7 @@ export function scopeFrom(
     customerId: asId(params.get("customerId")),
     categoryId: asId(params.get("categoryId")),
     payment: params.get("payment"),
+    memo: new Map(),
   }
 }
 
@@ -56,7 +57,26 @@ type Scope = {
   customerId: string | null
   categoryId: string | null
   payment: string | null
+  /**
+   * The loads this request has already started. A hub runs every report in
+   * its group at once, and most of them read the same bills, payments,
+   * expenses and items; with this each is read once per request.
+   */
+  memo?: Map<string, Promise<unknown>>
 }
+
+/** One load per request scope; callers get their own array to work on. */
+function once<T>(s: Scope, key: string, load: () => PromiseLike<T>): Promise<T> {
+  if (!s.memo) return Promise.resolve(load())
+  let hit = s.memo.get(key) as Promise<T> | undefined
+  if (!hit) {
+    hit = Promise.resolve(load())
+    s.memo.set(key, hit)
+  }
+  return hit
+}
+
+const copy = <T>(rows: T[]) => rows.slice()
 
 export async function buildReport(slug: string, s: Scope): Promise<ReportPayload> {
   switch (slug) {
@@ -134,8 +154,10 @@ async function loadBills(s: Scope) {
     filter.payment = { $ne: "quotation" }
   }
 
-  const bills = await Bill.find(filter).sort({ createdAt: 1 }).limit(5000)
-  const paid = await paidByBill(s.businessId)
+  const [bills, paid] = await Promise.all([
+    once(s, "bills", () => Bill.find(filter).sort({ createdAt: 1 }).limit(5000)),
+    once(s, "paidByBill", () => paidByBill(s.businessId)),
+  ])
 
   return bills.map((bill) => ({
     doc: bill,
@@ -240,7 +262,9 @@ async function salesByPeriod(unit: "day" | "month", s: Scope): Promise<ReportPay
 
 async function salesByEmployee(s: Scope): Promise<ReportPayload> {
   const bills = await loadBills(s)
-  const people = await User.find({ business: s.businessId }).select("name role")
+  const people = await once(s, "people:name role", () =>
+    User.find({ business: s.businessId }).select("name role")
+  )
   const names = new Map(people.map((p) => [String(p._id), p.name]))
 
   const buckets = new Map<string, { bills: number; total: number; paid: number }>()
@@ -290,9 +314,11 @@ async function salesByEmployee(s: Scope): Promise<ReportPayload> {
 
 async function salesByProduct(s: Scope): Promise<ReportPayload> {
   const bills = await loadBills(s)
-  const items = await InventoryItem.find({ business: s.businessId })
-    .select("name category")
-    .populate<{ category: { _id: unknown; name?: string } }>("category", "name")
+  const items = await once(s, "items:name category", () =>
+    InventoryItem.find({ business: s.businessId })
+      .select("name category")
+      .populate<{ category: { _id: unknown; name?: string } }>("category", "name")
+  )
 
   const categoryOf = new Map(
     items.map((one) => [String(one._id), one.category?.name ?? "Uncategorised"])
@@ -424,9 +450,11 @@ async function salesByCustomer(s: Scope): Promise<ReportPayload> {
 
 async function salesByCategory(s: Scope): Promise<ReportPayload> {
   const bills = await loadBills(s)
-  const items = await InventoryItem.find({ business: s.businessId })
-    .select("name category")
-    .populate<{ category: { _id: unknown; name?: string } }>("category", "name")
+  const items = await once(s, "items:name category", () =>
+    InventoryItem.find({ business: s.businessId })
+      .select("name category")
+      .populate<{ category: { _id: unknown; name?: string } }>("category", "name")
+  )
 
   const categoryOf = new Map(
     items.map((one) => [String(one._id), one.category?.name ?? "Uncategorised"])
@@ -487,10 +515,14 @@ async function loadItems(s: Scope) {
   const filter: Record<string, unknown> = { business: s.businessId }
   if (s.categoryId) filter.category = s.categoryId
 
-  return InventoryItem.find(filter)
-    .sort({ name: 1 })
-    .limit(5000)
-    .populate<{ category: { _id: unknown; name?: string } }>("category", "name")
+  return copy(
+    await once(s, "items", () =>
+      InventoryItem.find(filter)
+        .sort({ name: 1 })
+        .limit(5000)
+        .populate<{ category: { _id: unknown; name?: string } }>("category", "name")
+    )
+  )
 }
 
 async function currentStock(valuation: boolean, s: Scope): Promise<ReportPayload> {
@@ -784,10 +816,14 @@ async function loadPayments(direction: "in" | "out", s: Scope) {
       ...(s.to ? { $lte: s.to } : {}),
     }
   }
-  return Payment.find(filter)
-    .sort({ paidOn: -1 })
-    .limit(5000)
-    .populate<{ bill: { _id: unknown; number?: string } }>("bill", "number")
+  return copy(
+    await once(s, `payments:${direction}`, () =>
+      Payment.find(filter)
+        .sort({ paidOn: -1 })
+        .limit(5000)
+        .populate<{ bill: { _id: unknown; number?: string } }>("bill", "number")
+    )
+  )
 }
 
 /** Everything in the expense ledger for the dates asked for. */
@@ -799,7 +835,11 @@ async function loadExpenses(s: Scope) {
       ...(s.to ? { $lte: s.to } : {}),
     }
   }
-  return Expense.find(filter).sort({ spentOn: -1 }).limit(5000)
+  return copy(
+    await once(s, "expenses", () =>
+      Expense.find(filter).sort({ spentOn: -1 }).limit(5000)
+    )
+  )
 }
 
 async function expenses(s: Scope): Promise<ReportPayload> {
@@ -904,8 +944,8 @@ async function profit(s: Scope): Promise<ReportPayload> {
 
   // Bills raised before costs were recorded carry no snapshot, so the item's
   // cost today stands in. Flagged in the note rather than passed off as exact.
-  const items = await InventoryItem.find({ business: s.businessId }).select(
-    "costPrice"
+  const items = await once(s, "items:costPrice", () =>
+    InventoryItem.find({ business: s.businessId }).select("costPrice")
   )
   const costNow = new Map(
     items.map((item) => [String(item._id), item.costPrice ?? 0])
