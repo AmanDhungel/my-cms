@@ -69,6 +69,22 @@ const uploadForm = z.object({
   file: z.string().describe("binary; JPEG/PNG/WebP/AVIF by magic bytes; <= 1,000,000 bytes"),
 })
 
+/** src/app/api/mobile/auth/login/route.ts:16-20 */
+const mobileLoginSchema = z.object({
+  email: z.string().max(320),
+  password: z.string().max(1024),
+  deviceName: z.string().trim().max(120).optional(),
+})
+/** src/app/api/mobile/auth/refresh/route.ts:8 */
+const refreshSchema = z.object({ refreshToken: z.string().min(16).max(200) })
+/** src/app/api/mobile/auth/logout/route.ts:8 */
+const logoutSchema = z.object({ refreshToken: z.string().min(1).max(200) })
+/** src/app/api/me/password/route.ts:14-17 */
+const passwordChangeSchema = z.object({
+  currentPassword: z.string().min(1, "Enter your current password").max(1024),
+  newPassword: z.string().min(10, "Use at least 10 characters").max(1024),
+})
+
 // ---- response DTOs (transcribed from TypeScript types) --------------------
 
 const id = z.string().describe("24-hex ObjectId")
@@ -316,6 +332,25 @@ const AdminProject = z.object({
   business: n(named), tickets: z.number(),
 })
 
+/** src/lib/me.ts:17-44 */
+const MeDTO = z.object({
+  user: UserDTO,
+  superAdmin: z.boolean(),
+  business: BusinessDTO.extend({ today: day }),
+  shift: z.object({ day, resting: z.boolean(), hours: n(z.string()).describe("HH:MM–HH:MM, or null on a rest day / no hours set") }),
+  permissions: z.object({
+    isOwner: z.boolean(), deleteRecords: z.boolean(), manageWork: z.boolean(), decideRequests: z.boolean(),
+    manageTeam: z.boolean(), seeMoney: z.boolean(), editSettings: z.boolean(), checkIn: z.boolean(),
+    raiseRequests: z.boolean(), uploadPurposes: z.array(z.enum(["site", "maintenance", "ticket", "products", "logo"])),
+  }),
+})
+/** src/lib/auth/mobile-sessions.ts:30 */
+const TokenPair = z.object({
+  accessToken: z.string().describe("JWE, 15 min; send as Authorization: Bearer"),
+  refreshToken: z.string().describe("opaque, 256-bit, 30 days, single use (rotates)"),
+  expiresIn: z.number().describe("access token lifetime in seconds (900)"),
+})
+
 const ApiError = z.object({
   error: z.string(),
   fieldErrors: z.record(z.string(), z.array(z.string())).optional().describe("Keyed by form path, e.g. \"lines.0.qty\""),
@@ -450,6 +485,31 @@ const R = {
   })),
   providers: z.record(z.string(), z.object({ id: z.string(), name: z.string(), type: z.string(), signinUrl: z.string(), callbackUrl: z.string() })),
   authRefusal: z.object({ error: z.string(), url: z.string() }),
+  mobileLogin: TokenPair.extend({ user: MeDTO }),
+  okTrue: z.object({ ok: z.literal(true) }),
+  businessSettings: z.object({
+    business: BusinessDTO,
+    stats: z.object({ members: z.number(), pendingInvites: z.number() }),
+    canEdit: z.boolean(),
+    uploads: z.boolean(),
+  }),
+  navCounts: z.object({
+    counts: z.object({
+      people: z.number(), pendingInvites: z.number(), projects: z.number(), tickets: z.number(),
+      inventory: z.number(), sales: z.number(), customers: z.number(), payments: z.number(),
+      expenses: z.number(), maintenance: z.number(), approvals: z.number(), unread: z.number(),
+    }),
+  }),
+  dashboardSummary: z.object({
+    today: day, timeZone: z.string(), crew: z.number(), onSite: z.number(),
+    tickets: z.array(TicketDTO).max(6), pendingRequests: z.array(RequestDTO).max(4),
+  }),
+  billDetail: z.object({
+    bill: BillDTO,
+    payments: z.array(z.object({ id, amount: z.number(), method: z.enum(C.PAYMENT_METHODS), reference: n(z.string()), paidOn: day })),
+    business: z.object({ name: z.string(), pan: n(z.string()) }),
+    issuedBy: n(z.string()),
+  }),
 }
 
 // ---- conversion -------------------------------------------------------------
@@ -473,6 +533,7 @@ for (const [name, schema] of Object.entries({
   WorkspaceInviteDTO, RequestDTO, ProjectDTO, ProjectWithCounts, NotificationDTO, ActivityDTO, BillDTO, PublicQuote,
   CustomerDTO, PartyLedger, ExpenseDTO, CategoryDTO, CategoryWithCount, ItemDTO, MaintenanceDTO, OperationDTO,
   PaymentDTO, AccountDTO, ScheduleDTO, SiteContent, SiteDTO, ReportPayload, AdminBusiness, AdminUser, AdminProject,
+  MeDTO, TokenPair,
 })) ref(name, schema, "output")
 const components = { schemas: {} }
 
@@ -518,7 +579,14 @@ function op(method, path, o) {
     operationId: o.operationId,
     "x-source": o.source,
     "x-roles": o.roles,
-    security: o.roles === "public" ? [] : [{ sessionCookie: [] }],
+    // Public: none. Super admin: the web cookie only (Bearer is refused,
+    // src/lib/auth/guards.ts requireSuperAdmin). Everything else: either.
+    security:
+      o.roles === "public"
+        ? []
+        : Array.isArray(o.roles) && o.roles[0] === "superAdmin"
+          ? [{ sessionCookie: [] }]
+          : [{ sessionCookie: [] }, { bearerToken: [] }],
     parameters: params.length ? params : undefined,
     responses,
   }
@@ -575,6 +643,55 @@ op("post", "/api/auth/signout", {
   ok: { 200: ["AuthRefusal", R.authRefusal] }, extraResponses: { 302: { description: "Redirect to callbackUrl" } }, errors: [404],
 })
 
+// Mobile token auth ----------------------------------------------------------
+const MOBILE_UNAUTH = "Exempt from the Origin check (credential in the body, no cookie; src/proxy.ts MOBILE_AUTH_PATHS). mutation limit per IP."
+op("post", "/api/mobile/auth/login", {
+  tag: "mobile-auth", summary: "Sign in; returns a token pair and the /api/me DTO", operationId: "mobileLogin",
+  source: "src/app/api/mobile/auth/login/route.ts:30-67; password check src/lib/auth/verify-credentials.ts:17-56", roles: "public",
+  body: ["MobileLoginRequest", mobileLoginSchema], ok: { 200: ["MobileLoginResponse", R.mobileLogin] },
+  errors: [400, 401, 413, 422, 429, 500],
+  rateLimit: "loginEmail 5 / 15 min per email + loginIp 20 / 15 min per IP — the same buckets as the web sign-in. " + MOBILE_UNAUTH,
+  note: "401 {error:'Email or password is incorrect'} for every refusal: wrong password, unknown email, removed, blocked account, blocked workspace.",
+  sideEffects: ["MobileSession row (refresh hash, new family)", "activity login_succeeded | login_failed | login_rate_limited (known accounts)"],
+})
+op("post", "/api/mobile/auth/refresh", {
+  tag: "mobile-auth", summary: "Rotate: the presented refresh token is revoked and a new pair issued", operationId: "mobileRefresh",
+  source: "src/app/api/mobile/auth/refresh/route.ts:14-23; src/lib/auth/mobile-sessions.ts rotateMobileSession", roles: "public",
+  body: ["RefreshRequest", refreshSchema], ok: { 200: ["TokenPair", TokenPair] }, errors: [400, 401, 413, 422, 429, 500],
+  rateLimit: MOBILE_UNAUTH,
+  note: "401 for unknown, expired, revoked or reused tokens (reuse revokes the whole family), and for a removed/blocked account or workspace.",
+})
+op("post", "/api/mobile/auth/logout", {
+  tag: "mobile-auth", summary: "Revoke this refresh token (same answer whether or not it was live)", operationId: "mobileLogout",
+  source: "src/app/api/mobile/auth/logout/route.ts:15-23", roles: "public",
+  body: ["LogoutRequest", logoutSchema], ok: { 200: ["OkResponse", R.okTrue] }, errors: [400, 413, 422, 429, 500], rateLimit: MOBILE_UNAUTH,
+})
+op("post", "/api/mobile/auth/logout-all", {
+  tag: "mobile-auth", summary: "Revoke every mobile session of this account; its access tokens stop working at once", operationId: "mobileLogoutAll",
+  source: "src/app/api/mobile/auth/logout-all/route.ts:12-20", roles: ALL, ok: { 200: ["OkResponse", R.okTrue] },
+  errors: [401, 403, 429, 500], rateLimit: MUT, sideEffects: ["user.tokenVersion += 1", "MobileSession rows revoked"],
+})
+op("get", "/api/me", {
+  tag: "me", summary: "Who is signed in, their workspace, today's shift, permission flags", operationId: "getMe",
+  source: "src/app/api/me/route.ts:12-19; src/lib/me.ts:46-77", roles: ALL, ok: { 200: ["MeDTO", MeDTO] }, errors: [401, 403, 500],
+})
+op("post", "/api/me/password", {
+  tag: "me", summary: "Change your own password; ends every other session (web and mobile, including the caller's tokens)", operationId: "changePassword",
+  source: "src/app/api/me/password/route.ts:24-59", roles: ALL, body: ["PasswordChangeRequest", passwordChangeSchema],
+  ok: { 200: ["OkResponse", R.okTrue] }, errors: JSONERR,
+  rateLimit: "password 5 / hour per user (src/lib/security/limits.ts:15) + " + MUT,
+  refinements: ["422 fieldErrors.currentPassword when the current password is wrong"],
+  sideEffects: ["sessionsValidAfter = now (web cookie sessions end)", "user.tokenVersion += 1 and MobileSession rows revoked", "activity password_changed"],
+})
+op("get", "/api/nav-counts", {
+  tag: "me", summary: "Owner/supervisor navigation badges (same queries as the web layout)", operationId: "navCounts",
+  source: "src/app/api/nav-counts/route.ts:24-77", roles: OS, ok: { 200: ["NavCounts", R.navCounts] }, errors: [401, 403, 500],
+})
+op("get", "/api/dashboard/summary", {
+  tag: "me", summary: "Owner/supervisor home: today's tickets (≤6), on site, crew, pending requests (≤4)", operationId: "dashboardSummary",
+  source: "src/app/api/dashboard/summary/route.ts:20-63", roles: OS, ok: { 200: ["DashboardSummary", R.dashboardSummary] }, errors: [401, 403, 500],
+})
+
 // Onboarding ------------------------------------------------------------------
 op("post", "/api/register", {
   tag: "onboarding", summary: "Open a workspace + owner account against a super-admin invite", operationId: "register",
@@ -586,7 +703,7 @@ op("post", "/api/register", {
 })
 op("get", "/api/invites", {
   tag: "people", summary: "Live (unaccepted) crew invites", operationId: "listInvites",
-  source: "src/app/api/invites/route.ts:19-33", roles: OWNER, ok: { 200: ["InviteList", R.invites] }, errors: [401, 403, 500],
+  source: "src/app/api/invites/route.ts:23-37", roles: OS, ok: { 200: ["InviteList", R.invites] }, errors: [401, 403, 500],
 })
 op("post", "/api/invites", {
   tag: "people", summary: "Invite a supervisor/employee; returns the one-time join URL", operationId: "createInvite",
@@ -734,6 +851,10 @@ op("post", "/api/projects", {
   roles: OS, body: ["ProjectRequest", work.projectSchema], ok: { 201: ["ProjectResponse", R.project] }, errors: [...JSONERR, 409], rateLimit: MUT,
   sideEffects: ["activity project_created"],
 })
+op("get", "/api/projects/{id}", {
+  tag: "projects", summary: "One project (its tickets: GET /api/tickets?projectId=)", operationId: "getProject",
+  source: "src/app/api/projects/[id]/route.ts:16-33", roles: OS, ok: { 200: ["ProjectResponse", R.project] }, errors: [401, 403, 404, 500],
+})
 op("patch", "/api/projects/{id}", {
   tag: "projects", summary: "Edit, or archive/reopen ({status})", operationId: "updateProject", source: "src/app/api/projects/[id]/route.ts:15-90",
   roles: OS, body: ["ProjectUpdateRequest", work.projectUpdateSchema], ok: { 200: ["ProjectResponse", R.project] }, errors: [...JSONERR, 404, 409], rateLimit: MUT,
@@ -755,6 +876,10 @@ op("delete", "/api/people/{id}", {
   tag: "people", summary: "Remove a member (soft)", operationId: "removeMember", source: "src/app/api/people/[id]/route.ts:102-178",
   roles: OWNER, ok: { 200: ["MemberRemoved", R.memberRemoved] }, errors: [401, 403, 404, 409, 429, 500], rateLimit: MUT,
   sideEffects: ["status=removed", "cancels their pending tickets", "activity member_removed"],
+})
+op("get", "/api/business", {
+  tag: "settings", summary: "Workspace settings as the Organization settings page loads them", operationId: "getBusiness",
+  source: "src/app/api/business/route.ts:20-44", roles: OS, ok: { 200: ["BusinessSettings", R.businessSettings] }, errors: [401, 403, 500],
 })
 op("patch", "/api/business", {
   tag: "settings", summary: "Workspace settings (name, zone, VAT, office, week, logo)", operationId: "updateBusiness",
@@ -799,6 +924,10 @@ op("post", "/api/bills", {
   roles: OS, body: ["BillRequest", sales.billSchema], ok: { 201: ["BillResponse", R.bill] }, errors: [...JSONERR, 404, 409], rateLimit: MUT,
   refinements: ["source=inventory: every line needs itemId (validations/sales.ts:58-64)"],
   sideEffects: ["Business.billSeq += 1 -> BILL-0001 numbering (route.ts:132-138)", "inventory stock decremented unless quotation (route.ts:140-154)"],
+})
+op("get", "/api/bills/{id}", {
+  tag: "sales", summary: "One bill + its instalments, seller name/PAN, issuer (as the bill page loads them)", operationId: "getBill",
+  source: "src/app/api/bills/[id]/route.ts:24-61", roles: OS, ok: { 200: ["BillDetail", R.billDetail] }, errors: [401, 403, 404, 500],
 })
 op("patch", "/api/bills/{id}", {
   tag: "sales", summary: "Settle ({payment}) or void ({status:'void'})", operationId: "updateBill", source: "src/app/api/bills/[id]/route.ts:22-159",
@@ -1094,7 +1223,7 @@ const doc = {
     description:
       "Generated by docs/mobile/tools/generate-openapi.mjs from the Zod schemas in src/lib/validations (request bodies) and transcribed DTO types (responses). " +
       "Every non-2xx body is ApiError {error, fieldErrors?} (src/lib/api-response.ts:4-8, 36-74) except the Auth.js credentials refusal {error, url} and the site stale 409. " +
-      "Mutations through the proxy require Origin/Referer == host (src/proxy.ts:119-122) — see backend-gaps.md.",
+      "Cookie-authenticated mutations through the proxy require Origin/Referer == host; a genuine Bearer token replaces that check, and a write with a claimed-but-bad Bearer token is 401 (src/proxy.ts).",
   },
   servers: [{ url: BASE }],
   components: {
@@ -1106,7 +1235,8 @@ const doc = {
       },
       bearerToken: {
         type: "http", scheme: "bearer",
-        description: "PROPOSED, not implemented — see docs/mobile/backend-gaps.md §1.",
+        description:
+          "Mobile access token from POST /api/mobile/auth/login or /refresh (15 min). With this header the request is authenticated by the token alone, cookies ignored (src/lib/auth/guards.ts), and a genuine token replaces the Origin check on writes (src/proxy.ts). Refused on the super admin routes.",
       },
     },
   },

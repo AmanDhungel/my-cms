@@ -5,12 +5,60 @@ import { requireRole } from "@/lib/auth/guards"
 import { holdsStock } from "@/lib/billing"
 import { connectToDatabase } from "@/lib/mongodb"
 import { paidByBill } from "@/lib/payments"
+import { dayKeyInZone } from "@/lib/time"
 import { billUpdateSchema } from "@/lib/validations/sales"
 import type { BillPayment } from "@/lib/work-constants"
+import { getWorkspace } from "@/lib/workspace"
 import { Bill, toBillDTO } from "@/models/bill"
 import { InventoryItem } from "@/models/inventory-item"
+import { Payment } from "@/models/payment"
+import { User } from "@/models/user"
 
 export const runtime = "nodejs"
+
+/**
+ * One bill with what the bill page shows beside it — the instalments paid
+ * against it, the seller's name and PAN and who issued it — loaded exactly
+ * as src/app/dashboard/sales/[id]/page.tsx:20-53 loads them.
+ */
+export async function GET(
+  _request: Request,
+  ctx: RouteContext<"/api/bills/[id]">
+) {
+  try {
+    const viewer = await requireRole("owner", "supervisor")
+    const { id } = await ctx.params
+
+    await connectToDatabase()
+
+    const bill = await Bill.findOne({ _id: id, business: viewer.businessId })
+    if (!bill) throw new HttpError(404, "That bill doesn't exist")
+
+    const [business, issuer, received] = await Promise.all([
+      getWorkspace(viewer),
+      User.findById(bill.issuedBy).select("name"),
+      // The instalments against it, oldest first.
+      Payment.find({ bill: bill._id, direction: "in" }).sort({ paidOn: 1 }),
+    ])
+
+    const paid = received.reduce((sum, payment) => sum + payment.amount, 0)
+
+    return ok({
+      bill: toBillDTO(bill, paid),
+      payments: received.map((payment) => ({
+        id: String(payment._id),
+        amount: payment.amount,
+        method: payment.method,
+        reference: payment.reference ?? null,
+        paidOn: dayKeyInZone(payment.paidOn, business.timeZone),
+      })),
+      business: { name: business.name, pan: business.pan ?? null },
+      issuedBy: issuer?.name ?? null,
+    })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
 
 /**
  * Settle a bill or void it.

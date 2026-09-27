@@ -9,6 +9,30 @@ import { Ticket } from "@/models/ticket"
 export const runtime = "nodejs"
 
 /**
+ * One project, scoped to the workspace — what the project page loads
+ * server-side (src/app/dashboard/projects/[id]/page.tsx:16-37). Its tickets
+ * come from GET /api/tickets?projectId=…, as on the web.
+ */
+export async function GET(
+  _request: Request,
+  ctx: RouteContext<"/api/projects/[id]">
+) {
+  try {
+    const viewer = await requireRole("owner", "supervisor")
+    const { id } = await ctx.params
+
+    await connectToDatabase()
+
+    const project = await Project.findOne({ _id: id, business: viewer.businessId })
+    if (!project) throw new HttpError(404, "That project doesn't exist")
+
+    return ok({ project: toProjectDTO(project) })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
+
+/**
  * Edit a project, or archive and reopen it. Projects are never deleted —
  * tickets reference them, and deleting one would orphan its history.
  */

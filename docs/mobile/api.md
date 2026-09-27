@@ -5,8 +5,8 @@ Machine-readable companion: [`openapi.json`](./openapi.json) (generated from the
 [`tools/generate-openapi.mjs`](./tools/generate-openapi.mjs); re-run with
 `node --experimental-strip-types --no-warnings docs/mobile/tools/generate-openapi.mjs`).
 
-Totals: **56 route files → 91 callable operations** (86 app routes + 5 Auth.js operations the app
-uses). `GET /api/uploads` exists only to answer 405 and is not counted
+Totals: **65 route files → 102 callable operations** (97 app routes + 5 Auth.js operations; 8 route
+files / 11 operations added on `feature/mobile-api`, §19). `GET /api/uploads` exists only to answer 405 and is not counted
 (`src/app/api/uploads/route.ts:53-56`).
 
 > Every claim cites `file:line` in this repo. Where the code can't settle something, it says so.
@@ -15,7 +15,13 @@ uses). `GET /api/uploads` exists only to answer 405 and is not counted
 
 ## 0. Conventions that apply to every route
 
-### 0.1 Auth model (today: web cookies only)
+### 0.1 Auth model — web cookies, plus Bearer tokens for the app (branch `feature/mobile-api`)
+
+> **Mobile:** sign in with `POST /api/mobile/auth/login` (§19) and send `Authorization: Bearer
+> <accessToken>` on every call. A request carrying that header is authenticated **by the token alone**
+> (cookies ignored) and returns the same `SessionUser` to every route (`src/lib/auth/guards.ts:27-111`);
+> a genuine token also replaces the Origin check on writes (§0.2). Everything below about cookies is
+> the web path, unchanged. The super admin routes refuse Bearer (403).
 
 - Auth.js v5, Credentials provider, **JWT session strategy** (`src/auth.config.ts:14-16`,
   `src/auth.ts:12-62`). The session lives in the cookie `__Secure-authjs.session-token` on
@@ -46,12 +52,15 @@ The proxy runs on every path except `api/auth/*`, `api/uploads`, static files
    issue for `my-cms-ebon.vercel.app` (live probes return 401/405, not 404).
 2. **CSRF**: `POST|PUT|PATCH|DELETE` on `/api/*` must carry `Origin` (or `Referer`) whose host
    equals `x-forwarded-host`/`host` → else **403** *"Cross-origin requests aren't allowed"*
-   (`:120-122`, `src/lib/security/same-origin.ts:21-33`). `/api/uploads` repeats the check itself
-   (`src/app/api/uploads/route.ts:61,146`). **A React Native request sends no Origin by default →
-   every mutation 403s.** See `backend-gaps.md` §2.
+   (`src/lib/security/same-origin.ts:21-33`). `/api/uploads` repeats the check itself.
+   **Exceptions (`feature/mobile-api`):** a request with a *genuine* Bearer access token skips it (a
+   browser can't attach `Authorization` cross-site without a CORS preflight, and no CORS headers are
+   ever sent); a write whose Bearer token is bad/expired is **401** *"Sign in to continue"* (so the
+   app knows to refresh); `/api/mobile/auth/{login,refresh,logout}` are exempt (credential in the
+   body, no cookie). Cookie requests keep the check.
 3. **Rate limits** (`:124-140`): `/api/quote/*` → `publicPage` 120/min per IP; every other API
    mutation → `mutation` **300 per 10 min per session** (key = SHA-256 of the session cookie, or
-   the IP when there is no cookie, `:99-106`). Limits table: `src/lib/security/limits.ts:5-24`.
+   the IP when there is no cookie; **the user id for a genuine Bearer request**). Limits table: `src/lib/security/limits.ts:5-24`.
    Mongo-backed fixed windows (`src/lib/security/rate-limit.ts:45-78`); 429 carries `Retry-After`.
 4. Pages only: auth gate for `/dashboard`, `/admin`, `/choose` → 307 to `/login?callbackUrl=…`
    (confirmed live for `/dashboard`).
@@ -499,7 +508,8 @@ Body `memberUpdateSchema` (`src/lib/validations/auth.ts:219-234`): `name` ≥2, 
 (`:123-144`). 200 `{ member, cancelledTickets }`. Soft delete: `status:"removed"`, their **pending
 tickets are cancelled** (`:146-155`). Activity `member_removed`.
 
-### 8.4 `GET /api/invites` — `requireRole("owner")` (`src/app/api/invites/route.ts:21`).
+### 8.4 `GET /api/invites` — `requireRole("owner","supervisor")` (`src/app/api/invites/route.ts:23-37`;
+widened on `feature/mobile-api` to match the People page, which already shows supervisors this list).
 200 `{ invites: InviteDTO[] }` (unaccepted, newest first).
 
 ### 8.5 `POST /api/invites` — `requireRole("owner")` (`:41`). Body `inviteSchema`
@@ -727,7 +737,97 @@ Mobile: **WEB-ONLY** (the client isn't an app user).
 
 ---
 
-## 19. Endpoint → web screen(s)
+## 19. Mobile token auth and the new read endpoints (`feature/mobile-api`)
+
+All additive; existing responses are unchanged. Tokens:
+
+| Token | Form | Lifetime | Stored server-side |
+|---|---|---|---|
+| **access** | Auth.js `encode` (next-auth/jwt) with `AUTH_SECRET` and salt `"ems-mobile-access"` → an encrypted, integrity-protected JWT (JWE `dir`/A256CBC-HS512). Claims `{ sub, businessId, role, tokenVersion, typ:"access", iat, exp, jti }` | 15 min (`ACCESS_TOKEN_TTL_S`, `src/lib/auth/mobile-tokens.ts`) | nothing |
+| **refresh** | 256 random bits, base64url, opaque | 30 days (`REFRESH_TOKEN_TTL_MS`, `src/lib/auth/mobile-sessions.ts`) | SHA-256 only, in `MobileSession` (`src/models/mobile-session.ts`), TTL index on `expiresAt` |
+
+An access token is refused (401) when it fails to decode (tampered, wrong key, expired), has
+`typ ≠ "access"`, or its `tokenVersion` ≠ the account's current `tokenVersion`. **Revocation**
+(`revokeMobileAccess`, `src/lib/auth/mobile-sessions.ts`) = `tokenVersion += 1` + revoke every
+`MobileSession` of the account. It runs on: user blocked (`PATCH /api/admin/users/{id}`), workspace
+blocked (`PATCH /api/admin/businesses/{id}`, all members), role change (`PATCH /api/people/{id}`),
+removal (`DELETE /api/people/{id}`), adoption by another workspace (`POST /api/invites/{token}/accept`),
+password change (`POST /api/me/password`), and `POST /api/mobile/auth/logout-all`. Removed/blocked
+accounts are also refused per request by the guard's DB check, exactly as on the web (403).
+
+### 19.1 `POST /api/mobile/auth/login` — public
+- Body `{ email: string, password: string, deviceName?: string ≤120 }` (strings only, else 422).
+- Same password check as the web — `verifyCredentials` (`src/lib/auth/verify-credentials.ts`), which the
+  web's Auth.js `authorize` now calls too (`src/auth.ts`).
+- Same limits and buckets as the web sign-in: `loginEmail` 5 / 15 min per email, `loginIp` 20 / 15 min
+  per IP → **429** with `Retry-After`. Same audit rows (`login_succeeded|login_failed|login_rate_limited`).
+- **200** `{ accessToken, refreshToken, expiresIn: 900, user: MeDTO }` (§19.5).
+- **401** `{ error: "Email or password is incorrect" }` for every refusal (wrong password, unknown email,
+  removed, blocked account, blocked workspace).
+- No Origin needed (exempt path). Example → `{"email":"asha@example.com","password":"a-long-pass-123","deviceName":"Pixel 8"}` →
+  `200 {"accessToken":"eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2Q0JDLUhTNTEyIiwia2lkIjoi…","refreshToken":"Qk3…","expiresIn":900,"user":{…}}`
+
+### 19.2 `POST /api/mobile/auth/refresh` — public
+- Body `{ refreshToken }` (16–200 chars). Claims the row atomically, revokes it, issues a new pair in
+  the same family → **200** `{ accessToken, refreshToken, expiresIn }`.
+- **401** *"Sign in to continue"* for unknown / expired / revoked tokens and for a removed or blocked
+  account or workspace. **Reuse of an already-rotated token revokes the whole family** (theft detection).
+
+### 19.3 `POST /api/mobile/auth/logout` — public
+- Body `{ refreshToken }` → revokes it. **200** `{ ok: true }` whether or not it was live. The access
+  token already issued lapses within 15 min (use `logout-all` to end it at once).
+
+### 19.4 `POST /api/mobile/auth/logout-all` — any signed-in role
+- Bearer (or cookie). Revokes all of the account's mobile sessions and bumps `tokenVersion` → its access
+  tokens fail on their next request. Web cookie sessions are not affected. **200** `{ ok: true }`.
+
+### 19.5 `GET /api/me` — any signed-in role (`src/app/api/me/route.ts`, builder `src/lib/me.ts`)
+```ts
+{
+  user: UserDTO,                                   // src/models/user.ts
+  superAdmin: boolean,
+  business: BusinessDTO & { today: "YYYY-MM-DD" }, // logo.url is the served (CDN) URL; office, week, vatRate, pan, timeZone
+  shift: { day, resting: boolean, hours: "HH:MM–HH:MM" | null },  // own week → workspace week → standing shift
+  permissions: { isOwner, deleteRecords, manageWork, decideRequests, manageTeam, seeMoney,
+                 editSettings, checkIn, raiseRequests, uploadPurposes: string[] }
+}
+```
+Same data the web's layout and pages load server-side (`src/app/dashboard/layout.tsx:32-58`,
+`src/app/dashboard/page.tsx:38-47`, `src/app/dashboard/profile/page.tsx:17-24`). The login response
+embeds exactly this object.
+
+### 19.6 `POST /api/me/password` — any signed-in role
+- Body `{ currentPassword, newPassword (≥10) }`; limit `password` 5 / hour per user.
+- Wrong current password → **422** `fieldErrors.currentPassword`. Success → `{ ok: true }`; sets
+  `sessionsValidAfter = now` (web sessions end), revokes mobile access (the caller signs in again),
+  activity `password_changed`.
+
+### 19.7 `GET /api/business` — owner, supervisor
+- **200** `{ business: BusinessDTO, stats: { members, pendingInvites }, canEdit, uploads }` — as the
+  Organization settings page loads it (`src/app/dashboard/settings/page.tsx:15-38`).
+
+### 19.8 `GET /api/bills/{id}` — owner, supervisor
+- **200** `{ bill: BillDTO, payments: {id, amount, method, reference, paidOn}[], business: {name, pan}, issuedBy: string|null }`
+  — as the bill page loads it (`src/app/dashboard/sales/[id]/page.tsx:20-53`). 404 *"That bill doesn't exist"*.
+
+### 19.9 `GET /api/projects/{id}` — owner, supervisor
+- **200** `{ project: ProjectDTO }` — as the project page loads it (`src/app/dashboard/projects/[id]/page.tsx:16-37`).
+  404 *"That project doesn't exist"*. Its tickets: `GET /api/tickets?projectId=`.
+
+### 19.10 `GET /api/nav-counts` — owner, supervisor
+- **200** `{ counts: { people, pendingInvites, projects, tickets, inventory, sales, customers, payments, expenses, maintenance, approvals, unread } }`
+  — the dashboard layout's queries verbatim (`src/app/dashboard/layout.tsx:60-103`).
+
+### 19.11 `GET /api/dashboard/summary` — owner, supervisor
+- **200** `{ today, timeZone, crew, onSite, tickets: TicketDTO[≤6], pendingRequests: RequestDTO[≤4] }` —
+  the owner/supervisor home's queries verbatim (`src/app/dashboard/page.tsx:50-81`).
+
+Not done (would change existing response shapes): a `code` on the removed/blocked 403s, and
+`ticketId` on `NotificationDTO` (`backend-gaps.md` §3).
+
+---
+
+## 20. Endpoint → web screen(s)
 
 Where each endpoint is called from on the web (hooks in `src/lib/queries.ts` and direct `apiFetch`
 calls in components). “—” = not called by any screen (API-only or server-side).
@@ -804,3 +904,4 @@ calls in components). “—” = not called by any screen (API-only or server-s
 | `GET /api/report-groups/{group}` | Report hubs (sales/inventory/finance/employee); owner/supervisor dashboard charts |
 | `GET` · `PUT` · `POST /api/site` | `/dashboard/site` (website builder) |
 | `GET /api/admin/overview`, `PATCH /api/admin/{businesses,users}/{id}`, `POST /api/admin/invites`, `DELETE /api/admin/invites/{id}` | `/admin` |
+| `POST /api/mobile/auth/{login,refresh,logout,logout-all}`, `GET /api/me`, `POST /api/me/password`, `GET /api/nav-counts`, `GET /api/dashboard/summary`, `GET /api/business`, `GET /api/bills/{id}`, `GET /api/projects/{id}` | — (added for the mobile app; the web keeps loading the same data server-side) |

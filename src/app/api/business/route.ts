@@ -2,12 +2,46 @@ import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { logActivity } from "@/lib/activity"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
-import { deleteUploads, isBusinessKeyIn, keyFromUrl, servedUrl } from "@/lib/s3"
+import { deleteUploads, isBusinessKeyIn, keyFromUrl, servedUrl, uploadsConfigured } from "@/lib/s3"
 import { businessSettingsSchema } from "@/lib/validations/auth"
 import { cleanWeek } from "@/lib/week-server"
+import { getWorkspace } from "@/lib/workspace"
 import { Business, toBusinessDTO } from "@/models/business"
+import { Invite } from "@/models/invite"
+import { User } from "@/models/user"
 
 export const runtime = "nodejs"
+
+/**
+ * The workspace's settings, as the Organization settings page loads them
+ * server-side (src/app/dashboard/settings/page.tsx:15-38): owners and
+ * supervisors read; only the owner may change them (PATCH below).
+ */
+export async function GET() {
+  try {
+    const viewer = await requireRole("owner", "supervisor")
+    await connectToDatabase()
+
+    const [business, members, pendingInvites] = await Promise.all([
+      getWorkspace(viewer),
+      User.countDocuments({ business: viewer.businessId }),
+      Invite.countDocuments({
+        business: viewer.businessId,
+        acceptedAt: { $exists: false },
+      }),
+    ])
+
+    return ok({
+      business: toBusinessDTO(business),
+      stats: { members, pendingInvites },
+      canEdit: viewer.role === "owner",
+      // So a logo picker can say storage is unavailable rather than failing.
+      uploads: uploadsConfigured(),
+    })
+  } catch (error) {
+    return handleApiError(error)
+  }
+}
 
 /** Owner-only. The workspace a member belongs to is fixed by their session. */
 export async function PATCH(request: Request) {

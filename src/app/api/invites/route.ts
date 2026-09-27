@@ -15,10 +15,14 @@ import { User } from "@/models/user"
 
 export const runtime = "nodejs"
 
-/** Live invites for the owner's workspace, newest first. */
+/**
+ * Live invites for the workspace, newest first. Supervisors read them too —
+ * the People page already shows them the same list (src/app/dashboard/
+ * people/page.tsx:14-37); creating one stays owner-only (POST below).
+ */
 export async function GET() {
   try {
-    const owner = await requireRole("owner")
+    const owner = await requireRole("owner", "supervisor")
     await connectToDatabase()
 
     const invites = await Invite.find({
