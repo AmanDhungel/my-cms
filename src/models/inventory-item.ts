@@ -84,6 +84,8 @@ inventoryItemSchema.index(
   { unique: true, partialFilterExpression: { sku: { $type: "string" } } }
 )
 inventoryItemSchema.index({ business: 1, category: 1 })
+// Category counts and the in-use check look items up by category alone.
+inventoryItemSchema.index({ category: 1 })
 
 export type InventoryItemDocument = InferSchemaType<typeof inventoryItemSchema>
 

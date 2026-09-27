@@ -98,6 +98,10 @@ const userSchema = new Schema(
   { timestamps: true }
 )
 
+// Every people list, crew view and member count reads a workspace's users
+// by status, sorted by name. Without it each one scanned all accounts.
+userSchema.index({ business: 1, status: 1, name: 1 })
+
 export type UserDocument = InferSchemaType<typeof userSchema>
 
 /**

@@ -181,6 +181,14 @@ const ticketSchema = new Schema(
 ticketSchema.index({ assignees: 1, startAt: 1 })
 ticketSchema.index({ business: 1, startAt: -1 })
 ticketSchema.index({ project: 1, startAt: -1 })
+// Status scopes (in progress, in review, done) and the dashboard counts.
+ticketSchema.index({ business: 1, status: 1, startAt: 1 })
+// "Today": tickets still running, bounded by their end rather than every
+// ticket that ever started before tonight.
+ticketSchema.index({ business: 1, endAt: 1 })
+// The photo-reuse check and "still checked in?" before removing someone.
+ticketSchema.index({ "photos.key": 1 }, { sparse: true })
+ticketSchema.index({ "openCheckIns.user": 1 }, { sparse: true })
 
 export type TicketDocument = InferSchemaType<typeof ticketSchema>
 

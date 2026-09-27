@@ -175,6 +175,8 @@ const billSchema = new Schema(
 billSchema.index({ "review.token": 1 }, { sparse: true })
 billSchema.index({ business: 1, number: 1 }, { unique: true })
 billSchema.index({ business: 1, createdAt: -1 })
+// A customer's ledger.
+billSchema.index({ business: 1, customerRef: 1, createdAt: 1 })
 
 export type BillDocument = InferSchemaType<typeof billSchema>
 
