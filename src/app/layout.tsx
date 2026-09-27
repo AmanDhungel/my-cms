@@ -22,6 +22,11 @@ const inter = Inter({
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
   subsets: ["latin"],
+  // Until the font arrives, stand in with another monospace face. The
+  // default stand-in is Arial scaled up, which is far wider and re-wraps
+  // short mono labels the moment the real font swaps in (landing CLS 0.17).
+  adjustFontFallback: false,
+  fallback: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "Liberation Mono", "monospace"],
 })
 
 export const metadata: Metadata = {
