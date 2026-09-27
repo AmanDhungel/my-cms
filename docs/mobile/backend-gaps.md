@@ -9,6 +9,23 @@ implemented. Live observations come from unauthenticated GETs against
 **7 are blockers** (🔴): `MobileSession` model, mobile login, refresh, Bearer in `requireUser`, the
 CSRF bypass for Bearer, `GET /api/me`, and the upload length fallback (the last pending a device test).
 
+> **Status on branch `feature/mobile-api`** (details: `api.md` §19)
+> - **§1 done:** `MobileSession`, `POST /api/mobile/auth/{login,refresh,logout,logout-all}`, Bearer in
+>   `requireUser` (super admin refuses it), `POST /api/me/password`, revocation on block / workspace
+>   block / role change / removal / adoption / password change via `user.tokenVersion`. Differences from
+>   the proposal below: the access token is Auth.js' own `encode` output (JWE, 15 min, salt
+>   `ems-mobile-access`) rather than an opaque token, and refresh tokens last 30 days, not 60.
+> - **§2 done:** a genuine Bearer token skips the Origin check (proxy and uploads); a bad one on a write is 401.
+> - **§3 done:** `GET /api/me`, `/api/nav-counts`, `/api/dashboard/summary`, `/api/business`,
+>   `/api/projects/{id}`, `/api/bills/{id}`; `GET /api/invites` readable by supervisors. **Not done**
+>   (would change existing response shapes): the 403 `code`, `ticketId` on `NotificationDTO`, an
+>   employee stock picker.
+> - **§4 done (server):** the 411 is replaced by a counted read. The app still compresses on the device.
+> - **§5 partly:** the `mutation` limit is keyed by user id for Bearer requests. Login / invite limits
+>   stay per email / per IP, identical to the web by design.
+> - **§6 not started:** `/api/sync` and push notifications.
+> - **§8:** no new environment variable; `AUTH_SECRET` (already required) also keys the mobile tokens.
+
 | # | Area | Blocks the app? |
 |---|---|---|
 | 1 | Token auth (login/refresh/logout, Bearer in guards, password change, invalidation) | 🔴 yes |
@@ -26,20 +43,20 @@ CSRF bypass for Bearer, `GET /api/me`, and the upload length fallback (the last 
 ## 1. 🔴 Auth: the web uses Auth.js session cookies only
 
 **Evidence**
-- Credentials provider + JWT **cookie** session (`src/auth.ts:12-62`, `src/auth.config.ts:14-16`).
-  Cookie `__Secure-authjs.session-token` (`src/proxy.ts:99-106`). Live: `GET /api/auth/csrf` sets
+- Credentials provider + JWT **cookie** session (`src/auth.ts:7-20`, `src/auth.config.ts:14-16`).
+  Cookie `__Secure-authjs.session-token` (`src/proxy.ts:107-114`). Live: `GET /api/auth/csrf` sets
   `__Host-authjs.csrf-token` / `__Secure-authjs.callback-url` (`HttpOnly; Secure; SameSite=Lax`).
-- Every API guard reads the session via `auth()` — **only in `src/lib/auth/guards.ts:25` and `:104`**
+- Every API guard reads the session via `auth()` — **only in `src/lib/auth/guards.ts:28` and `:151`**
   (the other `auth()` callers are pages). So Bearer support is a single change point.
 - The guard already re-reads the member and workspace from Mongo on every request and refuses removed
-  / blocked / stale sessions (`src/lib/auth/guards.ts:37-55`). That logic must be reused, not duplicated.
+  / blocked / stale sessions (`src/lib/auth/guards.ts:39-57`). That logic must be reused, not duplicated.
 - No password change or reset route exists: the `password` rate limit says "no such route yet"
   (`src/lib/security/limits.ts:14-15`); the `password_changed` activity type is declared
   (`src/lib/work-constants.ts:302`) but nothing writes it; "Forgot password?" links back to `/login`
   (`src/components/auth/login-form.tsx:98-100`).
 - A stateless JWT cannot be revoked; the only kill switches are block, remove and
   `sessionsValidAfter` (set only when a removed account is adopted,
-  `src/app/api/invites/[token]/accept/route.ts:84`).
+  `src/app/api/invites/[token]/accept/route.ts:85`).
 
 **Why it blocks:** a native app can't use the browser flow cleanly: the session cookie is `HttpOnly`
 (can't be put in `expo-secure-store`), the login is a form POST with a double-submit CSRF cookie, and
@@ -55,11 +72,11 @@ cookie jar plus a hand-set `Origin` header — see §2 — but that is not a des
    stored as SHA-256 only — the same pattern as invite tokens (`src/models/invite.ts:57-64`). Opaque
    tokens mean no new dependency (`jose` is only a transitive dependency, v6.2.12 via next-auth) and
    **instant revocation**, at the cost of one indexed lookup per request (the guard already does a DB
-   round trip, `src/lib/auth/membership.ts:28-54`; the lookup can be folded into that aggregate).
+   round trip, `src/lib/auth/membership.ts:29-55`; the lookup can be folded into that aggregate).
 
 2. **`POST /api/mobile/auth/login`** `{ email, password, deviceId, deviceName?, platform? }` →
    `200 { accessToken, accessExpiresAt, refreshToken, refreshExpiresAt, user: UserDTO, business: MeBusiness }`.
-   - Reuse exactly the `authorize` checks (`src/auth.ts:20-59`): `credentialsSchema`, `DUMMY_HASH`
+   - Reuse exactly the `authorize` checks (`src/lib/auth/verify-credentials.ts:17-56`, called from `src/auth.ts:17`): `credentialsSchema`, `DUMMY_HASH`
      timing-safe compare, refuse `removed`, blocked account, blocked workspace — all as one generic
      401 *"Email or password is incorrect"*.
    - Apply `loginEmail` + `loginIp` limits (`src/lib/security/limits.ts:7-9`) and the same audit
@@ -77,7 +94,7 @@ cookie jar plus a hand-set `Origin` header — see §2 — but that is not a des
 4. **`POST /api/mobile/auth/logout`** (Bearer) → `revokedAt = now` for this session; also used to drop
    the push token (§6).
 
-5. **Guards accept `Authorization: Bearer`** — change `requireUser()` (`src/lib/auth/guards.ts:24-68`):
+5. **Guards accept `Authorization: Bearer`** — change `requireUser()` (`src/lib/auth/guards.ts:27-76`):
    ```ts
    // new: src/lib/auth/claims.ts
    export async function readClaims(): Promise<{ id: string; signedInAt?: number; via: "cookie" | "bearer" } | null> {
@@ -102,18 +119,18 @@ cookie jar plus a hand-set `Origin` header — see §2 — but that is not a des
    `src/lib/validations/review.ts:3-9`; no mailer in `src/`).
 
 7. **Session invalidation hooks** — revoke all `MobileSession`s for the user in:
-   `DELETE /api/people/[id]` (`src/app/api/people/[id]/route.ts:146-148`), admin block
-   (`src/app/api/admin/users/[id]/route.ts:36-41`), and when an invite adopts a removed account
-   (`src/app/api/invites/[token]/accept/route.ts:78-90`). Workspace block is already enforced per
-   request (`src/lib/auth/guards.ts:45-47`), so no hook is needed there.
+   `DELETE /api/people/[id]` (`src/app/api/people/[id]/route.ts:149-151`), admin block
+   (`src/app/api/admin/users/[id]/route.ts:37-42`), and when an invite adopts a removed account
+   (`src/app/api/invites/[token]/accept/route.ts:79-91`). Workspace block is already enforced per
+   request (`src/lib/auth/guards.ts:47-49`), so no hook is needed there.
 
 ---
 
 ## 2. 🔴 The Origin/Referer CSRF check 403s native requests
 
-**Evidence:** `src/proxy.ts:119-122` refuses any `POST|PUT|PATCH|DELETE` under `/api` whose
+**Evidence:** `src/proxy.ts:127-153` refuses any `POST|PUT|PATCH|DELETE` under `/api` whose
 `Origin`/`Referer` host ≠ `host` (`src/lib/security/same-origin.ts:21-33`) with 403 *"Cross-origin
-requests aren't allowed"*. `/api/uploads` repeats it (`src/app/api/uploads/route.ts:61,146`). RN's
+requests aren't allowed"*. `/api/uploads` repeats it (`src/app/api/uploads/route.ts:54,149`). RN's
 `fetch` sends no `Origin` → **every mutation fails**. There are no CORS headers anywhere (grep:
 none), which is fine for native.
 
@@ -124,7 +141,7 @@ everything else:
 export function isBearer(headers: Headers) {
   return /^Bearer\s+\S+$/.test(headers.get("authorization") ?? "")
 }
-// src/proxy.ts:120 and src/app/api/uploads/route.ts:61,146
+// src/proxy.ts:127 and src/app/api/uploads/route.ts:54,149
 if (isApi && !isBearer(request.headers) && !isSameOrigin(request.method, request.headers)) { … 403 … }
 ```
 Why this is safe: CSRF abuses *ambient* credentials (cookies). A cross-site page cannot attach an
@@ -147,7 +164,7 @@ Replaces the shell/page loaders `src/app/dashboard/layout.tsx:32-58`, `src/app/d
 Guard `requireUser`.
 ```ts
 {
-  user: UserDTO,                                   // src/models/user.ts:115-126
+  user: UserDTO,                                   // src/models/user.ts:123-134
   superAdmin: boolean,                             // isSuperAdmin(email), src/lib/auth/super-admin.ts:24-27
   business: {
     id, name, logoUrl: string | null,              // servedUrl(logo.url), src/app/dashboard/layout.tsx:42-49
@@ -183,12 +200,12 @@ business: {name, pan}, issuedBy: string | null }`. Consider stripping `review.to
 (it is the live public credential; `src/models/bill.ts:216-217,347`).
 
 ### 3.7 `GET /api/invites` for supervisors — GAP-7 (`src/app/dashboard/people/page.tsx:16-37`)
-The page shows invites to supervisors but the API is owner-only (`src/app/api/invites/route.ts:21`).
+The page shows invites to supervisors but the API is owner-only (`src/app/api/invites/route.ts:25`).
 Allow `owner|supervisor` on GET (POST stays owner-only).
 
 ### 3.8 403 `code` for blocked vs removed — GAP-12
 Add `code: "removed" | "account_blocked" | "workspace_blocked"` to the 403 bodies thrown at
-`src/lib/auth/guards.ts:41-47` (`HttpError` already carries extra fields only as `fieldErrors`/headers,
+`src/lib/auth/guards.ts:43-49` (`HttpError` already carries extra fields only as `fieldErrors`/headers,
 `src/lib/api-response.ts:11-30` — extend it with an optional `code`, as the site route already does
 ad hoc, `src/app/api/site/route.ts:51-60`).
 
@@ -207,9 +224,9 @@ Also missing for parity (not page gaps):
 
 **Evidence:** `POST /api/uploads` requires multipart **with a numeric `Content-Length`** or answers
 **411** *"Send the picture with its size"*; declared > 1,000,000 + 64 KiB → 413
-(`src/lib/storage/http.ts:30-45`, called at `src/app/api/uploads/route.ts:74`). File > 1,000,000 bytes
+(`src/lib/storage/http.ts:35-70`, called at `src/app/api/uploads/route.ts:74`). File > 1,000,000 bytes
 → 413; type by magic bytes JPEG/PNG/WebP/AVIF else 415 (`route.ts:92-112`,
-`src/lib/storage/sniff.ts`). Role × purpose matrix `route.ts:27-31`.
+`src/lib/storage/sniff.ts`). Role × purpose matrix `src/lib/auth/upload-purposes.ts:8-12`.
 
 **RN request shape:**
 ```ts
@@ -233,7 +250,7 @@ may use chunked transfer). It must be tested on a real Android and iOS device ag
    body up to `MAX_UPLOAD_BYTES + 64 KiB` (the same technique `readJson` uses,
    `src/lib/api-response.ts:85-111`) and parse the multipart from the buffered bytes
    (`new Response(bytes, { headers }).formData()`). The route is outside the proxy matcher precisely so
-   it sees headers before Next buffers the body (`src/proxy.ts:196-201`), so this stays bounded.
+   it sees headers before Next buffers the body (`src/proxy.ts:229-234`), so this stays bounded.
 
 **Compression on the device** (the server checks stay unchanged): mirror
 `src/lib/images/compress.ts:22-100` with `expo-image-manipulator` — skip if the picked file is already
@@ -252,11 +269,11 @@ record body → on save failure `DELETE /api/uploads { urls }` for the fresh upl
 
 ## 5. 🟠 Rate limits keyed by IP
 
-`src/lib/security/limits.ts:5-24`, keys in `src/proxy.ts:99-140` and the routes:
+`src/lib/security/limits.ts:5-24`, keys in `src/proxy.ts:107-173` and the routes:
 
 | Limit | Key | Mobile problem | Proposal |
 |---|---|---|---|
-| `mutation` 300/10 min | hash of the session **cookie**, else **IP** (`src/proxy.ts:99-106`) | Bearer requests have no cookie → **every app user behind one carrier NAT shares 300 writes / 10 min** | key by `sha256(bearer token)` when `Authorization` is present (same trust level as the cookie hash today) |
+| `mutation` 300/10 min | hash of the session **cookie**, else **IP** (`src/proxy.ts:107-114`) | Bearer requests have no cookie → **every app user behind one carrier NAT shares 300 writes / 10 min** | key by `sha256(bearer token)` when `Authorization` is present (same trust level as the cookie hash today) |
 | `loginIp` 20/15 min | IP | NAT'd users lock each other out of login | keep `loginEmail` 5/15 min (per account); raise `loginIp` for the mobile login or key it by `ip + deviceId` |
 | `register`, `inviteAccept` 5/h | IP | a crew onboarding on the same site Wi-Fi/NAT hits 5/h | key `inviteAccept` by `token` + IP |
 | `publicPage` 120/min | IP | only `/quote/*` (web-only) | none |
@@ -312,7 +329,7 @@ build is needed (verify against the SDK you pin; see `stack.md`).
 
 DTOs return pictures through `servedUrl()` (`src/lib/storage/urls.ts:157-161`): the CDN when
 `AWS_PUBLIC_BASE_URL` is set, else the bucket URL (`:38-42`). **Live today the page CSP lists only S3
-bucket origins and no CDN origin** (probe of `GET /login`), which by `src/proxy.ts:46-68` means
+bucket origins and no CDN origin** (probe of `GET /login`), which by `src/proxy.ts:54-76` means
 `AWS_PUBLIC_BASE_URL` is not set in production yet — pictures are served straight from S3. Either form
 loads in `expo-image` / `<Image>` (no CSP in native, plain HTTPS GET, no auth header). Objects carry
 `Cache-Control: public, max-age=31536000, immutable` (`src/lib/storage/s3.ts:58`), which suits
@@ -342,8 +359,8 @@ CDN goes live. Check `TRUST_PROXY` (§5).
 ## 9. Other things that will bite a native client
 
 1. **Tenant-host 404 rule.** Any `/api/*` on a host that parses as `<slug>.<NEXT_PUBLIC_ROOT_DOMAIN>`
-   answers 404 (`src/proxy.ts:116-117`, `src/lib/tenancy.ts:85-103`; auth and uploads repeat it,
-   `src/app/api/auth/[...nextauth]/route.ts:29,34`, `src/app/api/uploads/route.ts:54,59,145`). Fine on
+   answers 404 (`src/proxy.ts:124-125`, `src/lib/tenancy.ts:85-103`; auth and uploads repeat it,
+   `src/app/api/auth/[...nextauth]/route.ts:29,34`, `src/app/api/uploads/route.ts:48,53,148`). Fine on
    `my-cms-ebon.vercel.app` today (live probes return 401/405, not 404). **When a custom domain is set**,
    `EXPO_PUBLIC_API_BASE_URL` must be the root domain or a reserved label such as `app.` / `api.`
    (`src/lib/tenancy.ts:22-49`) — never a tenant subdomain.
@@ -362,7 +379,7 @@ CDN goes live. Check `TRUST_PROXY` (§5).
    (`navigation.md` §5).
 6. **Pages redirect, APIs don't.** Never call page routes from the app; the gate returns 307 to
    `/login` (live: `GET /dashboard` → 307).
-7. **Page CSP / security headers** (`src/proxy.ts:70-87`, `next.config.ts:29-66`) only affect browsers;
+7. **Page CSP / security headers** (`src/proxy.ts:78-95`, `next.config.ts:29-66`) only affect browsers;
    irrelevant to native. `Permissions-Policy: geolocation=(self)` is browser-only too.
 8. **Cookies have no `Domain`** (host-only, `__Host-`/`__Secure-` prefixes) — irrelevant once Bearer is used.
 9. **No offline support** on the server side (no idempotency keys). Check-in/out and status moves are

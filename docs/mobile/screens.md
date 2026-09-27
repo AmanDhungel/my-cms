@@ -29,7 +29,7 @@ collected in §8 and in `backend-gaps.md` §3.
 
 API equivalents (what the app actually sees): 401 *"Sign in to continue"* → login; 403 *"You are no
 longer part of this workspace"* → Removed screen; 403 *"This account has been blocked"* → Blocked
-screen (`src/lib/auth/guards.ts:28-55`). The 403 message does **not** say whether the account or the
+screen (`src/lib/auth/guards.ts:30-57`). The 403 message does **not** say whether the account or the
 workspace is blocked; `/blocked` distinguishes them server-side (`src/app/blocked/page.tsx:38`) — GAP-12.
 
 ### 0.2 Client role model
@@ -87,7 +87,7 @@ long. Try again with a clearer view of the sky."* · *"Could not read your locat
 | `ticket_done` | reviewer signs off (`status/route.ts:299-315`) | assignees |
 | `request_raised` | `src/app/api/requests/route.ts:107-114` | owners + supervisors |
 | `request_decided` | owner decides (`src/app/api/requests/[id]/route.ts:76-84`); **also** a client reviews a quote (`src/app/api/quote/[token]/route.ts:92-106`) | requester / workspace owner |
-| `member_joined` | `src/app/api/invites/[token]/accept/route.ts:114-120` | owners + supervisors |
+| `member_joined` | `src/app/api/invites/[token]/accept/route.ts:118-124` | owners + supervisors |
 
 Web delivery is polling only (`useNotifications`/`useUnreadCount` every 60 s,
 `src/lib/queries.ts:365-405`). **Employees get notifications but have no screen for them** (employee
@@ -153,7 +153,7 @@ Requests, `src/components/dashboard/employee/employee-home.tsx:143-149`). The ap
 - **WEB-ONLY** — the client is not an app user; the owner shares the URL from the app.
 
 ### 1.9 `/sites/[slug]` · `src/app/sites/[slug]/page.tsx`
-- The tenant's public website (proxy rewrite, `src/proxy.ts:149-166`). Not read in detail. **WEB-ONLY**.
+- The tenant's public website (proxy rewrite, `src/proxy.ts:182-199`). Not read in detail. **WEB-ONLY**.
 
 ### 1.10 `/admin` · `src/app/admin/page.tsx` → `src/components/admin/admin-view.tsx`
 - Super admin (`isSuperAdmin(me.email)`, `page.tsx:22-30`). Tabs businesses / users / projects /

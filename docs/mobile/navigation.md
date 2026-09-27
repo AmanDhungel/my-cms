@@ -180,7 +180,7 @@ additive): `/.well-known/apple-app-site-association` and `/.well-known/assetlink
 
 | Link (as the server builds it) | Built at | App handling |
 |---|---|---|
-| `https://my-cms-ebon.vercel.app/join/<token>` | `src/app/api/invites/route.ts:88` | universal link → `(auth)/join/[token]`; if signed in as someone else, confirm sign-out first. Token = 32 random bytes base64url, 7-day TTL, single use (`src/models/invite.ts:15,57-64`) |
+| `https://my-cms-ebon.vercel.app/join/<token>` | `src/app/api/invites/route.ts:92` | universal link → `(auth)/join/[token]`; if signed in as someone else, confirm sign-out first. Token = 32 random bytes base64url, 7-day TTL, single use (`src/models/invite.ts:15,57-64`) |
 | `https://my-cms-ebon.vercel.app/quote/<token>` | `src/app/api/bills/[id]/review/route.ts:85` | **don't claim it** — it's for the client; the owner shares it with the native share sheet |
 | `https://my-cms-ebon.vercel.app/signup?invite=<token>` | `src/app/api/admin/invites/route.ts:53-54` | don't claim — web-only |
 | `ems://tickets/<id>` | — | from push `data.ticketId` → `(employee)/tickets/[id]` or `(manager)/tickets/[id]` |

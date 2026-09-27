@@ -7,7 +7,7 @@ Machine-readable companion: [`openapi.json`](./openapi.json) (generated from the
 
 Totals: **65 route files → 102 callable operations** (97 app routes + 5 Auth.js operations; 8 route
 files / 11 operations added on `feature/mobile-api`, §19). `GET /api/uploads` exists only to answer 405 and is not counted
-(`src/app/api/uploads/route.ts:53-56`).
+(`src/app/api/uploads/route.ts:47-50`).
 
 > Every claim cites `file:line` in this repo. Where the code can't settle something, it says so.
 
@@ -19,36 +19,36 @@ files / 11 operations added on `feature/mobile-api`, §19). `GET /api/uploads` e
 
 > **Mobile:** sign in with `POST /api/mobile/auth/login` (§19) and send `Authorization: Bearer
 > <accessToken>` on every call. A request carrying that header is authenticated **by the token alone**
-> (cookies ignored) and returns the same `SessionUser` to every route (`src/lib/auth/guards.ts:27-111`);
+> (cookies ignored) and returns the same `SessionUser` to every route (`src/lib/auth/guards.ts:27-110`);
 > a genuine token also replaces the Origin check on writes (§0.2). Everything below about cookies is
 > the web path, unchanged. The super admin routes refuse Bearer (403).
 
 - Auth.js v5, Credentials provider, **JWT session strategy** (`src/auth.config.ts:14-16`,
-  `src/auth.ts:12-62`). The session lives in the cookie `__Secure-authjs.session-token` on
-  HTTPS (`src/proxy.ts:99-106`; confirmed live: `GET /api/auth/csrf` sets
+  `src/auth.ts:7-20`). The session lives in the cookie `__Secure-authjs.session-token` on
+  HTTPS (`src/proxy.ts:107-114`; confirmed live: `GET /api/auth/csrf` sets
   `__Host-authjs.csrf-token` and `__Secure-authjs.callback-url`, both `HttpOnly; Secure; SameSite=Lax`).
 - JWT claims: `sub`, `role`, `businessId`, `superAdmin`, `signedInAt` (`src/auth.config.ts:37-53`,
   `src/types/next-auth.d.ts:5-39`). No `session.maxAge` is configured, so Auth.js' own default
   applies (not set anywhere in `src/`).
 - **Every guarded request re-reads the account and workspace from Mongo**
-  (`src/lib/auth/guards.ts:24-68`): removed → 403 *"You are no longer part of this workspace"*
-  (`:41-43`); account or workspace blocked → 403 *"This account has been blocked"* (`:45-47`);
-  session signed in before `sessionsValidAfter` → 401 *"Sign in to continue"* (`:53-55`,
-  `:88-91`). So role/business changes take effect on the next request, whatever the token says.
+  (`src/lib/auth/guards.ts:27-76`): removed → 403 *"You are no longer part of this workspace"*
+  (`:43-45`); account or workspace blocked → 403 *"This account has been blocked"* (`:47-49`);
+  session signed in before `sessionsValidAfter` → 401 *"Sign in to continue"* (`:55-57`,
+  `:130-133`). So role/business changes take effect on the next request, whatever the token says.
 - Guards:
-  - `requireUser()` — any active member (`src/lib/auth/guards.ts:24`).
-  - `requireRole(...roles)` — 403 *"You don't have access to that"* otherwise (`:71-81`).
+  - `requireUser()` — any active member (`src/lib/auth/guards.ts:27`).
+  - `requireRole(...roles)` — 403 *"You don't have access to that"* otherwise (`:113-123`).
   - `requireSuperAdmin()` — email in `SUPER_ADMIN_EMAILS`, re-read from DB; deliberately ignores
-    blocked/removed (`:103-123`, `src/lib/auth/super-admin.ts:9-27`).
+    blocked/removed (`:145-170`, `src/lib/auth/super-admin.ts:9-27`).
 - Roles: `owner | supervisor | employee` (`src/models/user.ts:19-20`). Super admin is not a role;
   it is an env allow-list.
 
 ### 0.2 The request pipeline (`src/proxy.ts`)
 
 The proxy runs on every path except `api/auth/*`, `api/uploads`, static files
-(`src/proxy.ts:203-205`). In order (`:112-184`):
+(`src/proxy.ts:236-238`). In order (`:120-217`):
 
-1. **Tenant host** (`<slug>.<NEXT_PUBLIC_ROOT_DOMAIN>`) → any `/api/*` is **404** (`:117`). Not an
+1. **Tenant host** (`<slug>.<NEXT_PUBLIC_ROOT_DOMAIN>`) → any `/api/*` is **404** (`:125`). Not an
    issue for `my-cms-ebon.vercel.app` (live probes return 401/405, not 404).
 2. **CSRF**: `POST|PUT|PATCH|DELETE` on `/api/*` must carry `Origin` (or `Referer`) whose host
    equals `x-forwarded-host`/`host` → else **403** *"Cross-origin requests aren't allowed"*
@@ -134,7 +134,7 @@ notification rows. Proposal: `backend-gaps.md` §6.
   (`AWS_PUBLIC_BASE_URL`) when configured, else the plain bucket URL (`:38-42`). **Live today the
   page CSP lists only the S3 bucket origins and no CDN** (probe of `GET /login`), i.e. production
   currently serves direct S3 URLs — `AWS_PUBLIC_BASE_URL` is apparently not set there (inferred
-  from `src/proxy.ts:46-68`). Both forms load fine in React Native.
+  from `src/proxy.ts:54-76`). Both forms load fine in React Native.
 
 ### 0.7 Shared response shapes (DTOs)
 
@@ -145,7 +145,7 @@ Referenced by name below; all nullable fields are `null`, never absent.
 | `TicketDTO` | `src/models/ticket.ts:200-250` (built by `toTicketDTO` `:267-340`; `myCheckedInAt` and `photos[].byMe` are per viewer) |
 | `CheckInDTO` | `src/models/check-in.ts:57-68` |
 | `AttendanceDTO` | `src/models/attendance.ts:110-135` |
-| `UserDTO` | `src/models/user.ts:115-126` |
+| `UserDTO` | `src/models/user.ts:123-134` |
 | `BusinessDTO` | `src/models/business.ts:140-158` |
 | `InviteDTO` / `PendingInvite` | `src/models/invite.ts:66-75` / `src/lib/auth/invites.ts:6-17` |
 | `WorkspaceInviteDTO` | `src/models/workspace-invite.ts:58-69` |
@@ -190,8 +190,8 @@ Referenced by name below; all nullable fields are `null`, never absent.
 
 ## 1. Auth (Auth.js built-ins) — `src/app/api/auth/[...nextauth]/route.ts`
 
-Not in the proxy matcher (`src/proxy.ts:204`): no Origin check, no `mutation` limit. Tenant hosts
-get 404 (`route.ts:28-31`, `:33-34`).
+Not in the proxy matcher (`src/proxy.ts:237`): no Origin check, no `mutation` limit. Tenant hosts
+get 404 (`route.ts:28-31`, `:34-35`).
 
 ### 1.1 `GET /api/auth/csrf`
 - Public. Returns `{ csrfToken }` and sets `__Host-authjs.csrf-token` (confirmed live).
@@ -214,7 +214,7 @@ get 404 (`route.ts:28-31`, `:33-34`).
 - Pre-checks (`route.ts:52-67`): non-string email/password → **422** `{error:"Validation failed",url}`;
   body > 16 KiB treated as invalid (`:84`); **429** when `loginEmail` 5/15 min per email or `loginIp`
   20/15 min per IP is exceeded (`src/lib/security/limits.ts:7-9`), `Retry-After` set.
-- `authorize` (`src/auth.ts:20-59`): email via `credentialsSchema` (`src/lib/validations/auth.ts:73-76`),
+- `authorize` (`src/lib/auth/verify-credentials.ts:17-56`, called from `src/auth.ts:17`): email via `credentialsSchema` (`src/lib/validations/auth.ts:73-76`),
   bcrypt compare (cost 12, `src/lib/auth/password.ts:4-15`) always runs; refuses unknown email,
   wrong password, `status:"removed"`, blocked account, blocked workspace — **all as the same
   generic failure** (Auth.js redirect to `/login?error=CredentialsSignin`).
@@ -228,7 +228,7 @@ get 404 (`route.ts:28-31`, `:33-34`).
 ### 1.5 `POST /api/auth/signout`
 - Form `csrfToken`, optional `callbackUrl`; clears the session cookie. With a stateless JWT there is
   **no server-side revocation** — the only kill switches are block/remove/`sessionsValidAfter`
-  (`src/lib/auth/guards.ts:41-55`).
+  (`src/lib/auth/guards.ts:43-57`).
 
 ---
 
@@ -259,8 +259,8 @@ get 404 (`route.ts:28-31`, `:33-34`).
 - Example → `200 {"invite":{"id":"…","name":"Asha Rai","email":"asha@example.com","phone":"98…","role":"employee","shift":"09:00–17:00","message":null,"businessId":"…","businessName":"Balaju Electric","expiresAt":"2026-10-04T…Z"}}`
 
 ### 2.3 `POST /api/invites/{token}/accept` — join
-- Public, `src/app/api/invites/[token]/accept/route.ts:22-126`. Rate limit `inviteAccept` 5/hour per
-  IP (`:28`) + proxy Origin check + `mutation`.
+- Public, `src/app/api/invites/[token]/accept/route.ts:23-130`. Rate limit `inviteAccept` 5/hour per
+  IP (`:29`) + proxy Origin check + `mutation`.
 - Body `acceptInviteSchema` (`src/lib/validations/auth.ts:182-187`): `password` ≥10, `terms: true`.
 - 201 `{ user: UserDTO }` (`:122`). **Does not sign in**; the client must then log in.
 - Errors: 404 invalid token; 403 super-admin address (`:33-35`); 409 *"That email already has an
@@ -277,11 +277,11 @@ Outside the proxy matcher (so the handler sees headers before the body); does it
 Origin check and rate limit.
 
 ### 3.1 `POST /api/uploads` — one picture
-- Roles: all (`:63`), per purpose (`:27-31`):
+- Roles: all (`:62`), per purpose (`src/lib/auth/upload-purposes.ts:8-12`):
   owner `site|maintenance|ticket|products|logo`; supervisor `maintenance|ticket|products`;
-  employee `ticket`. Wrong purpose for role → 403 *"You can't add pictures there"* (`:86-88`).
-- **multipart/form-data** fields: `purpose` (one of the five, else 400 `:80-82`) and `file`
-  (else 400 *"No file was sent"* `:89-91`). RN: `form.append("file", { uri, name, type } as any)`.
+  employee `ticket`. Wrong purpose for role → 403 *"You can't add pictures there"* (`:89-91`).
+- **multipart/form-data** fields: `purpose` (one of the five, else 400 `:83-85`) and `file`
+  (else 400 *"No file was sent"* `:92-94`). RN: `form.append("file", { uri, name, type } as any)`.
 - Size gates (`src/lib/storage/http.ts`): a declared `Content-Length` > 1,000,000 + 64 KiB → **413**
   before reading; then the body is read with a running byte count and abandoned with **413** the
   moment it passes that cap — **no `Content-Length` is needed** (the old 411 rule is gone on
@@ -487,7 +487,7 @@ Query `status` `active|archived`. 200 `{ projects: (ProjectDTO & {tickets:{total
 201 `{ project }`. Duplicate name → 409 via unique index (`src/models/project.ts:33`). Activity `project_created`.
 
 ### 7.3 `PATCH /api/projects/{id}` — `requireRole("owner","supervisor")`
-(`src/app/api/projects/[id]/route.ts:20`). Body `projectUpdateSchema` = `{status:"active"|"archived"}`
+(`src/app/api/projects/[id]/route.ts:44`). Body `projectUpdateSchema` = `{status:"active"|"archived"}`
 **or** the full `projectSchema` (`src/lib/validations/work.ts:217-220`). 409 *"That project is already
 archived"* (`:34-36`); 404. **Archiving cancels its pending tickets** (`:43-48`). Projects are never
 deleted (`:11-14`). Activity `project_archived|project_reopened|project_updated`.
@@ -499,7 +499,7 @@ deleted (`:11-14`). Activity `project_archived|project_reopened|project_updated`
 ### 8.1 `GET /api/people` — `requireRole("owner","supervisor")` (`src/app/api/people/route.ts:11`).
 Query `includeRemoved=1`. 200 `{ members: UserDTO[] }` sorted status, name (`:19-24`).
 
-### 8.2 `PATCH /api/people/{id}` — `requireRole("owner")` (`src/app/api/people/[id]/route.ts:20`).
+### 8.2 `PATCH /api/people/{id}` — `requireRole("owner")` (`src/app/api/people/[id]/route.ts:21`).
 Body `memberUpdateSchema` (`src/lib/validations/auth.ts:219-234`): `name` ≥2, `phone` ≥7, `role`,
 `shiftStart?`/`shiftEnd?` `HH:MM` (end > start), `week?` WeekPattern | null (null = follow the workspace).
 404 removed/unknown (`:31-33`); 409 owner can't change own role / one owner only (`:37-43`).
@@ -510,11 +510,11 @@ Body `memberUpdateSchema` (`src/lib/validations/auth.ts:219-234`): `name` ≥2, 
 (`:123-144`). 200 `{ member, cancelledTickets }`. Soft delete: `status:"removed"`, their **pending
 tickets are cancelled** (`:146-155`). Activity `member_removed`.
 
-### 8.4 `GET /api/invites` — `requireRole("owner","supervisor")` (`src/app/api/invites/route.ts:23-37`;
+### 8.4 `GET /api/invites` — `requireRole("owner","supervisor")` (`src/app/api/invites/route.ts:27-41`;
 widened on `feature/mobile-api` to match the People page, which already shows supervisors this list).
 200 `{ invites: InviteDTO[] }` (unaccepted, newest first).
 
-### 8.5 `POST /api/invites` — `requireRole("owner")` (`:41`). Body `inviteSchema`
+### 8.5 `POST /api/invites` — `requireRole("owner")` (`:45`). Body `inviteSchema`
 (`src/lib/validations/auth.ts:165-177`): `name` ≥2, `email`, `phone` ≥7, `role` `employee|supervisor`,
 `shiftStart`, `shiftEnd` (`HH:MM`, end > start), `message?` ≤500. 422 super-admin email (`:45-49`);
 409 *"Someone already signs in with that email"* (`:55-59`). Re-inviting replaces the unaccepted
@@ -522,7 +522,7 @@ invite (`:61-67`). 201 `{ invite, joinUrl }` — **`joinUrl` = `https://my-cms-e
 shown once, TTL 7 days** (`:84-90`, `src/models/invite.ts:15`). No email/SMS is sent anywhere
 (`src/lib/validations/review.ts:3-9` states the same for quotes; no mailer exists in `src/`).
 
-### 8.6 `PATCH /api/business` — `requireRole("owner")` (`src/app/api/business/route.ts:15`).
+### 8.6 `PATCH /api/business` — `requireRole("owner")` (`src/app/api/business/route.ts:49`).
 Body `businessSettingsSchema` (`src/lib/validations/auth.ts:192-214`): `name` ≥2, `crewSize`,
 `timeZone` (valid IANA), `pan?` ≤30, `vatRate` 0–100, `office?` `{lat,lng,label?,radiusM 20–5000,
 awayRadiusM 20–20000 ≥ radiusM}` | `null` (clears), `week?` WeekPattern | `null`, `logo?`
@@ -598,7 +598,7 @@ Errors: 404 item gone (`:78-80`); 409 insufficient stock (`:104-112`) or stock m
 201 `{ bill }`. Side effects: `Business.billSeq` `$inc` → `BILL-0007` (`:132-138`); stock decremented
 unless quotation (`:95-102`, `:140-154`).
 
-### 11.3 `PATCH /api/bills/{id}` — same roles (`src/app/api/bills/[id]/route.ts:27`). Body
+### 11.3 `PATCH /api/bills/{id}` — same roles (`src/app/api/bills/[id]/route.ts:75`). Body
 `billUpdateSchema` (`src/lib/validations/sales.ts:72-78`): `{status:"void"}` **or**
 `{payment, chequeNo?}`. Moving between quotation and a sale moves stock (409 if short, `:61-94`);
 void returns stock (`:136-145`); 404 / 409 already void (`:125-133`). Bills are never deleted.
@@ -721,7 +721,7 @@ Mobile: **WEB-ONLY** (the client isn't an app user).
 - `POST /api/site` — `{ published: boolean }`; 400 without a business name (`:173-175`).
 - Mobile: **WEB-ONLY** (template editor).
 
-## 17. Super admin — `requireSuperAdmin` (`src/lib/auth/guards.ts:103-123`)
+## 17. Super admin — `requireSuperAdmin` (`src/lib/auth/guards.ts:145-170`)
 
 - `GET /api/admin/overview` → `{ businesses: AdminBusiness[], users: AdminUser[], projects: AdminProject[], invites: WorkspaceInviteDTO[] }` (`src/app/api/admin/overview/route.ts:30-134`).
 - `PATCH /api/admin/businesses/{id}` — `{ blocked: boolean }` → `{ business }`.

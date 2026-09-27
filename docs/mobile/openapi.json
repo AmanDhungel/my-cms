@@ -8660,7 +8660,7 @@
         ],
         "summary": "Sign in with email + password (Auth.js credentials); success sets __Secure-authjs.session-token",
         "operationId": "authSignIn",
-        "x-source": "src/app/api/auth/[...nextauth]/route.ts:33-80; authorize src/auth.ts:20-59",
+        "x-source": "src/app/api/auth/[...nextauth]/route.ts:33-80; authorize src/lib/auth/verify-credentials.ts:17-56",
         "x-roles": "public",
         "security": [],
         "responses": {
@@ -9637,7 +9637,7 @@
         ],
         "summary": "Invite a supervisor/employee; returns the one-time join URL",
         "operationId": "createInvite",
-        "x-source": "src/app/api/invites/route.ts:39-95",
+        "x-source": "src/app/api/invites/route.ts:43-99",
         "x-roles": [
           "owner"
         ],
@@ -9818,7 +9818,7 @@
         ],
         "summary": "Accept a crew invite (sets the password, creates/adopts the account)",
         "operationId": "acceptInvite",
-        "x-source": "src/app/api/invites/[token]/accept/route.ts:22-126",
+        "x-source": "src/app/api/invites/[token]/accept/route.ts:23-130",
         "x-roles": "public",
         "security": [],
         "parameters": [
@@ -9950,7 +9950,7 @@
         ],
         "summary": "Upload one picture (multipart)",
         "operationId": "upload",
-        "x-source": "src/app/api/uploads/route.ts:58-130",
+        "x-source": "src/app/api/uploads/route.ts:52-133",
         "x-roles": [
           "owner",
           "supervisor",
@@ -10090,7 +10090,7 @@
         "x-side-effects": [
           "S3 PutObject businesses/{businessId}/{purpose}/{uuid}.{ext}, Cache-Control immutable (src/lib/storage/s3.ts:58,273-301)"
         ],
-        "description": "Roles per purpose (route.ts:27-31): owner site|maintenance|ticket|products|logo; supervisor maintenance|ticket|products; employee ticket. A declared Content-Length over 1,000,000 + 64 KiB is 413 before reading; the body is then counted while it streams and dropped with 413 past that cap, so no Content-Length is required (src/lib/storage/http.ts). With a genuine Bearer token no Origin is needed; a bad Bearer is 401."
+        "description": "Roles per purpose (src/lib/auth/upload-purposes.ts:8-12): owner site|maintenance|ticket|products|logo; supervisor maintenance|ticket|products; employee ticket. A declared Content-Length over 1,000,000 + 64 KiB is 413 before reading; the body is then counted while it streams and dropped with 413 past that cap, so no Content-Length is required (src/lib/storage/http.ts). With a genuine Bearer token no Origin is needed; a bad Bearer is 401."
       },
       "delete": {
         "tags": [
@@ -10098,7 +10098,7 @@
         ],
         "summary": "Delete orphaned uploads (own-images rule)",
         "operationId": "deleteUploads",
-        "x-source": "src/app/api/uploads/route.ts:144-212",
+        "x-source": "src/app/api/uploads/route.ts:147-221",
         "x-roles": [
           "owner",
           "supervisor",
@@ -12309,7 +12309,7 @@
         ],
         "summary": "Edit, or archive/reopen ({status})",
         "operationId": "updateProject",
-        "x-source": "src/app/api/projects/[id]/route.ts:15-90",
+        "x-source": "src/app/api/projects/[id]/route.ts:39-114",
         "x-roles": [
           "owner",
           "supervisor"
@@ -12533,7 +12533,7 @@
         ],
         "summary": "Edit a member",
         "operationId": "updateMember",
-        "x-source": "src/app/api/people/[id]/route.ts:15-95",
+        "x-source": "src/app/api/people/[id]/route.ts:16-98",
         "x-roles": [
           "owner"
         ],
@@ -12681,7 +12681,7 @@
         ],
         "summary": "Remove a member (soft)",
         "operationId": "removeMember",
-        "x-source": "src/app/api/people/[id]/route.ts:102-178",
+        "x-source": "src/app/api/people/[id]/route.ts:105-182",
         "x-roles": [
           "owner"
         ],
@@ -12852,7 +12852,7 @@
         ],
         "summary": "Workspace settings (name, zone, VAT, office, week, logo)",
         "operationId": "updateBusiness",
-        "x-source": "src/app/api/business/route.ts:13-104",
+        "x-source": "src/app/api/business/route.ts:47-138",
         "x-roles": [
           "owner"
         ],
@@ -13674,7 +13674,7 @@
         ],
         "summary": "Settle ({payment}) or void ({status:'void'})",
         "operationId": "updateBill",
-        "x-source": "src/app/api/bills/[id]/route.ts:22-159",
+        "x-source": "src/app/api/bills/[id]/route.ts:70-207",
         "x-roles": [
           "owner",
           "supervisor"
@@ -18660,7 +18660,7 @@
         ],
         "summary": "Block / unblock a workspace",
         "operationId": "adminBlockBusiness",
-        "x-source": "src/app/api/admin/businesses/[id]/route.ts:17-42",
+        "x-source": "src/app/api/admin/businesses/[id]/route.ts:19-49",
         "x-roles": [
           "superAdmin"
         ],
@@ -18791,7 +18791,7 @@
         ],
         "summary": "Block / unblock an account",
         "operationId": "adminBlockUser",
-        "x-source": "src/app/api/admin/users/[id]/route.ts:17-47",
+        "x-source": "src/app/api/admin/users/[id]/route.ts:18-51",
         "x-roles": [
           "superAdmin"
         ],

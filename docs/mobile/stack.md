@@ -13,7 +13,7 @@ EXPO_PUBLIC_API_BASE_URL=https://my-cms-ebon.vercel.app
 
 Never point at `localhost`. When a custom domain arrives, the base URL must be the root domain or a
 reserved label (`app.`, `api.`), never a tenant subdomain — tenant hosts answer 404 to every `/api`
-(`src/proxy.ts:116-117`, `src/lib/tenancy.ts:22-49`).
+(`src/proxy.ts:124-125`, `src/lib/tenancy.ts:22-49`).
 
 ## 2. Libraries
 

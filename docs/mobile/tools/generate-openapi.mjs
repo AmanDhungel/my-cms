@@ -623,7 +623,7 @@ op("get", "/api/auth/providers", {
 })
 op("post", "/api/auth/callback/credentials", {
   tag: "auth", summary: "Sign in with email + password (Auth.js credentials); success sets __Secure-authjs.session-token",
-  operationId: "authSignIn", source: "src/app/api/auth/[...nextauth]/route.ts:33-80; authorize src/auth.ts:20-59", roles: "public",
+  operationId: "authSignIn", source: "src/app/api/auth/[...nextauth]/route.ts:33-80; authorize src/lib/auth/verify-credentials.ts:17-56", roles: "public",
   body: ["CredentialsForm", credentialsForm, "application/x-www-form-urlencoded"],
   ok: { 200: ["AuthRefusal", R.authRefusal] },
   extraResponses: {
@@ -707,7 +707,7 @@ op("get", "/api/invites", {
 })
 op("post", "/api/invites", {
   tag: "people", summary: "Invite a supervisor/employee; returns the one-time join URL", operationId: "createInvite",
-  source: "src/app/api/invites/route.ts:39-95", roles: OWNER, body: ["InviteRequest", auth.inviteSchema],
+  source: "src/app/api/invites/route.ts:43-99", roles: OWNER, body: ["InviteRequest", auth.inviteSchema],
   ok: { 201: ["InviteCreated", R.inviteCreated] }, errors: [...JSONERR, 409], rateLimit: MUT,
   refinements: ["shiftEnd > shiftStart (validations/auth.ts:174-177)"],
 })
@@ -718,7 +718,7 @@ op("get", "/api/invites/{token}", {
 })
 op("post", "/api/invites/{token}/accept", {
   tag: "onboarding", summary: "Accept a crew invite (sets the password, creates/adopts the account)", operationId: "acceptInvite",
-  source: "src/app/api/invites/[token]/accept/route.ts:22-126", roles: "public", body: ["AcceptInviteRequest", auth.acceptInviteSchema],
+  source: "src/app/api/invites/[token]/accept/route.ts:23-130", roles: "public", body: ["AcceptInviteRequest", auth.acceptInviteSchema],
   ok: { 201: ["UserResponse", R.user] }, errors: [400, 403, 404, 409, 413, 422, 429, 500],
   rateLimit: "inviteAccept 5 / hour per IP (route.ts:28) + " + MUT,
   refinements: ["terms must be true (validations/auth.ts:184-186)"],
@@ -728,15 +728,15 @@ op("post", "/api/invites/{token}/accept", {
 // Uploads ---------------------------------------------------------------------
 op("post", "/api/uploads", {
   tag: "uploads", summary: "Upload one picture (multipart)", operationId: "upload",
-  source: "src/app/api/uploads/route.ts:58-130", roles: ALL, body: ["UploadForm", uploadForm, "multipart/form-data"],
+  source: "src/app/api/uploads/route.ts:52-133", roles: ALL, body: ["UploadForm", uploadForm, "multipart/form-data"],
   ok: { 201: ["UploadResponse", R.uploaded] }, errors: [400, 401, 403, 404, 410, 413, 415, 429, 500, 503],
   rateLimit: "uploads 60 / 10 min per user (route.ts:64). Not in the proxy matcher: no mutation limit.",
-  note: "Roles per purpose (route.ts:27-31): owner site|maintenance|ticket|products|logo; supervisor maintenance|ticket|products; employee ticket. A declared Content-Length over 1,000,000 + 64 KiB is 413 before reading; the body is then counted while it streams and dropped with 413 past that cap, so no Content-Length is required (src/lib/storage/http.ts). With a genuine Bearer token no Origin is needed; a bad Bearer is 401.",
+  note: "Roles per purpose (src/lib/auth/upload-purposes.ts:8-12): owner site|maintenance|ticket|products|logo; supervisor maintenance|ticket|products; employee ticket. A declared Content-Length over 1,000,000 + 64 KiB is 413 before reading; the body is then counted while it streams and dropped with 413 past that cap, so no Content-Length is required (src/lib/storage/http.ts). With a genuine Bearer token no Origin is needed; a bad Bearer is 401.",
   sideEffects: ["S3 PutObject businesses/{businessId}/{purpose}/{uuid}.{ext}, Cache-Control immutable (src/lib/storage/s3.ts:58,273-301)"],
 })
 op("delete", "/api/uploads", {
   tag: "uploads", summary: "Delete orphaned uploads (own-images rule)", operationId: "deleteUploads",
-  source: "src/app/api/uploads/route.ts:144-212", roles: ALL, body: ["DeleteUploadsRequest", uploads.deleteUploadSchema],
+  source: "src/app/api/uploads/route.ts:147-221", roles: ALL, body: ["DeleteUploadsRequest", uploads.deleteUploadSchema],
   ok: { 200: ["UploadsDeleted", R.uploadsDeleted] }, errors: [400, 401, 403, 404, 413, 422, 500],
   sideEffects: ["S3 DeleteObject", "activity image_deleted for pictures a record pointed at"],
 })
@@ -856,7 +856,7 @@ op("get", "/api/projects/{id}", {
   source: "src/app/api/projects/[id]/route.ts:16-33", roles: OS, ok: { 200: ["ProjectResponse", R.project] }, errors: [401, 403, 404, 500],
 })
 op("patch", "/api/projects/{id}", {
-  tag: "projects", summary: "Edit, or archive/reopen ({status})", operationId: "updateProject", source: "src/app/api/projects/[id]/route.ts:15-90",
+  tag: "projects", summary: "Edit, or archive/reopen ({status})", operationId: "updateProject", source: "src/app/api/projects/[id]/route.ts:39-114",
   roles: OS, body: ["ProjectUpdateRequest", work.projectUpdateSchema], ok: { 200: ["ProjectResponse", R.project] }, errors: [...JSONERR, 404, 409], rateLimit: MUT,
   sideEffects: ["archive cancels pending tickets (route.ts:43-48)", "activity project_archived|project_reopened|project_updated"],
 })
@@ -867,13 +867,13 @@ op("get", "/api/people", {
   roles: OS, query: [{ name: "includeRemoved", description: "1 to include removed members" }], ok: { 200: ["MemberList", R.members] }, errors: [401, 403, 500],
 })
 op("patch", "/api/people/{id}", {
-  tag: "people", summary: "Edit a member", operationId: "updateMember", source: "src/app/api/people/[id]/route.ts:15-95",
+  tag: "people", summary: "Edit a member", operationId: "updateMember", source: "src/app/api/people/[id]/route.ts:16-98",
   roles: OWNER, body: ["MemberUpdateRequest", auth.memberUpdateSchema], ok: { 200: ["MemberResponse", R.member] }, errors: [...JSONERR, 404, 409], rateLimit: MUT,
   refinements: ["shiftEnd > shiftStart when both set (validations/auth.ts:228-234)"],
   sideEffects: ["activity member_updated (+ role_changed)"],
 })
 op("delete", "/api/people/{id}", {
-  tag: "people", summary: "Remove a member (soft)", operationId: "removeMember", source: "src/app/api/people/[id]/route.ts:102-178",
+  tag: "people", summary: "Remove a member (soft)", operationId: "removeMember", source: "src/app/api/people/[id]/route.ts:105-182",
   roles: OWNER, ok: { 200: ["MemberRemoved", R.memberRemoved] }, errors: [401, 403, 404, 409, 429, 500], rateLimit: MUT,
   sideEffects: ["status=removed", "cancels their pending tickets", "activity member_removed"],
 })
@@ -883,7 +883,7 @@ op("get", "/api/business", {
 })
 op("patch", "/api/business", {
   tag: "settings", summary: "Workspace settings (name, zone, VAT, office, week, logo)", operationId: "updateBusiness",
-  source: "src/app/api/business/route.ts:13-104", roles: OWNER, body: ["BusinessSettingsRequest", auth.businessSettingsSchema],
+  source: "src/app/api/business/route.ts:47-138", roles: OWNER, body: ["BusinessSettingsRequest", auth.businessSettingsSchema],
   ok: { 200: ["BusinessResponse", R.business] }, errors: JSONERR, rateLimit: MUT,
   refinements: ["office.awayRadiusM >= office.radiusM (validations/auth.ts:35-38)", "week: working day needs start < end (validations/auth.ts:59-66)", "timeZone must be a known IANA zone (validations/auth.ts:196-198)"],
   sideEffects: ["replaced logo deleted from S3 (route.ts:84-86)", "activity logo_changed"],
@@ -930,7 +930,7 @@ op("get", "/api/bills/{id}", {
   source: "src/app/api/bills/[id]/route.ts:24-61", roles: OS, ok: { 200: ["BillDetail", R.billDetail] }, errors: [401, 403, 404, 500],
 })
 op("patch", "/api/bills/{id}", {
-  tag: "sales", summary: "Settle ({payment}) or void ({status:'void'})", operationId: "updateBill", source: "src/app/api/bills/[id]/route.ts:22-159",
+  tag: "sales", summary: "Settle ({payment}) or void ({status:'void'})", operationId: "updateBill", source: "src/app/api/bills/[id]/route.ts:70-207",
   roles: OS, body: ["BillUpdateRequest", sales.billUpdateSchema], ok: { 200: ["BillResponse", R.bill] }, errors: [...JSONERR, 404, 409], rateLimit: MUT,
   sideEffects: ["stock moves when crossing quotation<->sale (route.ts:61-94)", "void returns stock (route.ts:136-145)"],
 })
@@ -1165,11 +1165,11 @@ op("get", "/api/admin/overview", {
   roles: ["superAdmin"], ok: { 200: ["AdminOverview", R.adminOverview] }, errors: [401, 403, 500],
 })
 op("patch", "/api/admin/businesses/{id}", {
-  tag: "admin", summary: "Block / unblock a workspace", operationId: "adminBlockBusiness", source: "src/app/api/admin/businesses/[id]/route.ts:17-42",
+  tag: "admin", summary: "Block / unblock a workspace", operationId: "adminBlockBusiness", source: "src/app/api/admin/businesses/[id]/route.ts:19-49",
   roles: ["superAdmin"], body: ["BlockRequest", blockSchema], ok: { 200: ["BusinessResponse", R.business] }, errors: [...JSONERR, 404], rateLimit: MUT,
 })
 op("patch", "/api/admin/users/{id}", {
-  tag: "admin", summary: "Block / unblock an account", operationId: "adminBlockUser", source: "src/app/api/admin/users/[id]/route.ts:17-47",
+  tag: "admin", summary: "Block / unblock an account", operationId: "adminBlockUser", source: "src/app/api/admin/users/[id]/route.ts:18-51",
   roles: ["superAdmin"], body: ["BlockRequest", blockSchema], ok: { 200: ["AdminUserResponse", R.adminUser] }, errors: [...JSONERR, 404, 409], rateLimit: MUT,
 })
 op("post", "/api/admin/invites", {
