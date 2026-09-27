@@ -54,7 +54,7 @@ export async function POST(
     const at = new Date()
 
     const [business, me] = await Promise.all([
-      getWorkspace(viewer.businessId),
+      getWorkspace(viewer),
       User.findById(viewer.id).select("shift week"),
     ])
 

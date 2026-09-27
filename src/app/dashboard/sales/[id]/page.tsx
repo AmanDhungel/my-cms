@@ -8,6 +8,7 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone } from "@/lib/time"
 import { Bill, toBillDTO } from "@/models/bill"
 import { Payment } from "@/models/payment"
+import { rememberedWorkspace } from "@/lib/auth/membership"
 import { Business } from "@/models/business"
 import { User } from "@/models/user"
 
@@ -28,7 +29,7 @@ export default async function BillPage({
   if (!bill) notFound()
 
   const [business, issuer, received] = await Promise.all([
-    Business.findById(viewer.businessId).orFail(),
+    (rememberedWorkspace(viewer) ?? Business.findById(viewer.businessId).orFail()),
     User.findById(bill.issuedBy).select("name"),
     // The instalments against it, oldest first, so the bill can show what is
     // still owed rather than just whether someone ticked "paid".

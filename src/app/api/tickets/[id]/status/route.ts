@@ -64,7 +64,7 @@ export async function PATCH(
     // Past tickets are view-only for the crew. Owners and supervisors keep
     // every move they had, including reopening one.
     if (!isReviewer) {
-      const business = await getWorkspace(viewer.businessId)
+      const business = await getWorkspace(viewer)
       if (isPastTicket(ticket, new Date(), business.timeZone)) {
         throw new HttpError(403, PAST_TICKET_MESSAGE)
       }
@@ -174,7 +174,7 @@ export async function PATCH(
     if (CLOSES_THE_VISIT.includes(values.status) && myVisit) {
       const at = new Date()
       const [business, me] = await Promise.all([
-        getWorkspace(viewer.businessId),
+        getWorkspace(viewer),
         User.findById(viewer.id).select("shift week"),
       ])
 

@@ -23,7 +23,7 @@ export async function GET() {
     const viewer = await requireRole("owner")
     await connectToDatabase()
 
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
 
     const payments = await Payment.find({ business: viewer.businessId })
       .populate("bill", "number")
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
     await connectToDatabase()
 
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     // Stored as the start of that day in the workspace's zone, so it reads
     // back as the date that was typed rather than the server's idea of it.
     const { start } = dayRangeInZone(values.paidOn, business.timeZone)

@@ -33,7 +33,7 @@ export default async function DashboardPage() {
 
   await connectToDatabase()
 
-  const business = await getWorkspace(user.businessId)
+  const business = await getWorkspace(user)
 
   if (user.role === "employee") {
     const me = await User.findById(user.id).select("shift")

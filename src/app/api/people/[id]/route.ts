@@ -25,7 +25,7 @@ export async function PATCH(
 
     const [member, business] = await Promise.all([
       User.findOne({ _id: id, business: viewer.businessId }),
-      getWorkspace(viewer.businessId),
+      getWorkspace(viewer),
     ])
 
     if (!member || member.status === "removed") {
@@ -113,7 +113,7 @@ export async function DELETE(
 
     const [member, business] = await Promise.all([
       User.findOne({ _id: id, business: viewer.businessId }),
-      getWorkspace(viewer.businessId),
+      getWorkspace(viewer),
     ])
 
     if (!member) {

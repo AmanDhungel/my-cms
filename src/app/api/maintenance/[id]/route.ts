@@ -42,7 +42,7 @@ export async function PATCH(
     }
 
     await connectToDatabase()
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     const row = await findOwn(viewer.businessId, id)
     const day = (key: string) => dayRangeInZone(key, business.timeZone).start
 

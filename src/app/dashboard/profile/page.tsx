@@ -5,6 +5,7 @@ import { SignOutButton } from "@/components/dashboard/sign-out-button"
 import { initialsOf } from "@/components/dashboard/viewer"
 import { requirePageRole } from "@/lib/auth/page-guards"
 import { connectToDatabase } from "@/lib/mongodb"
+import { rememberedWorkspace } from "@/lib/auth/membership"
 import { Business } from "@/models/business"
 import { User, toUserDTO } from "@/models/user"
 
@@ -17,7 +18,7 @@ export default async function ProfilePage() {
 
   const [me, business] = await Promise.all([
     User.findById(viewer.id).orFail(),
-    Business.findById(viewer.businessId).orFail(),
+    (rememberedWorkspace(viewer) ?? Business.findById(viewer.businessId).orFail()),
   ])
 
   const user = toUserDTO(me)

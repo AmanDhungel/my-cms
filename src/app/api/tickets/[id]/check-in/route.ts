@@ -41,7 +41,7 @@ export async function POST(
     await connectToDatabase()
 
     const ticket = await loadTicketForViewer(id, viewer)
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
 
     // A past ticket is view-only for the crew — the same rule the app uses
     // to hide the button, decided here with the server's own clock.

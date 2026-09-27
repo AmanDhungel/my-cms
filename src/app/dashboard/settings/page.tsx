@@ -4,6 +4,7 @@ import { SettingsView } from "@/components/dashboard/settings/settings-view"
 import { requirePageRole } from "@/lib/auth/page-guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { uploadsConfigured } from "@/lib/s3"
+import { rememberedWorkspace } from "@/lib/auth/membership"
 import { Business, toBusinessDTO } from "@/models/business"
 import { Invite } from "@/models/invite"
 import { User, toUserDTO } from "@/models/user"
@@ -16,7 +17,7 @@ export default async function SettingsPage() {
   await connectToDatabase()
 
   const [business, me, members, pendingInvites] = await Promise.all([
-    Business.findById(viewer.businessId).orFail(),
+    (rememberedWorkspace(viewer) ?? Business.findById(viewer.businessId).orFail()),
     User.findById(viewer.id).orFail(),
     User.countDocuments({ business: viewer.businessId }),
     Invite.countDocuments({

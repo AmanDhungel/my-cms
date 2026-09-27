@@ -39,7 +39,7 @@ export async function GET() {
     const viewer = await requireRole("owner", "supervisor")
     await connectToDatabase()
 
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
 
     const filter: Record<string, unknown> = { business: viewer.businessId }
     const allowed = kindsFor(viewer.role)
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
     await connectToDatabase()
 
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     // Stored as the start of that day in the workspace's zone, so it reads
     // back as the date that was typed rather than the server's idea of it.
     const { start } = dayRangeInZone(values.spentOn, business.timeZone)

@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 
     await connectToDatabase()
 
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     const vatRate = values.withVat ? business.vatRate : 0
 
     type Line = {

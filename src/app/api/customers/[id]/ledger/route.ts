@@ -26,7 +26,7 @@ export async function GET(
     const { id } = await ctx.params
 
     await connectToDatabase()
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
 
     const party = await Customer.findOne({
       _id: id,

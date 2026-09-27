@@ -5,6 +5,7 @@ import { OwnerShell } from "@/components/dashboard/owner-shell";
 import { loadViewer } from "@/lib/auth/page-guards";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
 import { Bill } from "@/models/bill";
+import { rememberedWorkspace } from "@/lib/auth/membership";
 import { Business } from "@/models/business";
 import { Customer } from "@/models/customer";
 import { InventoryItem } from "@/models/inventory-item";
@@ -29,7 +30,9 @@ export default async function DashboardLayout({
   // still-valid token can't outlive being removed.
   const me = await loadViewer();
 
-  const business = await Business.findById(me.businessId);
+  // Already read with the membership check (lib/auth/membership.ts).
+  const business =
+    rememberedWorkspace(me) ?? (await Business.findById(me.businessId));
 
   if (!business) {
     redirect("/login");

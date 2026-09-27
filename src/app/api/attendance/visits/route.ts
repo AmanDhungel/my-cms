@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const viewer = await requireRole("owner", "supervisor")
     await connectToDatabase()
 
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     const today = dayKeyInZone(new Date(), business.timeZone)
     const day = normaliseDay(request.nextUrl.searchParams.get("day"), today)
 

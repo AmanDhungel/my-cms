@@ -170,7 +170,7 @@ export async function DELETE(request: Request) {
      */
     const own: string[] = []
     const audited: string[] = []
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     for (const url of inWorkspace) {
       const key = keyFromUrl(url)!
       const refs = await referencesOf(key, url, viewer.businessId, business.timeZone)

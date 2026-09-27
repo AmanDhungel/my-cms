@@ -1,5 +1,6 @@
 import { auth } from "@/auth"
 import { HttpError } from "@/lib/api-response"
+import { loadMembership, rememberWorkspace } from "@/lib/auth/membership"
 import { isSuperAdmin } from "@/lib/auth/super-admin"
 import { connectToDatabase } from "@/lib/mongodb"
 import { User, type UserRole } from "@/models/user"
@@ -30,38 +31,40 @@ export async function requireUser(): Promise<SessionUser> {
 
   await connectToDatabase()
 
-  // The workspace comes along so a blocked one shuts out everyone in it —
-  // the second query is the price of a block that takes effect at once
-  // rather than whenever a cascade last ran.
-  const member = await User.findById(claims.id)
-    .select("name email role business status blockedAt sessionsValidAfter")
-    .populate<{ business: { _id: unknown; blockedAt?: Date } }>(
-      "business",
-      "blockedAt"
-    )
+  // The workspace comes along so a blocked one shuts out everyone in it,
+  // at once rather than whenever a cascade last ran. One round trip for
+  // both (lib/auth/membership.ts); the route reuses the workspace.
+  const found = await loadMembership(claims.id)
+  const member = found?.member
+  const business = found?.business
 
   if (!member || member.status === "removed") {
     throw new HttpError(403, "You are no longer part of this workspace")
   }
 
-  if (member.blockedAt || member.business?.blockedAt) {
+  if (member.blockedAt || business?.blockedAt) {
     throw new HttpError(403, "This account has been blocked")
+  }
+
+  if (!business) {
+    throw new Error("The account's workspace no longer exists")
   }
 
   if (isStaleSession(claims.signedInAt, member.sessionsValidAfter)) {
     throw new HttpError(401, "Sign in to continue")
   }
 
-  return {
+  const viewer: SessionUser = {
     id: String(member._id),
     name: member.name,
     email: member.email,
     role: member.role,
     // Read from the row, not the token: an account that moved workspaces must
-    // not keep reaching the old one's data. `_id` because the workspace was
-    // populated for the block check above.
-    businessId: String(member.business._id),
+    // not keep reaching the old one's data.
+    businessId: String(business._id),
   }
+  rememberWorkspace(viewer, business)
+  return viewer
 }
 
 /** A member holding one of `roles`. Throws 403 for everyone else. */

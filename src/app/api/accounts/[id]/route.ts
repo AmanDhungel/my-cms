@@ -31,7 +31,7 @@ export async function PATCH(
     const values = accountSchema.parse(await readJson(request))
 
     await connectToDatabase()
-    const business = await getWorkspace(viewer.businessId)
+    const business = await getWorkspace(viewer)
     const account = await findOwn(viewer.businessId, id)
 
     const clash = await Account.findOne({
