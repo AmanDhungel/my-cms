@@ -1,3 +1,5 @@
+import { servedUrl } from "@/lib/storage/urls"
+
 /**
  * Who added each picture, for records whose pictures are plain URL strings
  * (maintenance photos, site content). The record keeps a side list of
@@ -16,14 +18,15 @@ export function nextUploaders(
   existing: readonly Uploader[],
   viewerId: string
 ) {
-  const stored = new Map(existing.map((one) => [one.url, one]))
-  const had = new Set(before)
+  // Compared as served: an old bucket link and its CDN address are one picture.
+  const stored = new Map(existing.map((one) => [servedUrl(one.url), one]))
+  const had = new Set(before.map(servedUrl))
   const out: { url: string; uploadedBy: string; uploadedAt: Date }[] = []
   for (const url of new Set(urls)) {
-    const kept = stored.get(url)
+    const kept = stored.get(servedUrl(url))
     if (kept?.uploadedBy) {
       out.push({ url, uploadedBy: String(kept.uploadedBy), uploadedAt: kept.uploadedAt ?? new Date() })
-    } else if (!had.has(url)) {
+    } else if (!had.has(servedUrl(url))) {
       out.push({ url, uploadedBy: viewerId, uploadedAt: new Date() })
     }
   }
@@ -36,12 +39,12 @@ export function removedPictures(
   after: readonly string[],
   existing: readonly Uploader[]
 ) {
-  const keep = new Set(after)
-  const stored = new Map(existing.map((one) => [one.url, one]))
+  const keep = new Set(after.map(servedUrl))
+  const stored = new Map(existing.map((one) => [servedUrl(one.url), one]))
   return [...new Set(before)]
-    .filter((url) => url && !keep.has(url))
+    .filter((url) => url && !keep.has(servedUrl(url)))
     .map((url) => {
-      const by = stored.get(url)?.uploadedBy
+      const by = stored.get(servedUrl(url))?.uploadedBy
       return { url, uploadedBy: by ? String(by) : null }
     })
 }

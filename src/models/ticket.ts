@@ -15,6 +15,7 @@ import {
   type TicketStatus,
 } from "@/lib/work-constants"
 import { BLOCKER_REASONS, type BlockerReason } from "@/lib/work-constants"
+import { servedUrl } from "@/lib/storage/urls"
 
 export {
   DEFAULT_RADIUS_M,
@@ -329,7 +330,7 @@ export function toTicketDTO(
     assignees,
     project: named(ticket.project as MaybePopulated),
     photos: (ticket.photos ?? []).map((photo) => ({
-      url: photo.url,
+      url: servedUrl(photo.url),
       uploadedById: String(photo.uploadedBy),
       uploadedByName: byId.get(String(photo.uploadedBy)) ?? "",
       uploadedAt: (photo.uploadedAt as Date).toISOString(),

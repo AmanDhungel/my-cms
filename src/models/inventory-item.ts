@@ -8,6 +8,7 @@ import {
 } from "mongoose"
 
 import { ITEM_UNITS, type ItemUnit } from "@/lib/work-constants"
+import { servedUrl } from "@/lib/storage/urls"
 
 export { ITEM_UNITS, type ItemUnit }
 
@@ -142,7 +143,8 @@ export function toItemDTO(
     location: item.location ?? null,
     images: (item.images ?? []).map((one) => ({
       key: one.key,
-      url: one.url,
+      // Served from the CDN, old bucket links included (lib/storage/urls.ts).
+      url: servedUrl(one.url),
       uploadedById: one.uploadedBy ? String(one.uploadedBy) : null,
     })),
     category: named(item.category as MaybePopulated),

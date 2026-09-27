@@ -2,7 +2,7 @@ import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { logActivity } from "@/lib/activity"
 import { requireRole } from "@/lib/auth/guards"
 import { connectToDatabase } from "@/lib/mongodb"
-import { deleteUploads, isBusinessKeyIn, keyFromUrl } from "@/lib/s3"
+import { deleteUploads, isBusinessKeyIn, keyFromUrl, servedUrl } from "@/lib/s3"
 import { businessSettingsSchema } from "@/lib/validations/auth"
 import { cleanWeek } from "@/lib/week-server"
 import { Business, toBusinessDTO } from "@/models/business"
@@ -78,12 +78,15 @@ export async function PATCH(request: Request) {
     // a failed save never costs the logo that was already there. Nothing
     // waits on the bucket: the edit has landed either way.
     const replaced = previous.logo?.url ?? null
-    if (logoChanged && replaced && replaced !== logo?.url) {
+    // Compared as served: the same logo under its old bucket link and its CDN
+    // address is not a change, and must not be deleted.
+    const same = servedUrl(replaced) === servedUrl(logo?.url ?? null)
+    if (logoChanged && replaced && !same) {
       void deleteUploads([replaced], owner.businessId)
     }
 
     const business = await Business.findById(owner.businessId).orFail()
-    if (logoChanged && replaced !== (logo?.url ?? null)) {
+    if (logoChanged && !same) {
       void logActivity({
         businessId: owner.businessId,
         action: "logo_changed",

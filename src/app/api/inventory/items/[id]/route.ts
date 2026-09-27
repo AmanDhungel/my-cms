@@ -4,7 +4,7 @@ import { requireRole, requireUser } from "@/lib/auth/guards"
 import { assertItemIsNew, itemImagesFrom } from "@/lib/inventory"
 import { assertCanDeleteRecord, assertCanRemoveImages } from "@/lib/auth/permissions"
 import { connectToDatabase } from "@/lib/mongodb"
-import { deleteUploads } from "@/lib/s3"
+import { deleteUploads, keyFromUrl } from "@/lib/s3"
 import { itemSchema } from "@/lib/validations/inventory"
 import { InventoryCategory } from "@/models/inventory-category"
 import { InventoryItem, toItemDTO } from "@/models/inventory-item"
@@ -20,17 +20,20 @@ export const runtime = "nodejs"
  */
 async function onlyHere(urls: string[], businessId: string, itemId: string) {
   if (urls.length === 0) return []
+  // By key: the same object may be stored under an old bucket link on one
+  // item and its CDN address on another.
+  const keys = urls.map((url) => keyFromUrl(url)).filter((key): key is string => Boolean(key))
   const others = await InventoryItem.find({
     business: businessId,
     _id: { $ne: itemId },
-    "images.url": { $in: urls },
+    "images.key": { $in: keys },
   })
-    .select("images.url")
+    .select("images.key")
     .lean()
   const shared = new Set(
-    others.flatMap((one) => (one.images ?? []).map((image) => image.url))
+    others.flatMap((one) => (one.images ?? []).map((image) => image.key))
   )
-  return urls.filter((url) => !shared.has(url))
+  return urls.filter((url) => !shared.has(keyFromUrl(url) ?? ""))
 }
 
 /** Edit an item, including the stock count and where it is kept. */
@@ -84,11 +87,12 @@ export async function PATCH(
       // Dropping or replacing a saved picture is deleting it: each one has
       // to be the viewer's to delete (lib/auth/permissions.ts), or nothing
       // is saved.
-      const keep = new Set(next.map((one) => one.url))
+      // Compared by key: a kept picture may come back under its CDN address.
+      const keep = new Set(next.map((one) => one.key))
       assertCanRemoveImages(
         viewer,
         (item.images ?? [])
-          .filter((one) => !keep.has(one.url))
+          .filter((one) => !keep.has(one.key))
           .map((one) => ({ uploadedBy: one.uploadedBy ? String(one.uploadedBy) : null }))
       )
       item.set("images", next)
@@ -101,8 +105,8 @@ export async function PATCH(
      * awaited: a bucket that refuses a delete must not fail the edit.
      */
     if (values.images !== undefined) {
-      const kept = new Set((item.images ?? []).map((one) => one.url))
-      const dropped = before.filter((url) => !kept.has(url))
+      const kept = new Set((item.images ?? []).map((one) => one.key))
+      const dropped = before.filter((url) => !kept.has(keyFromUrl(url) ?? ""))
       void onlyHere(dropped, viewer.businessId, String(item._id))
         .then((urls) => deleteUploads(urls, viewer.businessId))
         .catch(() => undefined)

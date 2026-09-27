@@ -12,6 +12,7 @@ import {
   MAINTENANCE_STATUSES,
   type MaintenanceStatus,
 } from "@/lib/work-constants"
+import { servedUrl } from "@/lib/storage/urls"
 
 export { MAINTENANCE_STATUSES, type MaintenanceStatus }
 
@@ -169,9 +170,11 @@ export function toMaintenanceDTO(
       : null,
     cost: row.cost ?? null,
     assignee: named(row.assignee as MaybePopulated),
-    photos: (row.photos ?? []).filter(Boolean),
+    // Served from the CDN, old bucket links included; the uploader map is keyed
+    // the same way so the two still line up (lib/storage/urls.ts).
+    photos: (row.photos ?? []).filter(Boolean).map((url) => servedUrl(url)),
     photoUploaders: Object.fromEntries(
-      (row.photoUploaders ?? []).map((one) => [one.url, String(one.uploadedBy)])
+      (row.photoUploaders ?? []).map((one) => [servedUrl(one.url), String(one.uploadedBy)])
     ),
     note: text(row.note),
     createdAt: (row.createdAt as Date).toISOString(),

@@ -18,6 +18,7 @@ import { Project } from "@/models/project";
 import { WorkRequest } from "@/models/request";
 import { Ticket } from "@/models/ticket";
 import { User } from "@/models/user";
+import { servedUrl } from "@/lib/storage/urls"
 
 /** Sessions are per-request; nothing under /dashboard may be cached. */
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ export default async function DashboardLayout({
     email: me.email,
     role: me.role,
     businessName: business.name,
-    businessLogo: business.logo?.url ?? null,
+    businessLogo: servedUrl(business.logo?.url ?? null),
     superAdmin: isSuperAdmin(me.email),
   };
 

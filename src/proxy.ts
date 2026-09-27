@@ -37,20 +37,30 @@ const gate = NextAuth(authConfig).auth as unknown as (
 /** The paths that need a session. Kept in step with the auth matcher below. */
 const GATED = ["/dashboard", "/admin", "/choose"]
 
-/** Origins pictures may load from: our bucket, a configured CDN, map tiles. */
+/**
+ * Origins pictures may load from: the CDN (AWS_PUBLIC_BASE_URL) when one is
+ * configured — the bucket behind it is private, and every stored address is
+ * served through the CDN (lib/storage/urls.ts) — otherwise the public
+ * bucket itself; and the map tiles.
+ */
 function imageOrigins() {
   const origins = new Set<string>()
-  const bucket = process.env.AWS_BUCKET_NAME
-  const region = process.env.AWS_REGION
-  if (bucket && region) origins.add(`https://${bucket}.s3.${region}.amazonaws.com`)
-  if (bucket) origins.add(`https://${bucket}.s3.amazonaws.com`)
   const base = process.env.AWS_PUBLIC_BASE_URL
+  let cdn: string | null = null
   if (base) {
     try {
-      origins.add(new URL(base).origin)
+      cdn = new URL(base).origin
     } catch {
       // A malformed base adds nothing.
     }
+  }
+  if (cdn) {
+    origins.add(cdn)
+  } else {
+    const bucket = process.env.AWS_BUCKET_NAME
+    const region = process.env.AWS_REGION
+    if (bucket && region) origins.add(`https://${bucket}.s3.${region}.amazonaws.com`)
+    if (bucket) origins.add(`https://${bucket}.s3.amazonaws.com`)
   }
   // The map picker's tiles (Leaflet + OpenStreetMap).
   origins.add("https://tile.openstreetmap.org")

@@ -9,6 +9,7 @@ import {
 
 import { safeHref, safeImageSrc } from "@/lib/security/safe-url"
 import { DEFAULT_TEMPLATE } from "@/lib/site-templates"
+import { servedUrl } from "@/lib/storage/urls"
 
 /**
  * A workspace's public website.
@@ -229,8 +230,11 @@ const text = (value: unknown) => {
 /** A stored link, or null unless it is absolute http(s). */
 const link = (value: unknown) => safeHref(text(value))
 
-/** A stored picture address, or null unless it is safe as an <img src>. */
-const picture = (value: unknown) => safeImageSrc(text(value))
+/**
+ * A stored picture address, or null unless it is safe as an <img src>; one
+ * of ours comes back as the address it is served from (lib/storage/urls.ts).
+ */
+const picture = (value: unknown) => servedUrl(safeImageSrc(text(value)))
 
 /**
  * The content, with every absent field spelled `null` rather than missing.
@@ -272,7 +276,7 @@ export function toSiteContent(raw: SiteDocument["content"]): SiteContent {
     gallery: (safe.gallery ?? [])
       .filter((one) => picture(one.url) !== null)
       .map((one) => ({
-        url: one.url.trim(),
+        url: servedUrl(one.url.trim()),
         caption: text(one.caption),
       })),
     faq: (safe.faq ?? []).map((one) => ({
