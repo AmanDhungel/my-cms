@@ -1,6 +1,7 @@
 import { z } from "zod"
 
-import { isSafeHttpUrl, safeUrl, UNSAFE_URL_MESSAGE } from "@/lib/security/safe-url"
+import { isSafeHttpUrl, UNSAFE_URL_MESSAGE } from "@/lib/security/safe-url"
+import { safeUrl } from "@/lib/security/safe-url-schema"
 import { LIMITS, isKnownTemplate } from "@/lib/site-templates"
 import { RESERVED_SLUGS, SLUG_PATTERN } from "@/lib/tenancy"
 

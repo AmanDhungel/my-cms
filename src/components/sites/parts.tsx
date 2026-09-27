@@ -339,7 +339,10 @@ export function Picture({
     <img
       src={src}
       alt={alt}
-      loading="lazy"
+      // The opening picture is above the fold and usually the largest thing
+      // on the page: fetched at once, ahead of the rest. Everything else waits.
+      loading={slot === "hero.image" ? "eager" : "lazy"}
+      fetchPriority={slot === "hero.image" ? "high" : undefined}
       data-slot={slot}
       style={{ aspectRatio: ratio }}
       className={cn(radius, "w-full object-cover", className)}
