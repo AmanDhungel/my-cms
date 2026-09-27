@@ -1,3 +1,5 @@
+import { cache } from "react"
+
 import { connectToDatabase } from "@/lib/mongodb"
 import { DEFAULT_TEMPLATE } from "@/lib/site-templates"
 import { isValidSlug, slugify } from "@/lib/tenancy"
@@ -80,17 +82,31 @@ export async function loadOrStartSite(
  * come back the same way — as nothing at all. A subdomain that exists but
  * isn't ready should not advertise the difference.
  */
-export async function findPublishedSite(slug: string) {
+export const findPublishedSite = cache(async (slug: string) => {
   await connectToDatabase()
 
-  const site = await Site.findOne({ slug, published: true })
-  if (!site) return null
+  // The site and its workspace's block flag in one round trip; and once per
+  // render (React cache), since the metadata and the page both ask.
+  const [row] = await Site.aggregate<Record<string, unknown> & { owner: { blockedAt?: Date }[] }>([
+    { $match: { slug, published: true } },
+    { $limit: 1 },
+    {
+      $lookup: {
+        from: Business.collection.collectionName,
+        localField: "business",
+        foreignField: "_id",
+        pipeline: [{ $project: { blockedAt: 1 } }],
+        as: "owner",
+      },
+    },
+  ])
+  if (!row) return null
 
-  const business = await Business.findById(site.business).select("name blockedAt")
-  if (!business || business.blockedAt) return null
+  const { owner, ...site } = row
+  if (!owner[0] || owner[0].blockedAt) return null
 
-  return site
-}
+  return Site.hydrate(site)
+})
 
 /** Whether a subdomain is free for this workspace to take. */
 export async function slugIsFree(slug: string, forBusinessId: string) {
