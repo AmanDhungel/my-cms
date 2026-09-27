@@ -1,6 +1,9 @@
+import { headers } from "next/headers"
+
 import { auth } from "@/auth"
 import { HttpError } from "@/lib/api-response"
 import { loadMembership, rememberWorkspace } from "@/lib/auth/membership"
+import { bearerToken, hasBearer, verifyAccessToken } from "@/lib/auth/mobile-tokens"
 import { isSuperAdmin } from "@/lib/auth/super-admin"
 import { connectToDatabase } from "@/lib/mongodb"
 import { User, type UserRole } from "@/models/user"
@@ -22,8 +25,7 @@ export type SessionUser = {
  * request rather than trusted from the claims.
  */
 export async function requireUser(): Promise<SessionUser> {
-  const session = await auth()
-  const claims = session?.user
+  const claims = await readClaims()
 
   if (!claims?.id) {
     throw new HttpError(401, "Sign in to continue")
@@ -54,6 +56,12 @@ export async function requireUser(): Promise<SessionUser> {
     throw new HttpError(401, "Sign in to continue")
   }
 
+  // A mobile token minted before the account's last revocation (block,
+  // role change, removal, password change, log-out-everywhere) is spent.
+  if (claims.via === "bearer" && claims.tokenVersion !== (member.tokenVersion ?? 0)) {
+    throw new HttpError(401, "Sign in to continue")
+  }
+
   const viewer: SessionUser = {
     id: String(member._id),
     name: member.name,
@@ -65,6 +73,40 @@ export async function requireUser(): Promise<SessionUser> {
   }
   rememberWorkspace(viewer, business)
   return viewer
+}
+
+type Claims = {
+  id: string
+  /** ms since the epoch; checked against sessionsValidAfter. */
+  signedInAt?: number
+} & ({ via: "cookie" } | { via: "bearer"; tokenVersion: number })
+
+/**
+ * Who the request says it is — by one route only.
+ *
+ * With `Authorization: Bearer …` the mobile access token is the whole
+ * credential: it must decode (signature, expiry, typ — lib/auth/
+ * mobile-tokens.ts) or the request is 401, and any cookie that came along is
+ * ignored. Without the header, the Auth.js session cookie, exactly as before.
+ */
+async function readClaims(): Promise<Claims | null> {
+  const incoming = await headers()
+  if (hasBearer(incoming)) {
+    const token = bearerToken(incoming)
+    const access = token ? await verifyAccessToken(token) : null
+    if (!access) throw new HttpError(401, "Sign in to continue")
+    return {
+      id: access.sub,
+      signedInAt: access.iat * 1000,
+      via: "bearer",
+      tokenVersion: access.tokenVersion,
+    }
+  }
+
+  const session = await auth()
+  const user = session?.user
+  if (!user?.id) return null
+  return { id: user.id, signedInAt: user.signedInAt, via: "cookie" }
 }
 
 /** A member holding one of `roles`. Throws 403 for everyone else. */
@@ -101,6 +143,11 @@ export type SuperAdmin = { id: string; name: string; email: string }
  * block gets undone, and it has to stay reachable after a mistake.
  */
 export async function requireSuperAdmin(): Promise<SuperAdmin> {
+  // The admin area is web-only: a mobile token never opens it.
+  if (hasBearer(await headers())) {
+    throw new HttpError(403, "You don't have access to that")
+  }
+
   const session = await auth()
 
   if (!session?.user?.id) {
