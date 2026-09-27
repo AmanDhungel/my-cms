@@ -35,6 +35,14 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: "default-src 'none'; frame-ancestors 'none'" },
         ],
       })),
+      // Pictures in public/ keep their names when they change, so a day's
+      // cache and a week of serving stale while re-checking, not "immutable".
+      {
+        source: "/:file*\\.(webp|avif|png|jpg|jpeg|svg|ico)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" },
+        ],
+      },
     ]
   },
 }

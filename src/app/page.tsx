@@ -138,7 +138,7 @@ export default function Home() {
         {/* 01 — The problem */}
         <section className="relative flex h-[92vh] min-h-[560px] items-center overflow-hidden bg-[repeating-linear-gradient(118deg,#094F4E_0_26px,#073C3B_26px_52px)] bg-fixed">
           <Image
-            src="/landing_1.png"
+            src="/landing_1.webp"
             alt=""
             fill
             sizes="100vw"
@@ -283,7 +283,7 @@ export default function Home() {
         {/* 04 — Marigold is a request */}
         <section className="relative flex h-[86vh] min-h-[520px] items-center overflow-hidden bg-[repeating-linear-gradient(118deg,#563605_0_26px,#331F03_26px_52px)] bg-fixed">
           <Image
-            src="/landing_2.png"
+            src="/landing_2.webp"
             alt=""
             fill
             sizes="100vw"
