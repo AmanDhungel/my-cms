@@ -40,7 +40,10 @@ export default async function BillPage({
 
   return (
     <BillView
-      bill={toBillDTO(bill, paid)}
+      bill={toBillDTO(bill, paid, {
+        timeZone: business.timeZone,
+        today: dayKeyInZone(new Date(), business.timeZone),
+      })}
       payments={received.map((payment) => ({
         id: String(payment._id),
         amount: payment.amount,

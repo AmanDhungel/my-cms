@@ -10,6 +10,7 @@ import {
   type DateRange,
 } from "@/components/dashboard/date-range-filter"
 import { ExpenseDialog } from "@/components/dashboard/expenses/expense-dialog"
+import { SettleChip } from "@/components/dashboard/sales/payment"
 import { PlusIcon } from "@/components/dashboard/nav-icons"
 import { Pagination, paginate } from "@/components/dashboard/pagination"
 import { RowsSkeleton, StatGridSkeleton } from "@/components/dashboard/skeletons"
@@ -319,8 +320,21 @@ export function ExpensesPanel({
                 {expense.method}
               </span>
 
-              <span className="font-mono text-[13px] font-semibold tabular-nums">
-                {money(expense.amount)}
+              <span className="flex flex-col items-start gap-1">
+                <span className="font-mono text-[13px] font-semibold tabular-nums">
+                  {money(expense.amount)}
+                </span>
+                {/* Purchases carry their payment status; so does anything still owed. */}
+                {movesStock(expense.kind) || (expense.due ?? 0) > 0 ? (
+                  <span className="flex items-center gap-1.5">
+                    <SettleChip status={expense.settlement} />
+                    {(expense.due ?? 0) > 0 ? (
+                      <span className="text-n-500 font-mono text-[11px]">
+                        {money(expense.due ?? 0)} to pay
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
               </span>
 
               <div className="flex gap-1.5 lg:justify-self-end">

@@ -23,6 +23,7 @@ import {
   PAYMENT_LABELS,
   PaymentChip,
   PaymentPicker,
+  SettleChip,
 } from "@/components/dashboard/sales/payment"
 import {
   DashboardMain,
@@ -326,6 +327,13 @@ export function BillView({
                 chequeNo={bill.chequeNo}
                 className="mt-0.5"
               />
+              {/* Where the money stands, for the screen only. */}
+              <span className="flex items-center gap-1.5 print:hidden">
+                <SettleChip status={bill.settlement} />
+                {bill.dueOn && bill.due > 0 ? (
+                  <span className="text-n-500 text-[11.5px]">due {bill.dueOn}</span>
+                ) : null}
+              </span>
             </div>
           </header>
 

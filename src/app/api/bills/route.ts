@@ -3,13 +3,17 @@ import mongoose from "mongoose"
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
 import { holdsStock, quantity, totalsOf } from "@/lib/billing"
+import { fromPaisa, toPaisa } from "@/lib/allocations"
+import { resolveAllocations, writeAllocations } from "@/lib/allocations-server"
 import { connectToDatabase } from "@/lib/mongodb"
+import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
 import { paidByBill } from "@/lib/payments"
 import { billSchema } from "@/lib/validations/sales"
 import { getWorkspace } from "@/lib/workspace"
 import { Bill, toBillDTO } from "@/models/bill"
 import { Business } from "@/models/business"
 import { InventoryItem } from "@/models/inventory-item"
+import { Payment } from "@/models/payment"
 
 export const runtime = "nodejs"
 
@@ -19,15 +23,23 @@ export async function GET() {
     const viewer = await requireRole("owner", "supervisor")
     await connectToDatabase()
 
-    const [bills, paid] = await Promise.all([
+    const [bills, paid, business] = await Promise.all([
       Bill.find({ business: viewer.businessId }).sort({ createdAt: -1 }).limit(200),
       // What has actually been received against each one, so a bill paid in
       // instalments shows what is left rather than just "unpaid".
       paidByBill(viewer.businessId),
+      getWorkspace(viewer),
     ])
+    // For the due date and the Paid / Partly paid / Unpaid / Overdue chip.
+    const context = {
+      timeZone: business.timeZone,
+      today: dayKeyInZone(new Date(), business.timeZone),
+    }
 
     return ok({
-      bills: bills.map((bill) => toBillDTO(bill, paid.get(String(bill._id)) ?? 0)),
+      bills: bills.map((bill) =>
+        toBillDTO(bill, paid.get(String(bill._id)) ?? 0, context)
+      ),
     })
   } catch (error) {
     return handleApiError(error)
@@ -122,6 +134,49 @@ export async function POST(request: Request) {
 
     const totals = totalsOf(lines, vatRate)
 
+    /*
+     * Money taken at the till. "Paid" means the whole total came in now; a
+     * partial amount leaves the rest owing on the bill. Either way it is an
+     * ordinary "Money in" payment against the bill — cash moves through no
+     * account, anything else through one (lib/allocations.ts) — written in
+     * the same transaction as the bill, so the two can't disagree.
+     *
+     * A client that only sends payment: "paid" (as every one did before this)
+     * is taken as paid in cash. A cheque recorded without `received` stays a
+     * flag, as before: a cheque needs an account, which such a client can't
+     * name. A quotation takes no money.
+     */
+    const totalPaisa = toPaisa(totals.total)
+    let receivedPaisa = 0
+    if (values.payment === "paid") receivedPaisa = totalPaisa
+    else if (values.payment !== "quotation" && values.received) {
+      receivedPaisa = toPaisa(values.received.amount)
+    }
+    if (receivedPaisa > totalPaisa) {
+      const message = "That is more than the bill comes to"
+      throw new HttpError(422, message, { "received.amount": [message] })
+    }
+    const receivedMethod = values.received?.method ?? "cash"
+    const receivedAllocation =
+      receivedPaisa > 0
+        ? await resolveAllocations(viewer.businessId, {
+            method: receivedMethod,
+            amount: fromPaisa(receivedPaisa),
+            accountId: values.received?.accountId,
+            allocations: values.received?.allocations,
+            // A supervisor raises bills but can't see the accounts.
+            requireAccount: viewer.role === "owner",
+          })
+        : null
+    // Paid in full at the till settles it, whatever was ticked.
+    const paymentFlag =
+      receivedPaisa > 0 && receivedPaisa >= totalPaisa && values.payment === "unpaid"
+        ? "paid"
+        : values.payment
+    const dueDate = values.dueDate
+      ? dayRangeInZone(values.dueDate, business.timeZone).start
+      : undefined
+
     const session = await mongoose.startSession()
     let billId: mongoose.Types.ObjectId | undefined
 
@@ -171,18 +226,52 @@ export async function POST(request: Request) {
               vatRate,
               ...totals,
               note: values.note,
-              payment: values.payment,
+              payment: paymentFlag,
               // A cheque number means nothing on a bill settled another way.
               chequeNo:
                 values.payment === "cheque" ? values.chequeNo : undefined,
               status: "issued",
               issuedBy: viewer.id,
+              dueDate,
             },
           ],
           { session }
         )
 
         billId = bill._id
+
+        if (receivedAllocation) {
+          const [payment] = await Payment.create(
+            [
+              {
+                business: viewer.businessId,
+                direction: "in",
+                party: values.customer.name,
+                partyRef: values.customerId,
+                account: receivedAllocation.account,
+                allocated: receivedAllocation.allocated || undefined,
+                amount: fromPaisa(receivedPaisa),
+                method: receivedMethod,
+                reference:
+                  values.received?.reference ||
+                  (values.payment === "cheque" ? values.chequeNo : undefined),
+                note: `Received at sale ${number}`,
+                paidOn: dayRangeInZone(
+                  dayKeyInZone(new Date(), business.timeZone),
+                  business.timeZone
+                ).start,
+                bill: bill._id,
+                recordedBy: viewer.id,
+              },
+            ],
+            { session }
+          )
+          await writeAllocations(
+            session,
+            { businessId: viewer.businessId, paymentId: payment._id, direction: "in" },
+            receivedAllocation.rows
+          )
+        }
       })
     } finally {
       await session.endSession()
@@ -190,7 +279,15 @@ export async function POST(request: Request) {
 
     const bill = await Bill.findById(billId).orFail()
 
-    return ok({ bill: toBillDTO(bill) }, 201)
+    return ok(
+      {
+        bill: toBillDTO(bill, fromPaisa(receivedPaisa), {
+          timeZone: business.timeZone,
+          today: dayKeyInZone(new Date(), business.timeZone),
+        }),
+      },
+      201
+    )
   } catch (error) {
     return handleApiError(error)
   }

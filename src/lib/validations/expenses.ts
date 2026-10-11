@@ -32,6 +32,21 @@ export const expenseSchema = z
     /** A split across several accounts, instead of `accountId`. */
     allocations: allocationsField,
     /**
+     * Paid at the time, when that is less than the whole: the rest is owed
+     * to the party (a purchase on credit). Absent means paid in full, which
+     * is how every expense was recorded before.
+     */
+    paidNow: z.coerce
+      .number<number>()
+      .min(0, "An amount can't be negative")
+      .max(100_000_000, "That amount looks wrong")
+      .optional(),
+    /** When the rest of a purchase on credit is due. */
+    dueDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date")
+      .optional(),
+    /**
      * Ignored for a stock purchase, whose amount is the sum of its lines —
      * the server works that out so the two can never disagree.
      */

@@ -82,6 +82,12 @@ const paymentSchema = new Schema(
      * only the payments-out that have no expense behind them.
      */
     expense: { type: Schema.Types.ObjectId, ref: "Expense" },
+    /**
+     * Set on a later payment that settles (part of) a purchase made on credit.
+     * The purchase is already counted as spent, so reports skip these the
+     * same way they skip an expense's own cash row (`expense` above).
+     */
+    purchase: { type: Schema.Types.ObjectId, ref: "Expense" },
     recordedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }
@@ -116,6 +122,8 @@ export type PaymentDTO = {
   bill: { id: string; number: string } | null
   /** Set when this is the cash side of an expense, which is edited from there. */
   expenseId: string | null
+  /** Set when it pays off a purchase made on credit. */
+  purchaseId?: string | null
   createdAt: string
   /**
    * The accounts it moved through and how much through each. Empty for cash
@@ -158,6 +166,7 @@ export function toPaymentDTO(
     paidOn: dayKeyInZone(payment.paidOn, timeZone),
     bill: numbered(payment.bill as MaybePopulated),
     expenseId: payment.expense ? String(payment.expense) : null,
+    purchaseId: payment.purchase ? String(payment.purchase) : null,
     createdAt: (payment.createdAt as Date).toISOString(),
     ...(allocations ? { allocations } : {}),
   }

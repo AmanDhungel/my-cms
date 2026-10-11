@@ -19,6 +19,17 @@ import {
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import { CustomerDialog } from "@/components/dashboard/customers/customer-dialog"
 import { PaymentPicker } from "@/components/dashboard/sales/payment"
+import {
+  ReceivedNow,
+  emptyReceived,
+  receivedPayload,
+  validateReceived,
+  type ReceivedDraft,
+} from "@/components/dashboard/sales/received-now"
+import {
+  useCanSeeAccounts,
+  useDefaultAccountId,
+} from "@/components/dashboard/money-pickers"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   reportMutationError,
@@ -56,11 +67,14 @@ export function BillDialog({
   onClose,
   onCreated,
   vatRate,
+  today,
 }: {
   open: boolean
   onClose: () => void
   onCreated?: (bill: BillDTO) => void
   vatRate: number
+  /** The workspace's today, for the due date. */
+  today?: string
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
@@ -73,7 +87,12 @@ export function BillDialog({
       >
         {/* Mounted only while open, so every bill starts from a clean sheet. */}
         {open ? (
-          <Body onClose={onClose} onCreated={onCreated} vatRate={vatRate} />
+          <Body
+            onClose={onClose}
+            onCreated={onCreated}
+            vatRate={vatRate}
+            today={today ?? new Date().toISOString().slice(0, 10)}
+          />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -84,10 +103,12 @@ function Body({
   onClose,
   onCreated,
   vatRate,
+  today,
 }: {
   onClose: () => void
   onCreated?: (bill: BillDTO) => void
   vatRate: number
+  today: string
 }) {
   const [source, setSource] = React.useState<BillSource | null>(null)
 
@@ -134,6 +155,7 @@ function Body({
       key={source}
       source={source}
       vatRate={vatRate}
+      today={today}
       onBack={() => setSource(null)}
       onClose={onClose}
       onCreated={onCreated}
@@ -165,12 +187,14 @@ function SourceCard({
 function Editor({
   source,
   vatRate,
+  today,
   onBack,
   onClose,
   onCreated,
 }: {
   source: BillSource
   vatRate: number
+  today: string
   onBack: () => void
   onClose: () => void
   onCreated?: (bill: BillDTO) => void
@@ -195,6 +219,10 @@ function Editor({
   const [errors, setErrors] = React.useState<Errors>({})
   const [customerId, setCustomerId] = React.useState("")
   const [customerDialogOpen, setCustomerDialogOpen] = React.useState(false)
+  // Money taken at the till, and when the rest is due (received-now.tsx).
+  const [received, setReceived] = React.useState<ReceivedDraft>(emptyReceived)
+  const fallbackAccount = useDefaultAccountId()
+  const canSeeAccounts = useCanSeeAccounts()
 
   const stock = useInventoryItems(fromInventory)
   const customers = useCustomers()
@@ -343,17 +371,28 @@ function Editor({
       payment,
       chequeNo: chequeNo || undefined,
       note: note || undefined,
+      ...receivedPayload(payment, totals.total, received, fallbackAccount),
     }
 
     const parsed = billSchema.safeParse(payload)
 
+    const next: Errors = {}
     if (!parsed.success) {
-      const next: Errors = {}
       for (const issue of parsed.error.issues) {
         const path = issue.path.join(".") || "root"
         // Every line problem reads as one message above the table.
         next[path.startsWith("lines") ? "lines" : path] ??= issue.message
       }
+    }
+    // The account rules for the money taken now, checked before sending.
+    Object.assign(
+      next,
+      validateReceived(payment, totals.total, received, {
+        fallbackAccountId: fallbackAccount,
+        requireAccount: canSeeAccounts,
+      })
+    )
+    if (!parsed.success || Object.keys(next).length > 0) {
       setErrors(next)
       return
     }
@@ -823,6 +862,28 @@ function Editor({
                 unpaid bill gets marked paid when the money comes in.
               </span>
             </div>
+
+            <ReceivedNow
+              payment={payment}
+              total={totals.total}
+              value={received}
+              onChange={(value) => {
+                setReceived(value)
+                setErrors((prev) =>
+                  Object.fromEntries(
+                    Object.entries(prev).filter(
+                      ([path]) =>
+                        !path.startsWith("received") &&
+                        path !== "accountId" &&
+                        !path.startsWith("allocations")
+                    )
+                  )
+                )
+              }}
+              errors={errors}
+              fallbackAccountId={fallbackAccount}
+              today={today}
+            />
 
             <label className="border-n-200 flex items-start gap-2.5 rounded-[10px] border bg-white p-3">
               <input

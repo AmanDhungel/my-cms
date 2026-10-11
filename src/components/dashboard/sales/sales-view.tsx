@@ -16,6 +16,7 @@ import { BillDialog } from "@/components/dashboard/sales/bill-dialog"
 import {
   PAYMENT_LABELS,
   PaymentChip,
+  SettleChip,
 } from "@/components/dashboard/sales/payment"
 import { PlusIcon } from "@/components/dashboard/nav-icons"
 import { RowsSkeleton, StatGridSkeleton } from "@/components/dashboard/skeletons"
@@ -286,6 +287,7 @@ export function SalesView({
                     payment={bill.payment}
                     chequeNo={bill.chequeNo}
                   />
+                  <SettleChip status={bill.settlement} />
                   {[
                     bill.paid > 0 && bill.due > 0
                       ? `${money(bill.paid)} of ${money(bill.total)} paid`
@@ -358,6 +360,7 @@ export function SalesView({
       <BillDialog
         open={open}
         vatRate={vatRate}
+        today={today}
         onClose={() => setOpen(false)}
         // Straight to the bill, which is where printing and sending live.
         onCreated={(bill) => router.push(`/dashboard/sales/${bill.id}`)}

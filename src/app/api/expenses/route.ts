@@ -21,6 +21,10 @@ import {
   resolveAllocations,
   writeAllocations,
 } from "@/lib/allocations-server"
+import { fromPaisa, toPaisa } from "@/lib/allocations"
+import { purchasePayments } from "@/lib/purchases-server"
+import { purchasePaidPaisa, settleStatus } from "@/lib/settlement"
+import { dayKeyInZone } from "@/lib/time"
 import { Expense, toExpenseDTO } from "@/models/expense"
 import { Payment } from "@/models/payment"
 import { User } from "@/models/user"
@@ -66,16 +70,40 @@ export async function GET() {
           )
         : new Map<string, { accountId: string; amount: number }[]>()
 
+    // What has been paid on each (its own cash row plus later payments
+    // against it), so a purchase on credit shows what is still owed.
+    const { paid, atTime } = await purchasePayments(viewer.businessId, expenses)
+    const today = dayKeyInZone(new Date(), business.timeZone)
+
     return ok({
-      expenses: expenses.map((expense) =>
-        toExpenseDTO(
-          expense,
-          business.timeZone,
-          viewer.role === "owner"
-            ? (allocations.get(String(expense.payment)) ?? [])
-            : undefined
-        )
-      ),
+      expenses: expenses.map((expense) => {
+        const amountPaisa = toPaisa(expense.amount)
+        const paidPaisa = Math.min(amountPaisa, paid.get(String(expense._id)) ?? 0)
+        const spent = dayKeyInZone(expense.spentOn, business.timeZone)
+        const dueOn = expense.dueDate
+          ? dayKeyInZone(expense.dueDate, business.timeZone)
+          : null
+        return {
+          ...toExpenseDTO(
+            expense,
+            business.timeZone,
+            viewer.role === "owner"
+              ? (allocations.get(String(expense.payment)) ?? [])
+              : undefined
+          ),
+          paid: fromPaisa(paidPaisa),
+          paidAtTime: fromPaisa(atTime.get(String(expense._id)) ?? 0),
+          due: fromPaisa(amountPaisa - paidPaisa),
+          dueOn,
+          settlement: settleStatus({
+            totalPaisa: amountPaisa,
+            paidPaisa,
+            duePaisa: amountPaisa - paidPaisa,
+            dueOn: dueOn ?? spent,
+            today,
+          }),
+        }
+      }),
     })
   } catch (error) {
     return handleApiError(error)
@@ -129,17 +157,43 @@ export async function POST(request: Request) {
     const amount =
       values.kind === "stock" ? linesTotal(lines) : (values.amount ?? 0)
 
-    // Which accounts it came out of (lib/allocations.ts): none for cash; one,
-    // or a split that adds up to the amount, for anything else. A supervisor
-    // can't see the accounts, so is not made to name one.
-    const allocation = await resolveAllocations(viewer.businessId, {
-      method: values.method,
-      amount,
-      accountId: values.accountId,
-      allocations: values.allocations,
-      requireAccount: viewer.role === "owner",
+    /*
+     * What was paid now. All of it unless "Paid now" says less, in which case
+     * the rest is owed to the party — a purchase on credit — so a party is
+     * then required: there has to be someone to owe it to.
+     */
+    const amountPaisa = toPaisa(amount)
+    const paidPaisa = purchasePaidPaisa({
+      amountPaisa,
+      paidNowPaisa: values.paidNow === undefined ? undefined : toPaisa(values.paidNow),
     })
+    if (paidPaisa > amountPaisa) {
+      const message = "That is more than it comes to"
+      throw new HttpError(422, message, { paidNow: [message] })
+    }
+    if (paidPaisa < amountPaisa && !partyRef) {
+      const message = "Pick the party you owe the rest to"
+      throw new HttpError(422, message, { partyId: [message] })
+    }
+
+    // Which accounts it came out of (lib/allocations.ts): none for cash; one,
+    // or a split that adds up to what was paid, for anything else. A
+    // supervisor can't see the accounts, so is not made to name one.
+    const allocation =
+      paidPaisa > 0
+        ? await resolveAllocations(viewer.businessId, {
+            method: values.method,
+            amount: fromPaisa(paidPaisa),
+            accountId: values.accountId,
+            allocations: values.allocations,
+            requireAccount: viewer.role === "owner",
+          })
+        : { rows: [], account: undefined, allocated: false }
     const account = allocation.account
+    const dueDate =
+      paidPaisa < amountPaisa && values.dueDate
+        ? dayRangeInZone(values.dueDate, business.timeZone).start
+        : undefined
 
     const session = await mongoose.startSession()
     let expenseId: mongoose.Types.ObjectId | undefined
@@ -164,6 +218,7 @@ export async function POST(request: Request) {
               note: values.note,
               spentOn: start,
               lines,
+              dueDate,
               recordedBy: viewer.id,
             },
           ],
@@ -172,41 +227,44 @@ export async function POST(request: Request) {
 
         // The same money seen from the cash ledger. Mirrored rather than left
         // to the owner to enter twice, so the Payments page and the cash-flow
-        // report stay complete without anyone remembering to.
-        const [payment] = await Payment.create(
-          [
-            {
-              business: viewer.businessId,
-              direction: "out",
-              party: values.payee,
-              // The mirrored cash row lands on the same ledger and the same
-              // account, or the two views of one payment disagree.
-              partyRef,
-              account,
-              allocated: allocation.allocated || undefined,
-              amount,
-              method: values.method,
-              reference: values.reference,
-              note: values.note,
-              paidOn: start,
-              // Pointed both ways: this one so a report can tell an expense's
-              // cash row from one entered by hand on the Payments page.
-              expense: expense._id,
-              recordedBy: viewer.id,
-            },
-          ],
-          { session }
-        )
+        // report stay complete without anyone remembering to. A purchase made
+        // wholly on credit moved no money, so it has none.
+        if (paidPaisa > 0) {
+          const [payment] = await Payment.create(
+            [
+              {
+                business: viewer.businessId,
+                direction: "out",
+                party: values.payee,
+                // The mirrored cash row lands on the same ledger and the same
+                // account, or the two views of one payment disagree.
+                partyRef,
+                account,
+                allocated: allocation.allocated || undefined,
+                amount: fromPaisa(paidPaisa),
+                method: values.method,
+                reference: values.reference,
+                note: values.note,
+                paidOn: start,
+                // Pointed both ways: this one so a report can tell an expense's
+                // cash row from one entered by hand on the Payments page.
+                expense: expense._id,
+                recordedBy: viewer.id,
+              },
+            ],
+            { session }
+          )
 
-        expense.payment = payment._id
-        await expense.save({ session })
+          expense.payment = payment._id
+          await expense.save({ session })
 
-        // Money out of each account it was paid from, with the row itself.
-        await writeAllocations(
-          session,
-          { businessId: viewer.businessId, paymentId: payment._id, direction: "out" },
-          allocation.rows
-        )
+          // Money out of each account it was paid from, with the row itself.
+          await writeAllocations(
+            session,
+            { businessId: viewer.businessId, paymentId: payment._id, direction: "out" },
+            allocation.rows
+          )
+        }
 
         // Costs are averaged from the ledger, so this has to see the row
         // just written — hence inside the transaction, not after it.

@@ -35,6 +35,7 @@ import { money } from "@/lib/billing"
 import {
   reportMutationError,
   useBills,
+  useExpenses,
   useCreatePayment,
   useUpdatePayment,
 } from "@/lib/queries"
@@ -121,9 +122,12 @@ function Body({
   const [note, setNote] = React.useState(editing?.note ?? "")
   const [paidOn, setPaidOn] = React.useState(editing?.paidOn ?? today)
   const [billId, setBillId] = React.useState(editing?.bill?.id ?? "")
+  // Money out can pay off a purchase made on credit.
+  const [purchaseId, setPurchaseId] = React.useState(editing?.purchaseId ?? "")
   const [errors, setErrors] = React.useState<Errors>({})
 
   const bills = useBills()
+  const expenses = useExpenses()
   const create = useCreatePayment()
   const update = useUpdatePayment(editing?.id ?? "")
   const mutation = editing ? update : create
@@ -143,6 +147,28 @@ function Body({
   )
 
   const chosen = settleable.find((bill) => bill.id === billId)
+
+  // Purchases with something still owed on them — the chosen party's first,
+  // and only theirs once one is picked.
+  const payable = (expenses.data?.expenses ?? []).filter(
+    (one) =>
+      ((one.due ?? 0) > 0 || one.id === editing?.purchaseId) &&
+      (!partyId || one.partyId === partyId)
+  )
+  const chosenPurchase = payable.find((one) => one.id === purchaseId)
+
+  /** Picking a purchase offers what is owed on it, and its supplier. */
+  function choosePurchase(id: string) {
+    setPurchaseId(id)
+    setErrors((prev) => ({ ...prev, purchaseId: undefined }))
+    const purchase = payable.find((one) => one.id === id)
+    if (!purchase) return
+    if (!amount) setAmount(String(purchase.due ?? ""))
+    if (purchase.partyId && !partyId) {
+      setPartyId(purchase.partyId)
+      setParty(purchase.payee)
+    }
+  }
 
   /** Picking a bill offers its balance, which is the usual amount to enter. */
   function chooseBill(id: string) {
@@ -167,6 +193,7 @@ function Body({
       note: note || undefined,
       paidOn,
       billId: direction === "in" && billId ? billId : undefined,
+      purchaseId: direction === "out" && purchaseId ? purchaseId : undefined,
     })
 
     const next: Errors = {}
@@ -226,6 +253,7 @@ function Body({
             onPick={() => {
               setDirection("out")
               setBillId("")
+              setPurchaseId("")
             }}
           />
         </div>
@@ -381,6 +409,33 @@ function Body({
                 Only bills with money still owed on them are listed.
               </span>
             )}
+          </div>
+        ) : payable.length > 0 || purchaseId ? (
+          <div className="border-n-200 flex flex-col gap-2.5 rounded-[10px] border bg-white p-3">
+            <div className="flex flex-col gap-[7px]">
+              <FieldLabel>Against a purchase</FieldLabel>
+              <select
+                value={purchaseId}
+                onChange={(event) => choosePurchase(event.target.value)}
+                aria-label="Against a purchase"
+                className={cn(inputClass, "cursor-pointer py-2 text-[13.5px]")}
+              >
+                <option value="">Not against a purchase</option>
+                {payable.map((one) => (
+                  <option key={one.id} value={one.id}>
+                    {one.spentOn} · {one.payee} · {money(one.due ?? 0)} to pay
+                  </option>
+                ))}
+              </select>
+              <FieldError message={errors.purchaseId} />
+            </div>
+            <span className="text-n-500 text-[12.5px]">
+              {chosenPurchase
+                ? (Number(amount) || 0) >= (chosenPurchase.due ?? 0)
+                  ? "This pays it off."
+                  : `Leaves ${money(Math.max(0, (chosenPurchase.due ?? 0) - (Number(amount) || 0)))} to pay.`
+                : "Purchases bought on credit, with something still to pay."}
+            </span>
           </div>
         ) : null}
 

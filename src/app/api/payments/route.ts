@@ -9,6 +9,8 @@ import {
 } from "@/lib/allocations-server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { assertPayableBill, syncBillPayment } from "@/lib/payments"
+import { toPaisa } from "@/lib/allocations"
+import { assertPayablePurchase } from "@/lib/purchases-server"
 import { dayRangeInZone } from "@/lib/time"
 import { paymentSchema } from "@/lib/validations/payments"
 import { getWorkspace } from "@/lib/workspace"
@@ -80,6 +82,10 @@ export async function POST(request: Request) {
     })
 
     if (values.billId) await assertPayableBill(viewer.businessId, values.billId)
+    // Paying off a purchase made on credit: no more than is still owed on it.
+    if (values.purchaseId) {
+      await assertPayablePurchase(viewer.businessId, values.purchaseId, toPaisa(values.amount))
+    }
 
     const doc = {
       business: viewer.businessId,
@@ -94,6 +100,7 @@ export async function POST(request: Request) {
       note: values.note,
       paidOn: start,
       bill: values.billId,
+      purchase: values.purchaseId,
       recordedBy: viewer.id,
     }
 

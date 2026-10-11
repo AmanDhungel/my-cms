@@ -12,6 +12,8 @@ import {
 import { connectToDatabase } from "@/lib/mongodb"
 import { ownParty } from "@/lib/money-refs"
 import { assertPayableBill, syncBillPayment } from "@/lib/payments"
+import { toPaisa } from "@/lib/allocations"
+import { assertPayablePurchase } from "@/lib/purchases-server"
 import { dayRangeInZone } from "@/lib/time"
 import { paymentSchema } from "@/lib/validations/payments"
 import { getWorkspace } from "@/lib/workspace"
@@ -63,6 +65,10 @@ export async function PATCH(
     if (nextBill && nextBill !== previousBill) {
       await assertPayableBill(viewer.businessId, nextBill)
     }
+    const nextPurchase = values.direction === "out" ? (values.purchaseId ?? null) : null
+    if (nextPurchase) {
+      await assertPayablePurchase(viewer.businessId, nextPurchase, toPaisa(values.amount), payment._id)
+    }
 
     const session = await mongoose.startSession()
     try {
@@ -78,6 +84,7 @@ export async function PATCH(
         payment.note = values.note
         payment.paidOn = start
         payment.bill = nextBill ? new mongoose.Types.ObjectId(nextBill) : undefined
+        payment.purchase = nextPurchase ? new mongoose.Types.ObjectId(nextPurchase) : undefined
         await payment.save({ session })
 
         await writeAllocations(

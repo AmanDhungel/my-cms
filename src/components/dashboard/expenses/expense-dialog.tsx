@@ -152,6 +152,14 @@ function Body({
   const [allocation, setAllocation] = React.useState<AllocationDraft>(() =>
     editing ? draftFrom(editing) : emptyAllocationDraft
   )
+  // A purchase on credit: part (or none) paid now, the rest owed to the party.
+  const [onCredit, setOnCredit] = React.useState(
+    Boolean(editing && editing.paidAtTime !== undefined && editing.paidAtTime < editing.amount)
+  )
+  const [paidNow, setPaidNow] = React.useState(
+    editing?.paidAtTime !== undefined ? String(editing.paidAtTime) : ""
+  )
+  const [dueDate, setDueDate] = React.useState(editing?.dueOn ?? "")
   const [employeeId, setEmployeeId] = React.useState(
     editing?.employee?.id ?? ""
   )
@@ -252,6 +260,8 @@ function Body({
     cost: Number(line.cost) || 0,
   }))
   const total = buying ? linesTotal(priced) : Number(amount) || 0
+  // What leaves an account now: all of it, or the part paid on a credit purchase.
+  const paidAmount = onCredit ? Math.min(total, Math.max(0, Number(paidNow) || 0)) : total
 
   async function submit() {
     if (mutation.isPending) return
@@ -273,7 +283,14 @@ function Body({
       payee,
       partyId: partyId || undefined,
       // Nothing for cash; one account, or a split, for anything else.
-      ...allocationPayload(allocation, method, fallbackAccount),
+      ...(paidAmount > 0 ? allocationPayload(allocation, method, fallbackAccount) : {}),
+      // "Paid in full" sends the whole amount on an edit (it may have been on
+      // credit before); a new one leaves it out, which the server reads the same.
+      ...(onCredit
+        ? { paidNow: paidAmount, ...(dueDate ? { dueDate } : {}) }
+        : editing
+          ? { paidNow: total }
+          : {}),
       employeeId: payroll && employeeId ? employeeId : undefined,
       amount: buying ? undefined : amount || 0,
       method,
@@ -300,15 +317,24 @@ function Body({
     }
     // The same account rules the server applies (a supervisor, who can't
     // see the accounts, is not asked for one).
-    Object.assign(
-      next,
-      validateAllocation(allocation, {
-        method,
-        amount: total,
-        fallbackAccountId: fallbackAccount,
-        requireAccount: canSeeAccounts,
-      })
-    )
+    if (paidAmount > 0) {
+      Object.assign(
+        next,
+        validateAllocation(allocation, {
+          method,
+          amount: paidAmount,
+          fallbackAccountId: fallbackAccount,
+          requireAccount: canSeeAccounts,
+        })
+      )
+    }
+    if (onCredit && (Number(paidNow) || 0) > total) {
+      next.paidNow = "That is more than it comes to"
+    }
+    if (onCredit && !partyId) {
+      next.partyId = "Pick the party you owe the rest to"
+      next.payee ??= "Pick the party you owe the rest to — save them as a party first"
+    }
     if (!parsed.success || Object.keys(next).length > 0) {
       setErrors(next)
       return
@@ -507,26 +533,82 @@ function Body({
           </label>
         </div>
 
-        <AccountAllocationField
-          method={method}
-          amount={total}
-          direction="out"
-          value={allocation}
-          onChange={(next) => {
-            setAllocation(next)
-            setErrors((prev) =>
-              Object.fromEntries(
-                Object.entries(prev).filter(
-                  ([path]) =>
-                    path !== "accountId" && !path.startsWith("allocations")
+        <div className="border-n-200 flex flex-col gap-2.5 rounded-[10px] border bg-white p-3">
+          <label className="flex cursor-pointer items-center gap-2 text-[13.5px] font-semibold">
+            <input
+              type="checkbox"
+              checked={!onCredit}
+              onChange={(event) => {
+                setOnCredit(!event.target.checked)
+                setErrors((prev) => ({ ...prev, paidNow: undefined, partyId: undefined }))
+              }}
+              className="accent-p-500 size-4"
+            />
+            Paid in full now
+          </label>
+          {onCredit ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-[7px]">
+                  <FieldLabel>Paid now</FieldLabel>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={paidNow}
+                    onChange={(event) => {
+                      setPaidNow(event.target.value)
+                      setErrors((prev) => ({ ...prev, paidNow: undefined }))
+                    }}
+                    placeholder="0 — all on credit"
+                    aria-invalid={Boolean(errors.paidNow)}
+                    className={cn(inputClass, "py-2 text-[14px]")}
+                  />
+                  <FieldError message={errors.paidNow} />
+                </label>
+                <label className="flex flex-col gap-[7px]">
+                  <FieldLabel>Rest due by</FieldLabel>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(event) => setDueDate(event.target.value)}
+                    className={cn(inputClass, "py-2 text-[14px]")}
+                  />
+                </label>
+              </div>
+              <span className="text-n-600 text-[12.5px]">
+                {money(Math.max(0, total - paidAmount))} left to pay
+                {payee ? ` to ${payee}` : ""} — it shows under To pay until you
+                record a payment against it.
+              </span>
+              <FieldError message={errors.partyId} />
+            </>
+          ) : null}
+        </div>
+
+        {paidAmount > 0 ? (
+          <AccountAllocationField
+            method={method}
+            amount={paidAmount}
+            direction="out"
+            value={allocation}
+            onChange={(next) => {
+              setAllocation(next)
+              setErrors((prev) =>
+                Object.fromEntries(
+                  Object.entries(prev).filter(
+                    ([path]) =>
+                      path !== "accountId" && !path.startsWith("allocations")
+                  )
                 )
               )
-            )
-          }}
-          errors={errors}
-          previous={previous}
-          fallbackAccountId={fallbackAccount}
-        />
+            }}
+            errors={errors}
+            previous={previous}
+            fallbackAccountId={fallbackAccount}
+          />
+        ) : null}
 
         <div className="grid gap-3.5 sm:grid-cols-2">
           <label className="flex flex-col gap-[7px]">

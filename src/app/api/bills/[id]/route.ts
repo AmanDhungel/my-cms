@@ -44,7 +44,10 @@ export async function GET(
     const paid = received.reduce((sum, payment) => sum + payment.amount, 0)
 
     return ok({
-      bill: toBillDTO(bill, paid),
+      bill: toBillDTO(bill, paid, {
+        timeZone: business.timeZone,
+        today: dayKeyInZone(new Date(), business.timeZone),
+      }),
       payments: received.map((payment) => ({
         id: String(payment._id),
         amount: payment.amount,

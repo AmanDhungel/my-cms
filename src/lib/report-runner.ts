@@ -850,7 +850,7 @@ async function expenses(s: Scope): Promise<ReportPayload> {
    * it. Counted here so the report is every rupee that left, and filtered by
    * the back-reference so an expense's own cash row is not counted twice.
    */
-  const loose = (await loadPayments("out", s)).filter((one) => !one.expense)
+  const loose = (await loadPayments("out", s)).filter((one) => !one.expense && !one.purchase)
 
   const buckets = new Map<
     string,
@@ -990,7 +990,7 @@ async function profit(s: Scope): Promise<ReportPayload> {
   // no category, so the only safe reading is that it was spent — which errs
   // towards a smaller profit rather than a flattering one. Its back-reference
   // keeps an expense's own cash row from being counted a second time.
-  const loose = (await loadPayments("out", s)).filter((one) => !one.expense)
+  const loose = (await loadPayments("out", s)).filter((one) => !one.expense && !one.purchase)
   for (const one of loose) add(one.paidOn as Date, one.amount)
 
   for (const key of running.keys()) bucket(key)

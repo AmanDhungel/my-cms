@@ -38,10 +38,19 @@ export const paymentSchema = z
       .string()
       .regex(/^[0-9a-fA-F]{24}$/, "Pick a bill from the list")
       .optional(),
+    /** A purchase made on credit that this pays off (money out only). */
+    purchaseId: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/, "Pick a purchase from the list")
+      .optional(),
   })
   .refine((values) => values.direction === "in" || !values.billId, {
     message: "Only money you receive can be put against a bill",
     path: ["billId"],
+  })
+  .refine((values) => values.direction === "out" || !values.purchaseId, {
+    message: "Only money you pay out can be put against a purchase",
+    path: ["purchaseId"],
   })
 
 export type PaymentValues = z.infer<typeof paymentSchema>
