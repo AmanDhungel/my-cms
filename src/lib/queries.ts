@@ -40,6 +40,7 @@ import type {
 import type { TicketDTO } from "@/models/ticket"
 import type { ModuleKey, ModuleState } from "@/lib/modules"
 import type { SettleStatus } from "@/lib/settlement"
+import type { EstimateDTO } from "@/models/estimate"
 import type { UserDTO } from "@/models/user"
 
 export type TicketScope =
@@ -639,6 +640,7 @@ function invalidateSales(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["accounts"] })
   void client.invalidateQueries({ queryKey: ["khata"] })
   void client.invalidateQueries({ queryKey: ["customers"] })
+  void client.invalidateQueries({ queryKey: ["estimates"] })
 }
 
 /** Marking a bill paid, unpaid or on cheque after it was raised. */
@@ -1503,5 +1505,67 @@ export function usePartyStatement(
     queryFn: () =>
       apiFetch<PartyStatement>(`/api/customers/${id}/statement${qs ? `?${qs}` : ""}`),
     placeholderData: (previous) => previous,
+  })
+}
+
+/* ---------------------------------------------------------------- estimates */
+
+export function useEstimates() {
+  return useQuery({
+    queryKey: ["estimates"],
+    queryFn: () => apiFetch<{ estimates: EstimateDTO[] }>("/api/estimates"),
+  })
+}
+
+export function useEstimate(id: string) {
+  return useQuery({
+    queryKey: ["estimates", id],
+    queryFn: () => apiFetch<{ estimate: EstimateDTO }>(`/api/estimates/${id}`),
+  })
+}
+
+/** An estimate moves nothing else, so only the estimates are refreshed. */
+function invalidateEstimates(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: ["estimates"] })
+}
+
+export function useSaveEstimate(id?: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ estimate: EstimateDTO }>(id ? `/api/estimates/${id}` : "/api/estimates", {
+        method: id ? "PATCH" : "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateEstimates(client),
+  })
+}
+
+export function useEstimateStatus(id: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { action: "send" | "accept" | "decline" | "reopen"; validUntil?: string }) =>
+      apiFetch<{ estimate: EstimateDTO }>(`/api/estimates/${id}/status`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateEstimates(client),
+  })
+}
+
+export function useDuplicateEstimate(id: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ estimate: EstimateDTO }>(`/api/estimates/${id}/duplicate`, { method: "POST" }),
+    onSuccess: () => invalidateEstimates(client),
+  })
+}
+
+export function useDeleteEstimate(id: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<{ id: string }>(`/api/estimates/${id}`, { method: "DELETE" }),
+    onSuccess: () => invalidateEstimates(client),
   })
 }

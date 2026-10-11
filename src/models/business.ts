@@ -118,6 +118,11 @@ const businessSchema = new Schema(
      */
     billSeq: { type: Number, required: true, default: 0 },
     /**
+     * The last estimate number handed out (EST-0001…). Absent until the first
+     * estimate: $inc starts a missing counter at 1, so nothing is backfilled.
+     */
+    estimateSeq: { type: Number },
+    /**
      * Set by a super admin. A blocked workspace shuts out everyone in it,
      * whatever their role.
      */

@@ -14,6 +14,7 @@ import { Bill, toBillDTO } from "@/models/bill"
 import { Business } from "@/models/business"
 import { InventoryItem } from "@/models/inventory-item"
 import { Payment } from "@/models/payment"
+import { Estimate } from "@/models/estimate"
 
 export const runtime = "nodejs"
 
@@ -177,6 +178,40 @@ export async function POST(request: Request) {
       ? dayRangeInZone(values.dueDate, business.timeZone).start
       : undefined
 
+    /*
+     * Converting an estimate. Checked here for a clear answer, then again —
+     * atomically — inside the transaction, which is what makes a double click
+     * or a second tab unable to make two sales out of one estimate.
+     */
+    const todayStart = dayRangeInZone(
+      dayKeyInZone(new Date(), business.timeZone),
+      business.timeZone
+    ).start
+    const alreadyConverted = (saleId: unknown) =>
+      Bill.findById(saleId)
+        .select("number")
+        .then((sale) => {
+          const message = `This estimate is already sale ${sale?.number ?? ""}.`.replace(" .", ".")
+          return new HttpError(409, message, { estimateId: [message] }, undefined, {
+            saleId: String(saleId),
+            saleNumber: sale?.number ?? null,
+          })
+        })
+    if (values.estimateId) {
+      const estimate = await Estimate.findOne({
+        _id: values.estimateId,
+        business: viewer.businessId,
+      })
+      if (!estimate) throw new HttpError(404, "That estimate doesn't exist")
+      if (estimate.saleRef) throw await alreadyConverted(estimate.saleRef)
+      if (estimate.status === "declined") {
+        throw new HttpError(409, "This estimate was declined. Reopen it before converting.")
+      }
+      if (estimate.status !== "accepted" && estimate.validUntil < todayStart) {
+        throw new HttpError(409, "This estimate has expired. Reopen it (or extend its date) before converting.")
+      }
+    }
+
     const session = await mongoose.startSession()
     let billId: mongoose.Types.ObjectId | undefined
 
@@ -233,12 +268,36 @@ export async function POST(request: Request) {
               status: "issued",
               issuedBy: viewer.id,
               dueDate,
+              estimateRef: values.estimateId,
             },
           ],
           { session }
         )
 
         billId = bill._id
+
+        if (values.estimateId) {
+          // Only an estimate still open and not yet converted flips; anything
+          // else means another save got there first.
+          const flipped = await Estimate.findOneAndUpdate(
+            {
+              _id: values.estimateId,
+              business: viewer.businessId,
+              saleRef: { $exists: false },
+              $or: [
+                { status: "accepted" },
+                { status: { $in: ["draft", "sent"] }, validUntil: { $gte: todayStart } },
+              ],
+            },
+            { $set: { status: "converted", saleRef: bill._id, convertedAt: new Date() } },
+            { new: true, session }
+          )
+          if (!flipped) {
+            const now = await Estimate.findById(values.estimateId).session(session)
+            if (now?.saleRef) throw await alreadyConverted(now.saleRef)
+            throw new HttpError(409, "This estimate can't be converted any more.")
+          }
+        }
 
         if (receivedAllocation) {
           const [payment] = await Payment.create(

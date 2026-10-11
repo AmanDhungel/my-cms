@@ -49,20 +49,26 @@ const lineSchema = z.object({
     .max(100, "100% is the largest discount"),
 })
 
+/** Who a bill (or an estimate) is for: the copy that prints on it. */
+export const saleCustomerSchema = z.object({
+  name: z.string().trim().min(2, "Who is this bill for?").max(140),
+  phone: z.string().trim().max(30).optional(),
+  email: z
+    .union([z.literal(""), z.email("That email doesn't look right")])
+    .optional(),
+  address: z.string().trim().max(200).optional(),
+  pan: z.string().trim().max(30).optional(),
+})
+
+/** One line, as a bill and an estimate both take it. */
+export const saleLineSchema = lineSchema
+
 export const billSchema = z
   .object({
     source: z.enum(BILL_SOURCES),
     /** Set when the bill was raised for a saved customer. */
     customerId: objectId.optional(),
-    customer: z.object({
-      name: z.string().trim().min(2, "Who is this bill for?").max(140),
-      phone: z.string().trim().max(30).optional(),
-      email: z
-        .union([z.literal(""), z.email("That email doesn't look right")])
-        .optional(),
-      address: z.string().trim().max(200).optional(),
-      pan: z.string().trim().max(30).optional(),
-    }),
+    customer: saleCustomerSchema,
     lines: z
       .array(lineSchema)
       .min(1, "Add at least one line")
