@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog"
 import { money } from "@/lib/billing"
 import { maskAccountNumber } from "@/lib/allocations"
+import { ApiRequestError } from "@/lib/api-client"
 import { AccountStatementDialog } from "@/components/dashboard/payments/account-statement-dialog"
 import {
   reportMutationError,
@@ -333,15 +334,24 @@ function Body({
       return
     }
 
+    // Closes only once the server has said yes; a refusal stays on screen.
     mutation.mutate(parsed.data, {
-      onSuccess: ({ account }) =>
-        toast.success(editing ? `${account.name} saved` : `${account.name} added`),
-      onError: (error) =>
+      onSuccess: ({ account }) => {
+        toast.success(editing ? `${account.name} saved` : `${account.name} added`)
+        onClose()
+      },
+      onError: (error) => {
+        // A name already in use comes back as a 409 with no field named:
+        // it belongs under the name.
+        if (error instanceof ApiRequestError && error.status === 409) {
+          setErrors((prev) => ({ ...prev, name: error.message }))
+          return
+        }
         reportMutationError(error, (path, message) =>
           setErrors((prev) => ({ ...prev, [path]: message }))
-        ),
+        )
+      },
     })
-    if (!mutation.isError) onClose()
   }
 
   return (
