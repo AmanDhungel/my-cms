@@ -38,6 +38,7 @@ import type {
   RequestStatus,
 } from "@/lib/work-constants"
 import type { TicketDTO } from "@/models/ticket"
+import type { ModuleKey, ModuleState } from "@/lib/modules"
 import type { UserDTO } from "@/models/user"
 
 export type TicketScope =
@@ -1360,5 +1361,30 @@ export function useReportGroup(
     queryKey: ["report-group", group, query],
     queryFn: () =>
       apiFetch<ReportGroupResponse>(`/api/report-groups/${group}${query}`),
+  })
+}
+
+/* ------------------------------------------------------------------ modules */
+
+export type ModulesResponse = {
+  modules: ModuleKey[]
+  state: ModuleState
+  configured: boolean
+  configuredAt: string | null
+  canEdit: boolean
+}
+
+/**
+ * Saves which sidebar sections the workspace uses. The sidebar and the
+ * dashboard are server-rendered from it, so the caller refreshes the route
+ * once this lands.
+ */
+export function useSaveModules() {
+  return useMutation({
+    mutationFn: (modules: ModuleKey[]) =>
+      apiFetch<ModulesResponse>("/api/organization/modules", {
+        method: "PUT",
+        body: JSON.stringify({ modules }),
+      }),
   })
 }

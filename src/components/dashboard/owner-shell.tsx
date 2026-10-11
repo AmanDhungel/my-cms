@@ -29,8 +29,17 @@ import {
   TicketsIcon,
   WalletIcon,
 } from "@/components/dashboard/nav-icons";
+import { SectionOff } from "@/components/dashboard/modules/section-off";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { initialsOf, type Viewer } from "@/components/dashboard/viewer";
+import {
+  ALL_MODULES_ON,
+  NAV_SECTIONS,
+  isPathTurnedOff,
+  moduleForPath,
+  visibleSections,
+  type ModuleState,
+} from "@/lib/modules";
 import { useUnreadCount } from "@/lib/queries";
 
 type NavItem = {
@@ -48,9 +57,12 @@ type NavItem = {
 export function OwnerShell({
   viewer,
   counts,
+  modules = ALL_MODULES_ON,
   children,
 }: {
   viewer: Viewer;
+  /** The sections this workspace uses; all of them when it never chose. */
+  modules?: ModuleState;
   counts: {
     people: number;
     pendingInvites: number;
@@ -72,155 +84,65 @@ export function OwnerShell({
   // full navigation once the feed is read.
   const unread = useUnreadCount(counts.unread).data.unread;
 
-  const workspace: NavItem[] = [
-    { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
-    {
-      href: "/dashboard/projects",
-      label: "Projects",
-      icon: ProjectsIcon,
-      count: counts.projects,
-    },
-    {
-      href: "/dashboard/tickets",
-      label: "All tickets",
-      icon: TicketsIcon,
-      count: counts.tickets,
-    },
-    {
-      href: "/dashboard/people",
-      label: "People",
-      icon: PeopleIcon,
-      count: counts.people,
-    },
-    {
-      href: "/dashboard/attendance",
-      label: "Attendance",
-      icon: ClockIcon,
-    },
-    {
-      href: "/dashboard/approvals",
-      label: "Approvals",
+  // Icons and badges by link; which links show, in what order and under
+  // which heading comes from the shared config (lib/modules.ts), filtered by
+  // role first and then by the sections this workspace uses.
+  const decorations: Record<string, Omit<NavItem, "href" | "label">> = {
+    "/dashboard": { icon: DashboardIcon },
+    "/dashboard/projects": { icon: ProjectsIcon, count: counts.projects },
+    "/dashboard/tickets": { icon: TicketsIcon, count: counts.tickets },
+    "/dashboard/people": { icon: PeopleIcon, count: counts.people },
+    "/dashboard/attendance": { icon: ClockIcon },
+    "/dashboard/approvals": {
       icon: ApprovalsIcon,
       count: counts.approvals,
       accent: true,
     },
-  ];
+    // Everything with a date on it that isn't a ticket: what is coming up,
+    // and who is meant to be where.
+    "/dashboard/calendar": { icon: CalendarIcon },
+    "/dashboard/meetings": { icon: HandshakeIcon },
+    "/dashboard/installations": { icon: WrenchIcon },
+    "/dashboard/follow-ups": { icon: LoopIcon },
+    "/dashboard/schedules": { icon: RosterIcon },
+    "/dashboard/deadlines": { icon: FlagIcon },
+    "/dashboard/maintenance": { icon: WrenchIcon, count: counts.maintenance },
+    // Stock and the bills raised against it sit together, away from the
+    // day-to-day ticket work above them. Expenses and Payments are the
+    // owner's alone; a supervisor records stock purchases from Inventory.
+    "/dashboard/inventory": { icon: BoxIcon, count: counts.inventory },
+    "/dashboard/sales": { icon: ReceiptIcon, count: counts.sales },
+    "/dashboard/customers": { icon: ContactIcon, count: counts.customers },
+    "/dashboard/expenses": { icon: OutgoingIcon, count: counts.expenses },
+    "/dashboard/payments": { icon: WalletIcon, count: counts.payments },
+    // Four groups rather than twenty-five links: each opens a hub listing
+    // the reports under it, which keeps the sidebar readable without hiding
+    // any.
+    "/dashboard/reports/sales": { icon: ChartIcon },
+    "/dashboard/reports/inventory": { icon: StackIcon },
+    "/dashboard/reports/finance": { icon: CoinsIcon },
+    "/dashboard/reports/employee": { icon: BadgeIcon },
+    "/dashboard/notifications": { icon: BellIcon, count: unread, alert: true },
+    "/dashboard/settings": { icon: SettingsIcon },
+  };
 
-  // Everything with a date on it that isn't a ticket: what is coming up, and
-  // who is meant to be where.
-  const operations: NavItem[] = [
-    { href: "/dashboard/calendar", label: "Calendar", icon: CalendarIcon },
-    { href: "/dashboard/meetings", label: "Meetings", icon: HandshakeIcon },
-    {
-      href: "/dashboard/installations",
-      label: "Installation dates",
-      icon: WrenchIcon,
-    },
-    { href: "/dashboard/follow-ups", label: "Follow-ups", icon: LoopIcon },
-    {
-      href: "/dashboard/schedules",
-      label: "Employee schedules",
-      icon: RosterIcon,
-    },
-    {
-      href: "/dashboard/deadlines",
-      label: "Important deadlines",
-      icon: FlagIcon,
-    },
-    {
-      href: "/dashboard/maintenance",
-      label: "Maintenance",
-      icon: WrenchIcon,
-      count: counts.maintenance,
-    },
-  ];
+  const sections = visibleSections(NAV_SECTIONS, {
+    role: viewer.role,
+    modules,
+  }).map((section) => ({
+    ...section,
+    items: section.items.map(
+      (item): NavItem => ({
+        href: item.href,
+        label: item.label,
+        ...decorations[item.href],
+      }),
+    ),
+  }));
 
-  // Stock and the bills raised against it sit together, away from the
-  // day-to-day ticket work above them.
-  const salesStock: NavItem[] = [
-    {
-      href: "/dashboard/inventory",
-      label: "Inventory",
-      icon: BoxIcon,
-      count: counts.inventory,
-    },
-    {
-      href: "/dashboard/sales",
-      label: "Sales",
-      icon: ReceiptIcon,
-      count: counts.sales,
-    },
-    {
-      href: "/dashboard/customers",
-      label: "Parties",
-      icon: ContactIcon,
-      count: counts.customers,
-    },
-    // What the business pays out is the owner's business alone. Both of
-    // these sit behind that rule; a supervisor records stock purchases from
-    // the Inventory page instead.
-    ...(viewer.role === "owner"
-      ? [
-          {
-            href: "/dashboard/expenses",
-            label: "Expenses",
-            icon: OutgoingIcon,
-            count: counts.expenses,
-          },
-          {
-            href: "/dashboard/payments",
-            label: "Payments",
-            icon: WalletIcon,
-            count: counts.payments,
-          },
-        ]
-      : []),
-  ];
-
-  // Four groups rather than twenty-five links: each opens a hub listing the
-  // reports under it, which keeps the sidebar readable without hiding any.
-  const reports: NavItem[] = [
-    {
-      href: "/dashboard/reports/sales",
-      label: "Sales reports",
-      icon: ChartIcon,
-    },
-    {
-      href: "/dashboard/reports/inventory",
-      label: "Inventory reports",
-      icon: StackIcon,
-    },
-    // Payments and accounts are the owner's alone.
-    ...(viewer.role === "owner"
-      ? [
-          {
-            href: "/dashboard/reports/finance",
-            label: "Finance reports",
-            icon: CoinsIcon,
-          },
-        ]
-      : []),
-    {
-      href: "/dashboard/reports/employee",
-      label: "Employee reports",
-      icon: BadgeIcon,
-    },
-  ];
-
-  const account: NavItem[] = [
-    {
-      href: "/dashboard/notifications",
-      label: "Notifications",
-      icon: BellIcon,
-      count: unread,
-      alert: true,
-    },
-    {
-      href: "/dashboard/settings",
-      label: "Organization settings",
-      icon: SettingsIcon,
-    },
-  ];
+  const turnedOff = isPathTurnedOff(pathname, modules)
+    ? NAV_SECTIONS.find((section) => section.module === moduleForPath(pathname))
+    : undefined;
 
   return (
     <div className="bg-n-50 min-h-screen">
@@ -284,36 +206,15 @@ export function OwnerShell({
             </span>
           </div>
 
-          <NavGroup
-            label="Workspace"
-            items={workspace}
-            pathname={pathname}
-            pendingInvites={counts.pendingInvites}
-          />
-          <NavGroup
-            label="Operations"
-            items={operations}
-            pathname={pathname}
-            pendingInvites={counts.pendingInvites}
-          />
-          <NavGroup
-            label="Sales & stock"
-            items={salesStock}
-            pathname={pathname}
-            pendingInvites={counts.pendingInvites}
-          />
-          <NavGroup
-            label="Reports & analytics"
-            items={reports}
-            pathname={pathname}
-            pendingInvites={counts.pendingInvites}
-          />
-          <NavGroup
-            label="Account"
-            items={account}
-            pathname={pathname}
-            pendingInvites={counts.pendingInvites}
-          />
+          {sections.map((section) => (
+            <NavGroup
+              key={section.module ?? "account"}
+              label={section.label}
+              items={section.items}
+              pathname={pathname}
+              pendingInvites={counts.pendingInvites}
+            />
+          ))}
 
           {viewer.superAdmin ? (
             <Link
@@ -341,17 +242,20 @@ export function OwnerShell({
           </div>
         </aside>
 
-        <div className="min-w-0">{children}</div>
+        <div className="min-w-0">
+          {turnedOff ? (
+            <SectionOff
+              section={turnedOff.label}
+              canManage={viewer.role === "owner" || Boolean(viewer.superAdmin)}
+            />
+          ) : (
+            children
+          )}
+        </div>
       </div>
 
       <MobileNav
-        items={[
-          ...workspace,
-          ...operations,
-          ...salesStock,
-          ...reports,
-          ...account,
-        ]}
+        items={sections.flatMap((section) => section.items)}
         pathname={pathname}
       />
     </div>
@@ -364,16 +268,19 @@ function NavGroup({
   pathname,
   pendingInvites,
 }: {
-  label: string;
+  /** `null` when only an always-on link is left of a section that is off. */
+  label: string | null;
   items: NavItem[];
   pathname: string;
   pendingInvites: number;
 }) {
   return (
     <nav className="flex flex-col gap-0.5">
-      <span className="text-n-400 px-2 pb-1.5 font-mono text-[10.5px] tracking-[0.08em] uppercase">
-        {label}
-      </span>
+      {label ? (
+        <span className="text-n-400 px-2 pb-1.5 font-mono text-[10.5px] tracking-[0.08em] uppercase">
+          {label}
+        </span>
+      ) : null}
       {items.map((item) => {
         const Icon = item.icon;
         const active = isActive(pathname, item.href);

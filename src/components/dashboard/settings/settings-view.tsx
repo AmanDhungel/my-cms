@@ -48,6 +48,7 @@ export function SettingsView({
   canEdit,
   stats,
   uploads = true,
+  sections,
 }: {
   business: BusinessDTO
   me: UserDTO
@@ -55,6 +56,8 @@ export function SettingsView({
   stats: { members: number; pendingInvites: number }
   /** Whether file storage is configured; the logo picker says so when not. */
   uploads?: boolean
+  /** The Sections panel, for the owner or a super admin (dashboard/modules). */
+  sections?: React.ReactNode
 }) {
   const router = useRouter()
   const {
@@ -496,6 +499,8 @@ export function SettingsView({
           <Row label="Role" value={me.role} />
         </div>
       </Panel>
+
+      {sections}
     </DashboardMain>
   )
 }
