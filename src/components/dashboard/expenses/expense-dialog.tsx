@@ -28,8 +28,9 @@ import {
 } from "@/components/dashboard/account-allocation-field"
 import {
   PartyPicker,
+  rememberAccount,
+  useAccountFor,
   useCanSeeAccounts,
-  useDefaultAccountId,
 } from "@/components/dashboard/money-pickers"
 import { money, quantity } from "@/lib/billing"
 import {
@@ -192,7 +193,8 @@ function Body({
   const people = usePeople()
   const create = useCreateExpense()
   const update = useUpdateExpense(editing?.id ?? "")
-  const fallbackAccount = useDefaultAccountId()
+  // The account last used with this method, else the default one.
+  const fallbackAccount = useAccountFor(method)
   const canSeeAccounts = useCanSeeAccounts()
   // On an edit, the low-balance check puts this expense's own money back first.
   const previous = React.useMemo(
@@ -342,6 +344,7 @@ function Body({
 
     mutation.mutate(parsed.data, {
       onSuccess: ({ expense }) => {
+        rememberAccount(expense.method, expense.accountId ?? expense.allocations?.[0]?.accountId)
         toast.success(
           editing
             ? `${money(expense.amount)} to ${expense.payee} corrected`

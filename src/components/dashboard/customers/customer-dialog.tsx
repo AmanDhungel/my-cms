@@ -24,6 +24,7 @@ import {
 } from "@/lib/queries"
 import { customerSchema } from "@/lib/validations/customers"
 import type { CustomerDTO } from "@/models/customer"
+import type { PartyKind } from "@/lib/work-constants"
 
 type Errors = Partial<Record<string, string>>
 
@@ -36,12 +37,15 @@ export function CustomerDialog({
   onClose,
   onCreated,
   customer,
+  defaultKind,
 }: {
   open: boolean
   onClose: () => void
   onCreated?: (customer: CustomerDTO) => void
   /** Present when editing an existing customer. */
   customer?: CustomerDTO
+  /** A new party's starting kind, e.g. "vendor" from a Money-out form. */
+  defaultKind?: PartyKind
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
@@ -63,7 +67,12 @@ export function CustomerDialog({
         {/* Mounted only while open, so each visit starts from the record as
             it stands rather than from whatever was typed last time. */}
         {open ? (
-          <Body onClose={onClose} onCreated={onCreated} customer={customer} />
+          <Body
+            onClose={onClose}
+            onCreated={onCreated}
+            customer={customer}
+            defaultKind={defaultKind}
+          />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -74,12 +83,14 @@ function Body({
   onClose,
   onCreated,
   customer,
+  defaultKind,
 }: {
   onClose: () => void
   onCreated?: (customer: CustomerDTO) => void
   customer?: CustomerDTO
+  defaultKind?: PartyKind
 }) {
-  const [form, setForm] = React.useState(() => blank(customer))
+  const [form, setForm] = React.useState(() => blank(customer, defaultKind))
   const [errors, setErrors] = React.useState<Errors>({})
 
   const create = useCreateCustomer()
@@ -277,10 +288,10 @@ function Body({
   )
 }
 
-function blank(customer?: CustomerDTO) {
+function blank(customer?: CustomerDTO, defaultKind?: PartyKind) {
   return {
     name: customer?.name ?? "",
-    kind: customer?.kind ?? "customer",
+    kind: customer?.kind ?? defaultKind ?? "customer",
     company: customer?.company ?? "",
     phone: customer?.phone ?? "",
     email: customer?.email ?? "",

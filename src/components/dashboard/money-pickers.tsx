@@ -6,6 +6,7 @@ import { cn } from "cn"
 
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import { money } from "@/lib/billing"
+import { CustomerDialog } from "@/components/dashboard/customers/customer-dialog"
 import { useAccounts, useCustomers } from "@/lib/queries"
 import type { PartyKind } from "@/lib/work-constants"
 
@@ -35,6 +36,7 @@ export function PartyPicker({
   side,
   error,
   placeholder,
+  autoFocus,
 }: {
   label: string
   name: string
@@ -44,7 +46,11 @@ export function PartyPicker({
   side: PartyKind
   error?: string
   placeholder?: string
+  /** Put the cursor here when the form opens. */
+  autoFocus?: boolean
 }) {
+  // "+ Add party": saved in a dialog over the form, then picked.
+  const [adding, setAdding] = React.useState(false)
   const query = useCustomers()
   const parties = (query.data?.customers ?? []).filter(
     (one) => one.kind === side || one.kind === "both"
@@ -54,9 +60,18 @@ export function PartyPicker({
 
   return (
     <div className="flex flex-col gap-[7px]">
-      <FieldLabel>{label}</FieldLabel>
-
+      <div className="flex items-center justify-between gap-2">
+        <FieldLabel>{label}</FieldLabel>
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="text-p-600 text-[12px] font-semibold"
+        >
+          + Add party
+        </button>
+      </div>
       <select
+        autoFocus={autoFocus}
         value={partyId}
         onChange={(event) => {
           const id = event.target.value
@@ -100,6 +115,15 @@ export function PartyPicker({
       )}
 
       <FieldError message={error} />
+      <CustomerDialog
+        open={adding}
+        onClose={() => setAdding(false)}
+        defaultKind={side}
+        onCreated={(party) => {
+          onParty(party.id)
+          onName(party.name)
+        }}
+      />
     </div>
   )
 }
@@ -117,6 +141,35 @@ export function PartyPicker({
 export function useCanSeeAccounts() {
   const { data } = useSession()
   return data?.user?.role === "owner"
+}
+
+/**
+ * The account a form starts on for a payment method: the one used last time
+ * with that method (remembered in this browser only), while it is still
+ * open — else the workspace's default. A per-person convenience; nothing is
+ * stored on the server.
+ */
+export function useAccountFor(method: string) {
+  const fallback = useDefaultAccountId()
+  const query = useAccounts(useCanSeeAccounts())
+  const live = (query.data?.accounts ?? []).filter((one) => !one.archived)
+  let last: string | null = null
+  try {
+    last = typeof window === "undefined" ? null : window.localStorage.getItem(`ems.lastAccount.${method}`)
+  } catch {
+    last = null
+  }
+  return last && live.some((one) => one.id === last) ? last : fallback
+}
+
+/** After a save: remember which account went with which method. */
+export function rememberAccount(method: string, accountId: string | undefined) {
+  if (!accountId) return
+  try {
+    window.localStorage.setItem(`ems.lastAccount.${method}`, accountId)
+  } catch {
+    // Private windows and blocked storage simply don't remember.
+  }
 }
 
 export function useDefaultAccountId() {

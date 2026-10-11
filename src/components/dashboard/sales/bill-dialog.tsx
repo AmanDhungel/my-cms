@@ -36,8 +36,9 @@ import {
   type ReceivedDraft,
 } from "@/components/dashboard/sales/received-now"
 import {
+  rememberAccount,
+  useAccountFor,
   useCanSeeAccounts,
-  useDefaultAccountId,
 } from "@/components/dashboard/money-pickers"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -247,7 +248,10 @@ function Editor({
   const [customerDialogOpen, setCustomerDialogOpen] = React.useState(false)
   // Money taken at the till, and when the rest is due (received-now.tsx).
   const [received, setReceived] = React.useState<ReceivedDraft>(emptyReceived)
-  const fallbackAccount = useDefaultAccountId()
+  // The account last used with how the money came in, else the default one.
+  const fallbackAccount = useAccountFor(
+    payment === "cheque" ? "cheque" : received.method
+  )
   const canSeeAccounts = useCanSeeAccounts()
 
   const stock = useInventoryItems(fromInventory)
@@ -350,6 +354,10 @@ function Editor({
 
     create.mutate(parsed.data, {
       onSuccess: ({ bill }) => {
+        const taken = parsed.data.received
+        if (taken) {
+          rememberAccount(taken.method, taken.accountId ?? taken.allocations?.[0]?.accountId)
+        }
         toast.success(`${bill.number} raised`)
         onCreated?.(bill)
         onClose()
