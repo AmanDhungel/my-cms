@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { AccountsPanel } from "@/components/dashboard/payments/accounts-panel"
+import { DayBookPanel } from "@/components/dashboard/payments/day-book-panel"
 import { PlusIcon } from "@/components/dashboard/nav-icons"
 import { Pagination, paginate } from "@/components/dashboard/pagination"
 import { PaymentDialog } from "@/components/dashboard/payments/payment-dialog"
@@ -52,7 +53,7 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
   online: "Online",
 }
 
-type Tab = "ledger" | "parties" | "accounts"
+type Tab = "ledger" | "parties" | "accounts" | "daybook"
 
 /**
  * Money that has changed hands: what you paid out to companies and people,
@@ -142,6 +143,7 @@ export function PaymentsView({ today }: { today: string }) {
             ["ledger", "Payments"],
             ["parties", "Parties"],
             ["accounts", "Accounts"],
+            ["daybook", "Day book"],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -179,6 +181,8 @@ export function PaymentsView({ today }: { today: string }) {
             </button>
           }
         />
+      ) : tab === "daybook" ? (
+        <DayBookPanel today={today} />
       ) : payments.length === 0 ? (
         <EmptyState
           message="Nothing recorded yet. Put in what you pay suppliers and what customers hand over, and both sides add up here."

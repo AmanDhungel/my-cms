@@ -1569,3 +1569,61 @@ export function useDeleteEstimate(id: string) {
     onSuccess: () => invalidateEstimates(client),
   })
 }
+
+/* ---------------------------------------------------- day book, statements */
+
+export type DaybookEntryDTO = {
+  id: string
+  on: string
+  at: number
+  type: "sale" | "payment_in" | "purchase" | "purchase_payment" | "expense" | "payment_out"
+  direction: "in" | "out"
+  method: string
+  amount: number
+  party: string
+  reference: string | null
+  note: string | null
+  accounts: string[]
+  href: string
+}
+
+/** Every money movement in a range (owner only). */
+export function useDayBook(params: {
+  from: string
+  to: string
+  accountId?: string
+  type?: string
+  cashOnly?: boolean
+}) {
+  const search = new URLSearchParams({ from: params.from, to: params.to })
+  if (params.accountId) search.set("accountId", params.accountId)
+  if (params.type) search.set("type", params.type)
+  if (params.cashOnly) search.set("cashOnly", "1")
+  const qs = search.toString()
+  return useQuery({
+    queryKey: ["payments", "day-book", qs],
+    queryFn: () =>
+      apiFetch<{ from: string; to: string; today: string; entries: DaybookEntryDTO[]; moneyIn: number; moneyOut: number; net: number }>(
+        `/api/day-book?${qs}`
+      ),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export type AccountStatementDTO = {
+  account: { id: string; name: string; number: string | null; openingBalance: number; openedOn: string | null; archived: boolean }
+  today: string
+  opening: number
+  closing: number
+  moneyIn: number
+  moneyOut: number
+  rows: { id: string; on: string; direction: "in" | "out"; amount: number; running: number; what: string; detail: string; href: string }[]
+}
+
+export function useAccountStatement(id: string, enabled = true) {
+  return useQuery({
+    queryKey: ["accounts", id, "statement"],
+    queryFn: () => apiFetch<AccountStatementDTO>(`/api/accounts/${id}/statement`),
+    enabled,
+  })
+}
