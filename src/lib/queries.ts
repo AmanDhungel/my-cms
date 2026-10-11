@@ -39,6 +39,7 @@ import type {
 } from "@/lib/work-constants"
 import type { TicketDTO } from "@/models/ticket"
 import type { ModuleKey, ModuleState } from "@/lib/modules"
+import type { SettleStatus } from "@/lib/settlement"
 import type { UserDTO } from "@/models/user"
 
 export type TicketScope =
@@ -632,6 +633,12 @@ export function useVoidBill(id: string) {
 function invalidateSales(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["bills"] })
   void client.invalidateQueries({ queryKey: ["inventory"] })
+  // A sale can take money at the till (an account and a party move), and is
+  // what every party balance is built from.
+  void client.invalidateQueries({ queryKey: ["payments"] })
+  void client.invalidateQueries({ queryKey: ["accounts"] })
+  void client.invalidateQueries({ queryKey: ["khata"] })
+  void client.invalidateQueries({ queryKey: ["customers"] })
 }
 
 /** Marking a bill paid, unpaid or on cheque after it was raised. */
@@ -703,6 +710,9 @@ function invalidateMoney(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["payments"] })
   void client.invalidateQueries({ queryKey: ["bills"] })
   void client.invalidateQueries({ queryKey: ["accounts"] })
+  // Every party balance and statement is read from the same rows.
+  void client.invalidateQueries({ queryKey: ["khata"] })
+  void client.invalidateQueries({ queryKey: ["customers"] })
 }
 
 /* ----------------------------------------------------------------- expenses */
@@ -761,6 +771,8 @@ function invalidateSpend(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["inventory"] })
   // The money came out of an account, whose balance shows on the Accounts tab.
   void client.invalidateQueries({ queryKey: ["accounts"] })
+  void client.invalidateQueries({ queryKey: ["khata"] })
+  void client.invalidateQueries({ queryKey: ["customers"] })
 }
 
 /* -------------------------------------------------------------- maintenance */
@@ -1405,5 +1417,91 @@ export function useSaveModules() {
         method: "PUT",
         body: JSON.stringify({ modules }),
       }),
+  })
+}
+
+/* -------------------------------------------------------------------- khata */
+
+export type KhataTone = "owe_you" | "you_owe" | "settled"
+
+export type KhataParty = {
+  id: string
+  name: string
+  kind: string
+  phone: string | null
+  /** + they owe you, − you owe them. */
+  balance: number
+  tone: KhataTone
+}
+
+/** Every party's balance and the To collect / To pay strip (owner only). */
+export function useKhata(enabled = true) {
+  return useQuery({
+    queryKey: ["khata"],
+    queryFn: () =>
+      apiFetch<{ parties: KhataParty[]; toCollect: number; toPay: number }>("/api/khata"),
+    enabled,
+    retry: false,
+  })
+}
+
+export type StatementRowDTO = {
+  id: string
+  kind: "sale" | "received" | "settled" | "purchase" | "paid"
+  on: string
+  what: string
+  detail: string | null
+  billed: number
+  paid: number
+  running: number
+  href: string | null
+}
+
+export type PartyStatement = {
+  business: { name: string }
+  party: CustomerDTO
+  today: string
+  balance: number
+  tone: KhataTone
+  statement: {
+    from: string | null
+    to: string | null
+    opening: number
+    closing: number
+    billed: number
+    paid: number
+    rows: StatementRowDTO[]
+  }
+  open: {
+    id: string
+    kind: "sale" | "purchase"
+    what: string
+    on: string
+    dueOn: string
+    href: string | null
+    total: number
+    paid: number
+    due: number
+    settlement: SettleStatus
+  }[]
+  unapplied: { id: string; kind: string; what: string; on: string; amount: number }[]
+  aging: Record<string, number>
+}
+
+/** One party's statement for a period (the Ledger tab). */
+export function usePartyStatement(
+  id: string,
+  params: { from?: string | null; to?: string | null; types?: string[] }
+) {
+  const search = new URLSearchParams()
+  if (params.from) search.set("from", params.from)
+  if (params.to) search.set("to", params.to)
+  if (params.types?.length) search.set("types", params.types.join(","))
+  const qs = search.toString()
+  return useQuery({
+    queryKey: ["customers", id, "statement", qs],
+    queryFn: () =>
+      apiFetch<PartyStatement>(`/api/customers/${id}/statement${qs ? `?${qs}` : ""}`),
+    placeholderData: (previous) => previous,
   })
 }

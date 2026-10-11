@@ -7,7 +7,11 @@ import { Bill } from "@/models/bill"
 import { Expense } from "@/models/expense"
 import { Payment } from "@/models/payment"
 import { PaymentAllocation } from "@/models/payment-allocation"
-import { fromPaisa } from "@/lib/allocations"
+import { Customer } from "@/models/customer"
+import { fromPaisa, toPaisa } from "@/lib/allocations"
+import { kindLabel } from "@/lib/expenses"
+import { balanceOf, type KhataEvent } from "@/lib/khata"
+import { dayKeyInZone } from "@/lib/time"
 
 /**
  * Running totals: what a party owes, and what an account holds.
@@ -228,4 +232,190 @@ export async function partyLedger(
     owed: balance,
     running,
   }
+}
+
+// ---- the khata: one balance for every screen ------------------------------
+
+/**
+ * Every party's account events, for the whole workspace in one pass (see
+ * lib/khata.ts for the rules and the signs). The Ledger tab, the Parties
+ * list balance, the aging reports and the dashboard all read this, and
+ * nothing else, for what a party owes.
+ *
+ * Which party a bill belongs to follows the Parties list exactly: the party
+ * it was raised for, or — for a bill raised before that party was saved —
+ * the party of the same name (the last of that name, by name order, as the
+ * list resolves it). A payment against a bill belongs to the bill's party; a
+ * purchase's cash row and later payments, to the purchase's party.
+ *
+ * The party page's older ledger (`partyLedger` above, and its endpoint) is
+ * left exactly as it was, for anything that still reads it.
+ */
+export async function loadKhata(businessId: string, zone: string) {
+  await connectToDatabase()
+  const business = oid(businessId)
+
+  const [parties, bills, payments, purchases] = await Promise.all([
+    Customer.find({ business }).sort({ name: 1 }),
+    Bill.find({ business }).select(
+      "number customer customerRef total payment status lines createdAt dueDate"
+    ),
+    Payment.find({ business }).select(
+      "direction amount method reference note partyRef bill expense purchase paidOn createdAt"
+    ),
+    Expense.find({ business, partyRef: { $ne: null } }).select(
+      "kind payee partyRef amount reference note spentOn dueDate createdAt"
+    ),
+  ])
+
+  const known = new Set(parties.map((party) => String(party._id)))
+  const byName = new Map<string, string>()
+  for (const party of parties) byName.set(party.name.toLowerCase(), String(party._id))
+
+  const billParty = new Map<string, string>()
+  for (const bill of bills) {
+    const ref = bill.customerRef ? String(bill.customerRef) : null
+    const party = ref && known.has(ref) ? ref : byName.get(bill.customer.name.toLowerCase())
+    if (party) billParty.set(String(bill._id), party)
+  }
+  const purchaseParty = new Map<string, string>()
+  for (const purchase of purchases) {
+    const ref = String(purchase.partyRef)
+    if (known.has(ref)) purchaseParty.set(String(purchase._id), ref)
+  }
+
+  const events = new Map<string, KhataEvent[]>()
+  const add = (party: string | undefined | null, event: KhataEvent) => {
+    if (!party || !known.has(party)) return
+    const list = events.get(party) ?? []
+    list.push(event)
+    events.set(party, list)
+  }
+  const day = (date: Date) => dayKeyInZone(date, zone)
+  const at = (date: unknown) => (date instanceof Date ? date.getTime() : 0)
+
+  const live = new Set<string>()
+  const receivedOn = new Map<string, number>()
+  for (const payment of payments) {
+    if (payment.direction === "in" && payment.bill) {
+      const key = String(payment.bill)
+      receivedOn.set(key, (receivedOn.get(key) ?? 0) + toPaisa(payment.amount))
+    }
+  }
+
+  for (const bill of bills) {
+    if (bill.status !== "issued" || bill.payment === "quotation") continue
+    const id = String(bill._id)
+    live.add(id)
+    const party = billParty.get(id)
+    const total = toPaisa(bill.total)
+    const on = day(bill.createdAt as Date)
+    add(party, {
+      id,
+      kind: "sale",
+      on,
+      what: `Sale ${bill.number}`,
+      detail: `${bill.lines.length} item${bill.lines.length === 1 ? "" : "s"}`,
+      billed: total,
+      paid: 0,
+      delta: total,
+      href: `/dashboard/sales/${id}`,
+      dueOn: bill.dueDate ? day(bill.dueDate) : on,
+      at: at(bill.createdAt),
+    })
+    // Marked paid with no payment (or not enough) behind it: it has always
+    // read as settled, so the rest is settled here too.
+    const uncovered = total - (receivedOn.get(id) ?? 0)
+    if (bill.payment === "paid" && uncovered > 0) {
+      add(party, {
+        id: `settled-${id}`,
+        kind: "settled",
+        on,
+        what: `Marked paid at sale (${bill.number})`,
+        detail: "No payment was recorded for it",
+        billed: 0,
+        paid: uncovered,
+        delta: -uncovered,
+        href: `/dashboard/sales/${id}`,
+        appliesTo: id,
+        at: at(bill.createdAt) + 1,
+      })
+    }
+  }
+
+  for (const purchase of purchases) {
+    const id = String(purchase._id)
+    const amount = toPaisa(purchase.amount)
+    const on = day(purchase.spentOn)
+    add(purchaseParty.get(id), {
+      id,
+      kind: "purchase",
+      on,
+      what: purchase.kind === "stock" ? "Purchase" : kindLabel(purchase.kind),
+      detail: purchase.reference || purchase.note || null,
+      billed: amount,
+      paid: 0,
+      delta: -amount,
+      href: purchase.kind === "stock" ? "/dashboard/inventory" : "/dashboard/expenses",
+      dueOn: purchase.dueDate ? day(purchase.dueDate) : on,
+      at: at(purchase.createdAt),
+    })
+  }
+
+  for (const payment of payments) {
+    const id = String(payment._id)
+    const amount = toPaisa(payment.amount)
+    const on = day(payment.paidOn)
+    const detail =
+      [payment.reference, payment.note].filter(Boolean).join(" · ") || payment.method
+    if (payment.direction === "in") {
+      const bill = payment.bill ? String(payment.bill) : null
+      add(bill ? (billParty.get(bill) ?? String(payment.partyRef ?? "")) : String(payment.partyRef ?? ""), {
+        id,
+        kind: "received",
+        on,
+        what: "Payment received",
+        detail,
+        billed: 0,
+        paid: amount,
+        delta: -amount,
+        href: "/dashboard/payments",
+        appliesTo: bill && live.has(bill) ? bill : undefined,
+        at: at(payment.createdAt),
+      })
+    } else {
+      const linked = payment.purchase
+        ? String(payment.purchase)
+        : payment.expense
+          ? String(payment.expense)
+          : null
+      const party = linked && purchaseParty.has(linked)
+        ? purchaseParty.get(linked)
+        : String(payment.partyRef ?? "")
+      add(party, {
+        id,
+        kind: "paid",
+        on,
+        what: payment.expense ? "Paid at purchase" : payment.purchase ? "Payment for a purchase" : "Payment made",
+        detail,
+        billed: 0,
+        paid: amount,
+        delta: amount,
+        href: "/dashboard/payments",
+        appliesTo: linked && purchaseParty.has(linked) ? linked : undefined,
+        at: at(payment.createdAt) + (payment.expense ? 1 : 0),
+      })
+    }
+  }
+
+  return { parties, events }
+}
+
+/** Every party's balance, in paisa (+ they owe you, − you owe them). */
+export async function khataBalances(businessId: string, zone: string) {
+  const { parties, events } = await loadKhata(businessId, zone)
+  return parties.map((party) => {
+    const list = events.get(String(party._id)) ?? []
+    return { party, events: list, balance: balanceOf(list) }
+  })
 }

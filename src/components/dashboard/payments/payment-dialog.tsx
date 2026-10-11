@@ -49,6 +49,16 @@ import {
 
 type Errors = Partial<Record<string, string>>
 
+/** Starting values for a new payment (PaymentDialog's `initial`). */
+export type PaymentPrefill = {
+  direction: PaymentDirection
+  party: string
+  partyId: string
+  amount?: number
+  billId?: string
+  purchaseId?: string
+}
+
 const METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: "Cash",
   cheque: "Cheque",
@@ -61,6 +71,7 @@ export function PaymentDialog({
   onClose,
   today,
   editing = null,
+  initial,
 }: {
   open: boolean
   onClose: () => void
@@ -68,6 +79,11 @@ export function PaymentDialog({
   today: string
   /** A payment to correct; absent to record a new one. */
   editing?: PaymentDTO | null
+  /**
+   * A new payment's starting values, e.g. from a party's Ledger tab: who,
+   * which way, and the oldest bill or purchase still open.
+   */
+  initial?: PaymentPrefill
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
@@ -88,7 +104,12 @@ export function PaymentDialog({
         </DialogHeader>
         {/* Mounted only while open, so each entry starts from a clean sheet. */}
         {open ? (
-          <Body onClose={onClose} today={today} editing={editing} />
+          <Body
+            onClose={onClose}
+            today={today}
+            editing={editing}
+            initial={initial}
+          />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -99,21 +120,25 @@ function Body({
   onClose,
   today,
   editing,
+  initial,
 }: {
   onClose: () => void
   today: string
   editing: PaymentDTO | null
+  initial?: PaymentPrefill
 }) {
   const [direction, setDirection] = React.useState<PaymentDirection>(
-    editing?.direction ?? "in"
+    editing?.direction ?? initial?.direction ?? "in"
   )
-  const [party, setParty] = React.useState(editing?.party ?? "")
-  const [partyId, setPartyId] = React.useState(editing?.partyId ?? "")
+  const [party, setParty] = React.useState(editing?.party ?? initial?.party ?? "")
+  const [partyId, setPartyId] = React.useState(
+    editing?.partyId ?? initial?.partyId ?? ""
+  )
   const [allocation, setAllocation] = React.useState<AllocationDraft>(() =>
     editing ? draftFrom(editing) : emptyAllocationDraft
   )
   const [amount, setAmount] = React.useState(
-    editing ? String(editing.amount) : ""
+    editing ? String(editing.amount) : initial?.amount ? String(initial.amount) : ""
   )
   const [method, setMethod] = React.useState<PaymentMethod>(
     editing?.method ?? "cash"
@@ -121,9 +146,13 @@ function Body({
   const [reference, setReference] = React.useState(editing?.reference ?? "")
   const [note, setNote] = React.useState(editing?.note ?? "")
   const [paidOn, setPaidOn] = React.useState(editing?.paidOn ?? today)
-  const [billId, setBillId] = React.useState(editing?.bill?.id ?? "")
+  const [billId, setBillId] = React.useState(
+    editing?.bill?.id ?? initial?.billId ?? ""
+  )
   // Money out can pay off a purchase made on credit.
-  const [purchaseId, setPurchaseId] = React.useState(editing?.purchaseId ?? "")
+  const [purchaseId, setPurchaseId] = React.useState(
+    editing?.purchaseId ?? initial?.purchaseId ?? ""
+  )
   const [errors, setErrors] = React.useState<Errors>({})
 
   const bills = useBills()
