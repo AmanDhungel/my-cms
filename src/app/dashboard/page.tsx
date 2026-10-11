@@ -19,6 +19,8 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
 import { getWorkspace } from "@/lib/workspace"
 import { NAV_SECTIONS, resolveModules } from "@/lib/modules"
+import { dashboardMoney } from "@/lib/dashboard-money"
+import { MoneyWidgets } from "@/components/dashboard/money-widgets"
 import { toBusinessDTO } from "@/models/business"
 import { WorkRequest, toRequestDTO } from "@/models/request"
 import { windowOverlaps } from "@/lib/ticket-window"
@@ -51,6 +53,14 @@ export default async function DashboardPage() {
   // Widgets of a section the workspace has switched off are left out (and
   // not queried); a workspace that never chose has every section on.
   const modules = resolveModules(business.enabledModules)
+  // To collect / To pay / Open estimates — only with Sales & stock on; the
+  // balances are the owner's, like every other money page.
+  const money = modules.sales_stock
+    ? await dashboardMoney(String(business._id), business.timeZone, {
+        balances: user.role === "owner",
+      })
+    : null
+  const moneyWidgets = money ? <MoneyWidgets {...money} /> : null
 
   if (!modules.workspace) {
     return (
@@ -59,6 +69,7 @@ export default async function DashboardPage() {
           eyebrow={longDate(business.timeZone)}
           title={`${greeting(business.timeZone)}, ${firstName(user.name)}`}
         />
+        {moneyWidgets}
         {modules.reports ? (
           <DashboardCharts finance={user.role === "owner"} />
         ) : (
@@ -244,6 +255,8 @@ export default async function DashboardPage() {
 
       {/* The crew never reach this page — they are returned an EmployeeHome
           above — so these need no guard of their own. */}
+      {moneyWidgets}
+
       {modules.reports ? (
         <DashboardCharts finance={user.role === "owner"} />
       ) : null}

@@ -278,7 +278,7 @@ export function ReportView({ report }: { report: ReportDef }) {
                         key={index}
                         className="border-n-200/70 hover:bg-n-50 border-b last:border-b-0"
                       >
-                        {columns.map((column) => (
+                        {columns.map((column, columnIndex) => (
                           <td
                             key={column.key}
                             className={cn(
@@ -288,7 +288,14 @@ export function ReportView({ report }: { report: ReportDef }) {
                                 : "text-left"
                             )}
                           >
-                            {render(row[column.key], column)}
+                            {/* A row may name where it leads (e.g. a party's ledger). */}
+                            {columnIndex === 0 && typeof row.href === "string" ? (
+                              <Link href={row.href} className="text-p-700 font-semibold hover:underline">
+                                {render(row[column.key], column)}
+                              </Link>
+                            ) : (
+                              render(row[column.key], column)
+                            )}
                           </td>
                         ))}
                       </tr>
