@@ -18,9 +18,19 @@ import {
 } from "@/components/ui/dialog"
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import {
-  AccountPicker,
+  AccountAllocationField,
+  allocationPayload,
+  draftFrom,
+  emptyAllocationDraft,
+  previousOf,
+  validateAllocation,
+  type AllocationDraft,
+} from "@/components/dashboard/account-allocation-field"
+import {
   PartyPicker,
-  useDefaultAccountId,
+  rememberAccount,
+  useAccountFor,
+  useCanSeeAccounts,
 } from "@/components/dashboard/money-pickers"
 import { money, quantity } from "@/lib/billing"
 import {
@@ -140,7 +150,17 @@ function Body({
   )
   const [payee, setPayee] = React.useState(editing?.payee ?? "")
   const [partyId, setPartyId] = React.useState(editing?.partyId ?? "")
-  const [accountId, setAccountId] = React.useState(editing?.accountId ?? "")
+  const [allocation, setAllocation] = React.useState<AllocationDraft>(() =>
+    editing ? draftFrom(editing) : emptyAllocationDraft
+  )
+  // A purchase on credit: part (or none) paid now, the rest owed to the party.
+  const [onCredit, setOnCredit] = React.useState(
+    Boolean(editing && editing.paidAtTime !== undefined && editing.paidAtTime < editing.amount)
+  )
+  const [paidNow, setPaidNow] = React.useState(
+    editing?.paidAtTime !== undefined ? String(editing.paidAtTime) : ""
+  )
+  const [dueDate, setDueDate] = React.useState(editing?.dueOn ?? "")
   const [employeeId, setEmployeeId] = React.useState(
     editing?.employee?.id ?? ""
   )
@@ -173,7 +193,14 @@ function Body({
   const people = usePeople()
   const create = useCreateExpense()
   const update = useUpdateExpense(editing?.id ?? "")
-  const fallbackAccount = useDefaultAccountId()
+  // The account last used with this method, else the default one.
+  const fallbackAccount = useAccountFor(method)
+  const canSeeAccounts = useCanSeeAccounts()
+  // On an edit, the low-balance check puts this expense's own money back first.
+  const previous = React.useMemo(
+    () => (editing ? previousOf(editing, "out") : null),
+    [editing]
+  )
   const mutation = editing ? update : create
   // Zod comes with the form, not the page (lib/lazy-schemas.ts).
   React.useEffect(() => {
@@ -235,6 +262,8 @@ function Body({
     cost: Number(line.cost) || 0,
   }))
   const total = buying ? linesTotal(priced) : Number(amount) || 0
+  // What leaves an account now: all of it, or the part paid on a credit purchase.
+  const paidAmount = onCredit ? Math.min(total, Math.max(0, Number(paidNow) || 0)) : total
 
   async function submit() {
     if (mutation.isPending) return
@@ -255,7 +284,15 @@ function Body({
       kind,
       payee,
       partyId: partyId || undefined,
-      accountId: accountId || fallbackAccount || undefined,
+      // Nothing for cash; one account, or a split, for anything else.
+      ...(paidAmount > 0 ? allocationPayload(allocation, method, fallbackAccount) : {}),
+      // "Paid in full" sends the whole amount on an edit (it may have been on
+      // credit before); a new one leaves it out, which the server reads the same.
+      ...(onCredit
+        ? { paidNow: paidAmount, ...(dueDate ? { dueDate } : {}) }
+        : editing
+          ? { paidNow: total }
+          : {}),
       employeeId: payroll && employeeId ? employeeId : undefined,
       amount: buying ? undefined : amount || 0,
       method,
@@ -271,20 +308,43 @@ function Body({
         : [],
     })
 
+    const next: Errors = {}
     if (!parsed.success) {
-      const next: Errors = {}
       for (const issue of parsed.error.issues) {
         // A line's own complaint is shown against the list, not against a
         // field called "lines.0.qty" that nobody can see.
         const path = issue.path.join(".") || "root"
         next[path.startsWith("lines") ? "lines" : path] ??= issue.message
       }
+    }
+    // The same account rules the server applies (a supervisor, who can't
+    // see the accounts, is not asked for one).
+    if (paidAmount > 0) {
+      Object.assign(
+        next,
+        validateAllocation(allocation, {
+          method,
+          amount: paidAmount,
+          fallbackAccountId: fallbackAccount,
+          requireAccount: canSeeAccounts,
+        })
+      )
+    }
+    if (onCredit && (Number(paidNow) || 0) > total) {
+      next.paidNow = "That is more than it comes to"
+    }
+    if (onCredit && !partyId) {
+      next.partyId = "Pick the party you owe the rest to"
+      next.payee ??= "Pick the party you owe the rest to — save them as a party first"
+    }
+    if (!parsed.success || Object.keys(next).length > 0) {
       setErrors(next)
       return
     }
 
     mutation.mutate(parsed.data, {
       onSuccess: ({ expense }) => {
+        rememberAccount(expense.method, expense.accountId ?? expense.allocations?.[0]?.accountId)
         toast.success(
           editing
             ? `${money(expense.amount)} to ${expense.payee} corrected`
@@ -411,7 +471,7 @@ function Body({
         <div
           className={cn(
             "grid gap-3.5",
-            buying ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-4"
+            buying ? "sm:grid-cols-2" : "sm:grid-cols-3"
           )}
         >
           {buying ? null : (
@@ -450,19 +510,21 @@ function Body({
             <FieldError message={errors.spentOn} />
           </label>
 
-          <AccountPicker
-            value={accountId}
-            onChange={setAccountId}
-            error={errors.accountId}
-          />
-
           <label className="flex flex-col gap-[7px]">
             <FieldLabel>Method</FieldLabel>
             <select
               value={method}
-              onChange={(event) =>
-                setMethod(event.target.value as PaymentMethod)
-              }
+              onChange={(event) => {
+                const next = event.target.value as PaymentMethod
+                setMethod(next)
+                // Cash comes out of no account: whatever was picked goes.
+                if (next === "cash") setAllocation(emptyAllocationDraft)
+                setErrors((prev) => ({
+                  ...prev,
+                  accountId: undefined,
+                  allocations: undefined,
+                }))
+              }}
               className={cn(inputClass, "cursor-pointer")}
             >
               {PAYMENT_METHODS.map((option) => (
@@ -473,6 +535,83 @@ function Body({
             </select>
           </label>
         </div>
+
+        <div className="border-n-200 flex flex-col gap-2.5 rounded-[10px] border bg-white p-3">
+          <label className="flex cursor-pointer items-center gap-2 text-[13.5px] font-semibold">
+            <input
+              type="checkbox"
+              checked={!onCredit}
+              onChange={(event) => {
+                setOnCredit(!event.target.checked)
+                setErrors((prev) => ({ ...prev, paidNow: undefined, partyId: undefined }))
+              }}
+              className="accent-p-500 size-4"
+            />
+            Paid in full now
+          </label>
+          {onCredit ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-[7px]">
+                  <FieldLabel>Paid now</FieldLabel>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={paidNow}
+                    onChange={(event) => {
+                      setPaidNow(event.target.value)
+                      setErrors((prev) => ({ ...prev, paidNow: undefined }))
+                    }}
+                    placeholder="0 — all on credit"
+                    aria-invalid={Boolean(errors.paidNow)}
+                    className={cn(inputClass, "py-2 text-[14px]")}
+                  />
+                  <FieldError message={errors.paidNow} />
+                </label>
+                <label className="flex flex-col gap-[7px]">
+                  <FieldLabel>Rest due by</FieldLabel>
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(event) => setDueDate(event.target.value)}
+                    className={cn(inputClass, "py-2 text-[14px]")}
+                  />
+                </label>
+              </div>
+              <span className="text-n-600 text-[12.5px]">
+                {money(Math.max(0, total - paidAmount))} left to pay
+                {payee ? ` to ${payee}` : ""} — it shows under To pay until you
+                record a payment against it.
+              </span>
+              <FieldError message={errors.partyId} />
+            </>
+          ) : null}
+        </div>
+
+        {paidAmount > 0 ? (
+          <AccountAllocationField
+            method={method}
+            amount={paidAmount}
+            direction="out"
+            value={allocation}
+            onChange={(next) => {
+              setAllocation(next)
+              setErrors((prev) =>
+                Object.fromEntries(
+                  Object.entries(prev).filter(
+                    ([path]) =>
+                      path !== "accountId" && !path.startsWith("allocations")
+                  )
+                )
+              )
+            }}
+            errors={errors}
+            previous={previous}
+            fallbackAccountId={fallbackAccount}
+          />
+        ) : null}
 
         <div className="grid gap-3.5 sm:grid-cols-2">
           <label className="flex flex-col gap-[7px]">

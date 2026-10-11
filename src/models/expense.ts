@@ -1,11 +1,12 @@
 import {
   Schema,
-  model,
-  models,
   type HydratedDocument,
   type InferSchemaType,
   type Model,
 } from "mongoose"
+
+import { defineModel } from "@/lib/model"
+import type { SettleStatus } from "@/lib/settlement"
 
 import { dayKeyInZone } from "@/lib/time"
 import {
@@ -95,6 +96,12 @@ const expenseSchema = new Schema(
      * moves that one too rather than leaving the two to drift apart.
      */
     payment: { type: Schema.Types.ObjectId, ref: "Payment" },
+    /**
+     * When what is still owed on a purchase made on credit falls due, as the
+     * start of that day in the workspace's zone. Absent when it was paid in
+     * full, and on everything recorded before credit purchases existed.
+     */
+    dueDate: { type: Date },
 
     recordedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
@@ -111,8 +118,7 @@ expenseSchema.index({ business: 1, "lines.item": 1 })
 export type ExpenseDocument = InferSchemaType<typeof expenseSchema>
 
 export const Expense: Model<ExpenseDocument> =
-  (models.Expense as Model<ExpenseDocument>) ??
-  model<ExpenseDocument>("Expense", expenseSchema)
+  defineModel<ExpenseDocument>("Expense", expenseSchema)
 
 export type PurchaseLineDTO = {
   itemId: string | null
@@ -140,6 +146,21 @@ export type ExpenseDTO = {
   lines: PurchaseLineDTO[]
   recordedBy: { id: string; name: string } | null
   createdAt: string
+  /**
+   * The accounts its cash row moved through (see PaymentDTO.allocations).
+   * Present only where a route loaded them.
+   */
+  allocations?: { accountId: string; amount: number }[]
+  /** Paid so far (at the time, and since), where the list route worked it out. */
+  paid?: number
+  /** Paid when it was recorded — its own cash row. */
+  paidAtTime?: number
+  /** Still owed to the party on a purchase made on credit. */
+  due?: number
+  /** "YYYY-MM-DD" the rest is due; null = the day it was recorded. */
+  dueOn?: string | null
+  /** Paid / Partly paid / Unpaid / Overdue. */
+  settlement?: SettleStatus
 }
 
 type MaybePopulated =
@@ -159,7 +180,8 @@ function named(ref: MaybePopulated) {
 
 export function toExpenseDTO(
   expense: HydratedDocument<ExpenseDocument>,
-  timeZone: string
+  timeZone: string,
+  allocations?: { accountId: string; amount: number }[]
 ): ExpenseDTO {
   return {
     id: String(expense._id),
@@ -183,5 +205,6 @@ export function toExpenseDTO(
     })),
     recordedBy: named(expense.recordedBy as MaybePopulated),
     createdAt: (expense.createdAt as Date).toISOString(),
+    ...(allocations ? { allocations } : {}),
   }
 }

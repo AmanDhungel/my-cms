@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
 
+import { SafeImage } from "@/components/dashboard/safe-image";
 import { SignOutButton } from "@/components/dashboard/sign-out-button";
 import { initialsOf, type Viewer } from "@/components/dashboard/viewer";
 
@@ -69,11 +70,17 @@ export function EmployeeShell({
         <aside className="border-n-200 bg-n-100 ems-thin-scroll top-[49px] hidden h-[calc(100vh-49px)] flex-col gap-[26px] self-start overflow-y-auto overscroll-contain border-r px-4 py-6 lg:sticky lg:flex">
           <div className="flex items-center gap-2.5 px-2">
             {viewer.businessLogo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <SafeImage
                 src={viewer.businessLogo}
                 alt=""
                 className="size-8 shrink-0 rounded-[9px] object-cover"
+                fallback={
+                  <span
+                    aria-hidden
+                    className="font-heading bg-p-100 text-p-700 flex size-8 shrink-0 items-center justify-center rounded-[9px] text-[13px] font-semibold">
+                    {initialsOf(viewer.businessName)}
+                  </span>
+                }
               />
             ) : (
               <span

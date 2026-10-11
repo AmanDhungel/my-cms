@@ -38,6 +38,9 @@ import type {
   RequestStatus,
 } from "@/lib/work-constants"
 import type { TicketDTO } from "@/models/ticket"
+import type { ModuleKey, ModuleState } from "@/lib/modules"
+import type { SettleStatus } from "@/lib/settlement"
+import type { EstimateDTO } from "@/models/estimate"
 import type { UserDTO } from "@/models/user"
 
 export type TicketScope =
@@ -631,6 +634,13 @@ export function useVoidBill(id: string) {
 function invalidateSales(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["bills"] })
   void client.invalidateQueries({ queryKey: ["inventory"] })
+  // A sale can take money at the till (an account and a party move), and is
+  // what every party balance is built from.
+  void client.invalidateQueries({ queryKey: ["payments"] })
+  void client.invalidateQueries({ queryKey: ["accounts"] })
+  void client.invalidateQueries({ queryKey: ["khata"] })
+  void client.invalidateQueries({ queryKey: ["customers"] })
+  void client.invalidateQueries({ queryKey: ["estimates"] })
 }
 
 /** Marking a bill paid, unpaid or on cheque after it was raised. */
@@ -671,6 +681,19 @@ export function useCreatePayment() {
   })
 }
 
+export function useUpdatePayment(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ payment: PaymentDTO }>(`/api/payments/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateMoney(client),
+  })
+}
+
 export function useDeletePayment(id: string) {
   const client = useQueryClient()
 
@@ -681,10 +704,17 @@ export function useDeletePayment(id: string) {
   })
 }
 
-/** A payment can settle a bill, so the bills list moves with the ledger. */
+/**
+ * A payment can settle a bill, so the bills list moves with the ledger; and
+ * it moves the balance of every account it went through.
+ */
 function invalidateMoney(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["payments"] })
   void client.invalidateQueries({ queryKey: ["bills"] })
+  void client.invalidateQueries({ queryKey: ["accounts"] })
+  // Every party balance and statement is read from the same rows.
+  void client.invalidateQueries({ queryKey: ["khata"] })
+  void client.invalidateQueries({ queryKey: ["customers"] })
 }
 
 /* ----------------------------------------------------------------- expenses */
@@ -741,6 +771,10 @@ function invalidateSpend(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["expenses"] })
   void client.invalidateQueries({ queryKey: ["payments"] })
   void client.invalidateQueries({ queryKey: ["inventory"] })
+  // The money came out of an account, whose balance shows on the Accounts tab.
+  void client.invalidateQueries({ queryKey: ["accounts"] })
+  void client.invalidateQueries({ queryKey: ["khata"] })
+  void client.invalidateQueries({ queryKey: ["customers"] })
 }
 
 /* -------------------------------------------------------------- maintenance */
@@ -1360,5 +1394,236 @@ export function useReportGroup(
     queryKey: ["report-group", group, query],
     queryFn: () =>
       apiFetch<ReportGroupResponse>(`/api/report-groups/${group}${query}`),
+  })
+}
+
+/* ------------------------------------------------------------------ modules */
+
+export type ModulesResponse = {
+  modules: ModuleKey[]
+  state: ModuleState
+  configured: boolean
+  configuredAt: string | null
+  canEdit: boolean
+}
+
+/**
+ * Saves which sidebar sections the workspace uses. The sidebar and the
+ * dashboard are server-rendered from it, so the caller refreshes the route
+ * once this lands.
+ */
+export function useSaveModules() {
+  return useMutation({
+    mutationFn: (modules: ModuleKey[]) =>
+      apiFetch<ModulesResponse>("/api/organization/modules", {
+        method: "PUT",
+        body: JSON.stringify({ modules }),
+      }),
+  })
+}
+
+/* -------------------------------------------------------------------- khata */
+
+export type KhataTone = "owe_you" | "you_owe" | "settled"
+
+export type KhataParty = {
+  id: string
+  name: string
+  kind: string
+  phone: string | null
+  /** + they owe you, − you owe them. */
+  balance: number
+  tone: KhataTone
+}
+
+/** Every party's balance and the To collect / To pay strip (owner only). */
+export function useKhata(enabled = true) {
+  return useQuery({
+    queryKey: ["khata"],
+    queryFn: () =>
+      apiFetch<{ parties: KhataParty[]; toCollect: number; toPay: number }>("/api/khata"),
+    enabled,
+    retry: false,
+  })
+}
+
+export type StatementRowDTO = {
+  id: string
+  kind: "sale" | "received" | "settled" | "purchase" | "paid"
+  on: string
+  what: string
+  detail: string | null
+  billed: number
+  paid: number
+  running: number
+  href: string | null
+}
+
+export type PartyStatement = {
+  business: { name: string }
+  party: CustomerDTO
+  today: string
+  balance: number
+  tone: KhataTone
+  statement: {
+    from: string | null
+    to: string | null
+    opening: number
+    closing: number
+    billed: number
+    paid: number
+    rows: StatementRowDTO[]
+  }
+  open: {
+    id: string
+    kind: "sale" | "purchase"
+    what: string
+    on: string
+    dueOn: string
+    href: string | null
+    total: number
+    paid: number
+    due: number
+    settlement: SettleStatus
+  }[]
+  unapplied: { id: string; kind: string; what: string; on: string; amount: number }[]
+  aging: Record<string, number>
+}
+
+/** One party's statement for a period (the Ledger tab). */
+export function usePartyStatement(
+  id: string,
+  params: { from?: string | null; to?: string | null; types?: string[] }
+) {
+  const search = new URLSearchParams()
+  if (params.from) search.set("from", params.from)
+  if (params.to) search.set("to", params.to)
+  if (params.types?.length) search.set("types", params.types.join(","))
+  const qs = search.toString()
+  return useQuery({
+    queryKey: ["customers", id, "statement", qs],
+    queryFn: () =>
+      apiFetch<PartyStatement>(`/api/customers/${id}/statement${qs ? `?${qs}` : ""}`),
+    placeholderData: (previous) => previous,
+  })
+}
+
+/* ---------------------------------------------------------------- estimates */
+
+export function useEstimates() {
+  return useQuery({
+    queryKey: ["estimates"],
+    queryFn: () => apiFetch<{ estimates: EstimateDTO[] }>("/api/estimates"),
+  })
+}
+
+export function useEstimate(id: string) {
+  return useQuery({
+    queryKey: ["estimates", id],
+    queryFn: () => apiFetch<{ estimate: EstimateDTO }>(`/api/estimates/${id}`),
+  })
+}
+
+/** An estimate moves nothing else, so only the estimates are refreshed. */
+function invalidateEstimates(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: ["estimates"] })
+}
+
+export function useSaveEstimate(id?: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ estimate: EstimateDTO }>(id ? `/api/estimates/${id}` : "/api/estimates", {
+        method: id ? "PATCH" : "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateEstimates(client),
+  })
+}
+
+export function useEstimateStatus(id: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { action: "send" | "accept" | "decline" | "reopen"; validUntil?: string }) =>
+      apiFetch<{ estimate: EstimateDTO }>(`/api/estimates/${id}/status`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateEstimates(client),
+  })
+}
+
+export function useDuplicateEstimate(id: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ estimate: EstimateDTO }>(`/api/estimates/${id}/duplicate`, { method: "POST" }),
+    onSuccess: () => invalidateEstimates(client),
+  })
+}
+
+export function useDeleteEstimate(id: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<{ id: string }>(`/api/estimates/${id}`, { method: "DELETE" }),
+    onSuccess: () => invalidateEstimates(client),
+  })
+}
+
+/* ---------------------------------------------------- day book, statements */
+
+export type DaybookEntryDTO = {
+  id: string
+  on: string
+  at: number
+  type: "sale" | "payment_in" | "purchase" | "purchase_payment" | "expense" | "payment_out"
+  direction: "in" | "out"
+  method: string
+  amount: number
+  party: string
+  reference: string | null
+  note: string | null
+  accounts: string[]
+  href: string
+}
+
+/** Every money movement in a range (owner only). */
+export function useDayBook(params: {
+  from: string
+  to: string
+  accountId?: string
+  type?: string
+  cashOnly?: boolean
+}) {
+  const search = new URLSearchParams({ from: params.from, to: params.to })
+  if (params.accountId) search.set("accountId", params.accountId)
+  if (params.type) search.set("type", params.type)
+  if (params.cashOnly) search.set("cashOnly", "1")
+  const qs = search.toString()
+  return useQuery({
+    queryKey: ["payments", "day-book", qs],
+    queryFn: () =>
+      apiFetch<{ from: string; to: string; today: string; entries: DaybookEntryDTO[]; moneyIn: number; moneyOut: number; net: number }>(
+        `/api/day-book?${qs}`
+      ),
+    placeholderData: (previous) => previous,
+  })
+}
+
+export type AccountStatementDTO = {
+  account: { id: string; name: string; number: string | null; openingBalance: number; openedOn: string | null; archived: boolean }
+  today: string
+  opening: number
+  closing: number
+  moneyIn: number
+  moneyOut: number
+  rows: { id: string; on: string; direction: "in" | "out"; amount: number; running: number; what: string; detail: string; href: string }[]
+}
+
+export function useAccountStatement(id: string, enabled = true) {
+  return useQuery({
+    queryKey: ["accounts", id, "statement"],
+    queryFn: () => apiFetch<AccountStatementDTO>(`/api/accounts/${id}/statement`),
+    enabled,
   })
 }

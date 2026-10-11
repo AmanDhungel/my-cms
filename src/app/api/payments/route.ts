@@ -1,14 +1,20 @@
 import mongoose from "mongoose"
 
-import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
+import { handleApiError, ok, readJson } from "@/lib/api-response"
 import { requireRole } from "@/lib/auth/guards"
+import {
+  allocationsFor,
+  resolveAllocations,
+  writeAllocations,
+} from "@/lib/allocations-server"
 import { connectToDatabase } from "@/lib/mongodb"
-import { syncBillPayment } from "@/lib/payments"
+import { assertPayableBill, syncBillPayment } from "@/lib/payments"
+import { toPaisa } from "@/lib/allocations"
+import { assertPayablePurchase } from "@/lib/purchases-server"
 import { dayRangeInZone } from "@/lib/time"
 import { paymentSchema } from "@/lib/validations/payments"
 import { getWorkspace } from "@/lib/workspace"
-import { Bill } from "@/models/bill"
-import { ownAccount, ownParty } from "@/lib/money-refs"
+import { ownParty } from "@/lib/money-refs"
 import { Payment, toPaymentDTO } from "@/models/payment"
 
 export const runtime = "nodejs"
@@ -30,9 +36,19 @@ export async function GET() {
       .sort({ paidOn: -1, createdAt: -1 })
       .limit(500)
 
+    // Which accounts each one moved through, for an edit to start from.
+    const allocations = await allocationsFor(
+      viewer.businessId,
+      payments.filter((payment) => payment.allocated).map((payment) => payment._id)
+    )
+
     return ok({
       payments: payments.map((payment) =>
-        toPaymentDTO(payment, business.timeZone)
+        toPaymentDTO(
+          payment,
+          business.timeZone,
+          allocations.get(String(payment._id)) ?? []
+        )
       ),
     })
   } catch (error) {
@@ -55,25 +71,20 @@ export async function POST(request: Request) {
     // Both references are checked against this workspace rather than trusted:
     // an id from a request is a claim until it is found here.
     const partyRef = await ownParty(viewer.businessId, values.partyId)
-    const account = await ownAccount(viewer.businessId, values.accountId)
+    // Cash names no account; anything else names one, or a split that adds
+    // up (lib/allocations.ts). Checked before anything is written.
+    const allocation = await resolveAllocations(viewer.businessId, {
+      method: values.method,
+      amount: values.amount,
+      accountId: values.accountId,
+      allocations: values.allocations,
+      requireAccount: true,
+    })
 
-    if (values.billId) {
-      const bill = await Bill.findOne({
-        _id: values.billId,
-        business: viewer.businessId,
-      })
-
-      if (!bill) throw new HttpError(404, "That bill doesn't exist")
-      if (bill.status === "void") {
-        throw new HttpError(409, `${bill.number} is void`)
-      }
-      // Accepting a quotation moves stock, which belongs on the bill itself.
-      if (bill.payment === "quotation") {
-        throw new HttpError(
-          409,
-          `${bill.number} is still a quotation. Accept it on the bill first, so the stock moves with it.`
-        )
-      }
+    if (values.billId) await assertPayableBill(viewer.businessId, values.billId)
+    // Paying off a purchase made on credit: no more than is still owed on it.
+    if (values.purchaseId) {
+      await assertPayablePurchase(viewer.businessId, values.purchaseId, toPaisa(values.amount))
     }
 
     const doc = {
@@ -81,44 +92,60 @@ export async function POST(request: Request) {
       direction: values.direction,
       party: values.party,
       partyRef,
-      account,
+      account: allocation.account,
+      allocated: allocation.allocated || undefined,
       amount: values.amount,
       method: values.method,
       reference: values.reference,
       note: values.note,
       paidOn: start,
       bill: values.billId,
+      purchase: values.purchaseId,
       recordedBy: viewer.id,
     }
 
-    // A payment against a bill and the bill's own flag have to agree, so
-    // they move together: the instalment lands, then the bill is settled if
-    // this one finished it off.
-    if (values.billId) {
-      const session = await mongoose.startSession()
-      let createdId: mongoose.Types.ObjectId | undefined
+    // The payment, the accounts it moved through and — for one against a
+    // bill — the bill's own flag all land together or not at all: the
+    // instalment lands, then the bill is settled if this one finished it off.
+    const session = await mongoose.startSession()
+    let createdId: mongoose.Types.ObjectId | undefined
 
-      try {
-        await session.withTransaction(async () => {
-          const [payment] = await Payment.create([doc], { session })
-          createdId = payment._id
-          await syncBillPayment(values.billId as string, session)
-        })
-      } finally {
-        await session.endSession()
-      }
-
-      const payment = await Payment.findById(createdId)
-        .populate("bill", "number")
-        .orFail()
-
-      return ok({ payment: toPaymentDTO(payment, business.timeZone) }, 201)
+    try {
+      await session.withTransaction(async () => {
+        const [payment] = await Payment.create([doc], { session })
+        createdId = payment._id
+        await writeAllocations(
+          session,
+          {
+            businessId: viewer.businessId,
+            paymentId: payment._id,
+            direction: values.direction,
+          },
+          allocation.rows
+        )
+        if (values.billId) await syncBillPayment(values.billId, session)
+      })
+    } finally {
+      await session.endSession()
     }
 
-    const payment = await Payment.create(doc)
-    await payment.populate("bill", "number")
+    const payment = await Payment.findById(createdId)
+      .populate("bill", "number")
+      .orFail()
 
-    return ok({ payment: toPaymentDTO(payment, business.timeZone) }, 201)
+    return ok(
+      {
+        payment: toPaymentDTO(
+          payment,
+          business.timeZone,
+          allocation.rows.map((row) => ({
+            accountId: String(row.account),
+            amount: row.amount,
+          }))
+        ),
+      },
+      201
+    )
   } catch (error) {
     return handleApiError(error)
   }

@@ -4,6 +4,7 @@ import * as React from "react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
+import { SafeImage } from "@/components/dashboard/safe-image"
 import { FieldLabel } from "@/components/auth/field"
 import { PlusIcon } from "@/components/dashboard/nav-icons"
 import {
@@ -73,8 +74,7 @@ export function ImagePicker({
           className="bg-n-100 border-n-200 w-[104px] shrink-0 overflow-hidden rounded-md border"
         >
           {src ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={src} alt="" className="size-full object-cover" />
+            <SafeImage src={src} alt="" className="size-full object-cover" />
           ) : (
             <span className="text-n-400 flex size-full items-center justify-center px-1 text-center font-mono text-[9px] tracking-[0.08em]">
               NO PICTURE
@@ -230,8 +230,7 @@ export function ImagePickerList({
             className="border-n-200 relative m-0 size-[92px] overflow-hidden rounded-[10px] border bg-white"
           >
             {imageSrc(draft) ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <SafeImage
                 src={imageSrc(draft) ?? ""}
                 alt=""
                 className="size-full object-cover"

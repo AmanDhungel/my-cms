@@ -1,5 +1,6 @@
 import { Types, type ClientSession } from "mongoose"
 
+import { HttpError } from "@/lib/api-response"
 import { round2 } from "@/lib/billing"
 import { Bill } from "@/models/bill"
 import { Payment } from "@/models/payment"
@@ -56,4 +57,24 @@ export async function syncBillPayment(
     bill.payment = "unpaid"
     await bill.save({ session })
   }
+}
+
+/**
+ * A bill a payment may be put against: this workspace's, not void, and no
+ * longer a quotation (accepting one moves stock, which belongs on the bill).
+ */
+export async function assertPayableBill(businessId: string, billId: string) {
+  const bill = await Bill.findOne({ _id: billId, business: businessId })
+
+  if (!bill) throw new HttpError(404, "That bill doesn't exist")
+  if (bill.status === "void") {
+    throw new HttpError(409, `${bill.number} is void`)
+  }
+  if (bill.payment === "quotation") {
+    throw new HttpError(
+      409,
+      `${bill.number} is still a quotation. Accept it on the bill first, so the stock moves with it.`
+    )
+  }
+  return bill
 }

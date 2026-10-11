@@ -18,6 +18,9 @@ import { loadViewer } from "@/lib/auth/page-guards"
 import { connectToDatabase } from "@/lib/mongodb"
 import { dayKeyInZone, dayRangeInZone } from "@/lib/time"
 import { getWorkspace } from "@/lib/workspace"
+import { NAV_SECTIONS, resolveModules } from "@/lib/modules"
+import { dashboardMoney } from "@/lib/dashboard-money"
+import { MoneyWidgets } from "@/components/dashboard/money-widgets"
 import { toBusinessDTO } from "@/models/business"
 import { WorkRequest, toRequestDTO } from "@/models/request"
 import { windowOverlaps } from "@/lib/ticket-window"
@@ -44,6 +47,35 @@ export default async function DashboardPage() {
         // Plain object, not the subdocument — this crosses to the client.
         office={toBusinessDTO(business).office}
       />
+    )
+  }
+
+  // Widgets of a section the workspace has switched off are left out (and
+  // not queried); a workspace that never chose has every section on.
+  const modules = resolveModules(business.enabledModules)
+  // To collect / To pay / Open estimates — only with Sales & stock on; the
+  // balances are the owner's, like every other money page.
+  const money = modules.sales_stock
+    ? await dashboardMoney(String(business._id), business.timeZone, {
+        balances: user.role === "owner",
+      })
+    : null
+  const moneyWidgets = money ? <MoneyWidgets {...money} /> : null
+
+  if (!modules.workspace) {
+    return (
+      <DashboardMain>
+        <PageHeading
+          eyebrow={longDate(business.timeZone)}
+          title={`${greeting(business.timeZone)}, ${firstName(user.name)}`}
+        />
+        {moneyWidgets}
+        {modules.reports ? (
+          <DashboardCharts finance={user.role === "owner"} />
+        ) : (
+          <SectionLinks modules={modules} role={user.role} />
+        )}
+      </DashboardMain>
     )
   }
 
@@ -223,8 +255,52 @@ export default async function DashboardPage() {
 
       {/* The crew never reach this page — they are returned an EmployeeHome
           above — so these need no guard of their own. */}
-      <DashboardCharts finance={user.role === "owner"} />
+      {moneyWidgets}
+
+      {modules.reports ? (
+        <DashboardCharts finance={user.role === "owner"} />
+      ) : null}
     </DashboardMain>
+  )
+}
+
+/**
+ * With neither Workspace nor Reports on, nothing on this page has data of its
+ * own; point at the sections that are on instead of leaving it blank.
+ */
+function SectionLinks({
+  modules,
+  role,
+}: {
+  modules: ReturnType<typeof resolveModules>
+  role: string
+}) {
+  const sections = NAV_SECTIONS.filter(
+    (section) => section.module && modules[section.module]
+  )
+  return (
+    <div className="grid gap-3.5 sm:grid-cols-2">
+      {sections.map((section) => {
+        const first = section.items.find(
+          (item) =>
+            !item.alwaysOn &&
+            (!item.roles || (item.roles as readonly string[]).includes(role))
+        )
+        return (
+          <Panel key={section.label} className="flex flex-col gap-1.5 p-[18px]">
+            <span className="text-n-500 font-mono text-[10.5px] tracking-[0.07em] uppercase">
+              {section.label}
+            </span>
+            <p className="text-n-600 m-0 text-[13.5px]">{section.blurb}</p>
+            {first ? (
+              <Link href={first.href} className="text-p-600 text-[13.5px] font-semibold">
+                Open {first.label} →
+              </Link>
+            ) : null}
+          </Panel>
+        )
+      })}
+    </div>
   )
 }
 

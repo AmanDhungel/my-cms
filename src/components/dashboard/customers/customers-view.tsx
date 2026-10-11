@@ -35,14 +35,25 @@ import {
   useBills,
   useCustomers,
   useDeleteCustomer,
+  useKhata,
 } from "@/lib/queries"
 import type { BillDTO } from "@/models/bill"
 import type { CustomerDTO } from "@/models/customer"
 import { useViewer } from "@/lib/use-viewer"
+import { BalancePill } from "@/components/dashboard/customers/balance-pill"
 
 const PER_PAGE = 10
 
 type Standing = { bills: number; billed: number; due: number }
+
+/** The balance filter chips (owner only). */
+type BalanceFilter = "all" | "owe_me" | "i_owe" | "settled"
+const BALANCE_FILTERS: { key: BalanceFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "owe_me", label: "They owe me" },
+  { key: "i_owe", label: "I owe them" },
+  { key: "settled", label: "Settled" },
+]
 
 /** Everyone the workspace bills, and where each of them stands. */
 export function CustomersView() {
@@ -55,22 +66,42 @@ export function CustomersView() {
 
   const query = useCustomers()
   const bills = useBills()
+  // Where each party stands (lib/khata.ts) — the owner's view of the money.
+  const khata = useKhata(isOwner)
+  const balanceById = new Map(
+    (khata.data?.parties ?? []).map((party) => [party.id, party.balance])
+  )
+  const [balanceFilter, setBalanceFilter] = React.useState<BalanceFilter>("all")
+  const [sortBy, setSortBy] = React.useState<"name" | "amount">("name")
 
   const customers = query.data?.customers ?? []
   const standing = standingOf(customers, bills.data?.bills ?? [])
 
   const needle = search.trim().toLowerCase()
-  const visible = customers.filter((customer) =>
-    !needle
-      ? true
-      : [
-          customer.name,
-          customer.company,
-          customer.phone,
-          customer.email,
-          customer.location,
-        ].some((field) => field?.toLowerCase().includes(needle))
-  )
+  const visible = customers
+    .filter((customer) =>
+      !needle
+        ? true
+        : [
+            customer.name,
+            customer.company,
+            customer.phone,
+            customer.email,
+            customer.location,
+          ].some((field) => field?.toLowerCase().includes(needle))
+    )
+    .filter((customer) => {
+      if (balanceFilter === "all") return true
+      const balance = balanceById.get(customer.id) ?? 0
+      if (balanceFilter === "owe_me") return balance > 0
+      if (balanceFilter === "i_owe") return balance < 0
+      return balance === 0
+    })
+    .sort((a, b) =>
+      sortBy === "amount"
+        ? Math.abs(balanceById.get(b.id) ?? 0) - Math.abs(balanceById.get(a.id) ?? 0)
+        : 0
+    )
 
   const shown = paginate(visible, page, PER_PAGE)
 
@@ -118,6 +149,46 @@ export function CustomersView() {
           <StatCard label="OWING" value={totals.owing} />
         </div>
       )}
+
+      {/* Plain words over the whole book: what comes in, what goes out. */}
+      {isOwner && khata.data ? (
+        <div className="grid gap-3.5 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => {
+              setBalanceFilter("owe_me")
+              setSortBy("amount")
+              setPage(1)
+            }}
+            className="border-s-done/30 flex flex-col gap-1 rounded-xl border bg-[#eefaf4] p-4 text-left"
+          >
+            <span className="text-s-done font-mono text-[10.5px] tracking-[0.07em]">
+              TO COLLECT
+            </span>
+            <span className="font-heading text-s-done text-[24px] leading-none font-semibold">
+              Rs {money(khata.data.toCollect)}
+            </span>
+            <span className="text-n-600 text-[12.5px]">They owe you</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setBalanceFilter("i_owe")
+              setSortBy("amount")
+              setPage(1)
+            }}
+            className="border-s-overdue/30 flex flex-col gap-1 rounded-xl border bg-[#fdecec] p-4 text-left"
+          >
+            <span className="text-s-overdue font-mono text-[10.5px] tracking-[0.07em]">
+              TO PAY
+            </span>
+            <span className="font-heading text-s-overdue text-[24px] leading-none font-semibold">
+              Rs {money(khata.data.toPay)}
+            </span>
+            <span className="text-n-600 text-[12.5px]">You owe them</span>
+          </button>
+        </div>
+      ) : null}
 
       {query.isPending ? (
         <RowsSkeleton rows={4} />
@@ -167,8 +238,50 @@ export function CustomersView() {
             </label>
           </div>
 
-          <div className="border-n-200 bg-n-100 hidden grid-cols-[1.3fr_1fr_1fr_80px_120px_130px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
-            {["CUSTOMER", "CONTACT", "LOCATION", "BILLS", "DUE", ""].map(
+          {isOwner ? (
+            <div className="border-n-200 flex flex-wrap items-center gap-2 border-b px-[18px] py-2.5">
+              {BALANCE_FILTERS.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => {
+                    setBalanceFilter(option.key)
+                    setPage(1)
+                  }}
+                  aria-pressed={balanceFilter === option.key}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-[12.5px] transition-colors",
+                    balanceFilter === option.key
+                      ? "bg-p-100 border-p-400 text-p-700 font-semibold"
+                      : "border-n-200 text-n-600 hover:bg-n-100 bg-white font-medium"
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+              <label className="text-n-600 ml-auto flex items-center gap-2 text-[12.5px]">
+                Sort
+                <select
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as "name" | "amount")}
+                  className="border-n-300 rounded-md border bg-white px-2 py-1 text-[12.5px]"
+                >
+                  <option value="name">By name</option>
+                  <option value="amount">Largest balance first</option>
+                </select>
+              </label>
+            </div>
+          ) : null}
+
+          <div
+            className={cn(
+              "border-n-200 bg-n-100 hidden gap-3.5 border-b px-[18px] py-2.5 lg:grid",
+              isOwner
+                ? "grid-cols-[1.3fr_1fr_1fr_80px_120px_170px_130px]"
+                : "grid-cols-[1.3fr_1fr_1fr_80px_120px_130px]"
+            )}
+          >
+            {["CUSTOMER", "CONTACT", "LOCATION", "BILLS", "DUE", ...(isOwner ? ["BALANCE"] : []), ""].map(
               (head) => (
                 <span
                   key={head}
@@ -186,7 +299,12 @@ export function CustomersView() {
             return (
               <div
                 key={customer.id}
-                className="border-n-200/70 hover:bg-n-50 grid gap-3.5 border-b px-[18px] py-3.5 lg:grid-cols-[1.3fr_1fr_1fr_80px_120px_130px] lg:items-center"
+                className={cn(
+                  "border-n-200/70 hover:bg-n-50 grid gap-3.5 border-b px-[18px] py-3.5 lg:items-center",
+                  isOwner
+                    ? "lg:grid-cols-[1.3fr_1fr_1fr_80px_120px_170px_130px]"
+                    : "lg:grid-cols-[1.3fr_1fr_1fr_80px_120px_130px]"
+                )}
               >
                 <span className="flex min-w-0 flex-col gap-0.5">
                   <span className="truncate text-sm font-semibold">
@@ -224,6 +342,15 @@ export function CustomersView() {
                 >
                   {money(row?.due ?? 0)}
                 </span>
+
+                {isOwner ? (
+                  <Link
+                    href={`/dashboard/customers/${customer.id}?tab=ledger`}
+                    title="Open their ledger"
+                  >
+                    <BalancePill balance={balanceById.get(customer.id) ?? 0} />
+                  </Link>
+                ) : null}
 
                 <div className="flex gap-2 lg:justify-end">
                   <Link

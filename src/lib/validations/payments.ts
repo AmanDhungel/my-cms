@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { allocationsField } from "@/lib/validations/allocations"
 import { PAYMENT_DIRECTIONS, PAYMENT_METHODS } from "@/lib/work-constants"
 
 const dayKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date")
@@ -27,6 +28,8 @@ export const paymentSchema = z
     partyId: objectId,
     /** Which bank, wallet or drawer it moved through. */
     accountId: objectId,
+    /** A split across several accounts, instead of `accountId`. */
+    allocations: allocationsField,
     method: z.enum(PAYMENT_METHODS),
     reference: z.string().trim().max(60, "That reference is very long").optional(),
     note: z.string().trim().max(500).optional(),
@@ -35,10 +38,19 @@ export const paymentSchema = z
       .string()
       .regex(/^[0-9a-fA-F]{24}$/, "Pick a bill from the list")
       .optional(),
+    /** A purchase made on credit that this pays off (money out only). */
+    purchaseId: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/, "Pick a purchase from the list")
+      .optional(),
   })
   .refine((values) => values.direction === "in" || !values.billId, {
     message: "Only money you receive can be put against a bill",
     path: ["billId"],
+  })
+  .refine((values) => values.direction === "out" || !values.purchaseId, {
+    message: "Only money you pay out can be put against a purchase",
+    path: ["purchaseId"],
   })
 
 export type PaymentValues = z.infer<typeof paymentSchema>

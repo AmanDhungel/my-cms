@@ -2,6 +2,7 @@
 
 import { cn } from "cn"
 
+import { SETTLE_LABELS, type SettleStatus } from "@/lib/settlement"
 import { BILL_PAYMENTS, type BillPayment } from "@/lib/work-constants"
 
 export const PAYMENT_LABELS: Record<BillPayment, string> = {
@@ -96,5 +97,38 @@ export function PaymentPicker({
         />
       ) : null}
     </div>
+  )
+}
+
+/**
+ * Where the money on a sale or a purchase stands (lib/settlement.ts). Green
+ * once settled, amber while part-paid, red once past its due date, and a
+ * quiet grey while it is simply not paid yet.
+ */
+const SETTLE_TONE: Record<SettleStatus, string> = {
+  paid: "border-s-done/40 text-s-done bg-[#eefaf4]",
+  partly_paid: "border-a-400 text-a-700 bg-a-50",
+  overdue: "border-s-overdue/40 text-s-overdue bg-[#fdecec]",
+  unpaid: "border-n-300 text-n-600 bg-n-100",
+}
+
+export function SettleChip({
+  status,
+  className,
+}: {
+  status: SettleStatus | null | undefined
+  className?: string
+}) {
+  if (!status) return null
+  return (
+    <span
+      className={cn(
+        "rounded-full border px-2 py-0.5 font-mono text-[10.5px] tracking-[0.05em] whitespace-nowrap uppercase",
+        SETTLE_TONE[status],
+        className
+      )}
+    >
+      {SETTLE_LABELS[status]}
+    </span>
   )
 }

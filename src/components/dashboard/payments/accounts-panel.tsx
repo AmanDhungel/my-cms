@@ -26,6 +26,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { money } from "@/lib/billing"
+import { maskAccountNumber } from "@/lib/allocations"
+import { ApiRequestError } from "@/lib/api-client"
+import { AccountStatementDialog } from "@/components/dashboard/payments/account-statement-dialog"
 import {
   reportMutationError,
   useAccounts,
@@ -54,6 +57,8 @@ const KIND_LABELS: Record<AccountKind, string> = {
 export function AccountsPanel({ today }: { today: string }) {
   const [open, setOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<AccountDTO | null>(null)
+  // The account whose statement is open.
+  const [statementOf, setStatementOf] = React.useState<AccountDTO | null>(null)
 
   const query = useAccounts()
   const accounts = query.data?.accounts ?? []
@@ -121,7 +126,7 @@ export function AccountsPanel({ today }: { today: string }) {
             </button>
           </div>
 
-          <div className="border-n-200 bg-n-100 hidden grid-cols-[1.4fr_120px_120px_130px_96px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
+          <div className="border-n-200 bg-n-100 hidden grid-cols-[1.4fr_120px_120px_130px_190px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
             {["ACCOUNT", "OPENING", "MOVEMENTS", "BALANCE", ""].map((head) => (
               <span
                 key={head}
@@ -137,7 +142,7 @@ export function AccountsPanel({ today }: { today: string }) {
               key={account.id}
               data-account-row
               className={cn(
-                "border-n-200/70 hover:bg-n-50 grid gap-3.5 border-b px-[18px] py-3.5 lg:grid-cols-[1.4fr_120px_120px_130px_96px] lg:items-center",
+                "border-n-200/70 hover:bg-n-50 grid gap-3.5 border-b px-[18px] py-3.5 lg:grid-cols-[1.4fr_120px_120px_130px_190px] lg:items-center",
                 account.archived && "opacity-55"
               )}
             >
@@ -156,7 +161,12 @@ export function AccountsPanel({ today }: { today: string }) {
                   ) : null}
                 </span>
                 <span className="text-n-500 truncate text-xs">
-                  {[KIND_LABELS[account.kind], account.reference, account.detail]
+                  {/* The number masked to its last four; the full one is on Edit. */}
+                  {[
+                    KIND_LABELS[account.kind],
+                    maskAccountNumber(account.reference),
+                    account.detail,
+                  ]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
@@ -182,6 +192,13 @@ export function AccountsPanel({ today }: { today: string }) {
               <div className="flex gap-1.5 lg:justify-self-end">
                 <button
                   type="button"
+                  onClick={() => setStatementOf(account)}
+                  className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold"
+                >
+                  Statement
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     setEditing(account)
                     setOpen(true)
@@ -198,6 +215,8 @@ export function AccountsPanel({ today }: { today: string }) {
           ))}
         </Panel>
       )}
+
+      <AccountStatementDialog account={statementOf} onClose={() => setStatementOf(null)} />
 
       <AccountDialog
         open={open}
@@ -315,15 +334,24 @@ function Body({
       return
     }
 
+    // Closes only once the server has said yes; a refusal stays on screen.
     mutation.mutate(parsed.data, {
-      onSuccess: ({ account }) =>
-        toast.success(editing ? `${account.name} saved` : `${account.name} added`),
-      onError: (error) =>
+      onSuccess: ({ account }) => {
+        toast.success(editing ? `${account.name} saved` : `${account.name} added`)
+        onClose()
+      },
+      onError: (error) => {
+        // A name already in use comes back as a 409 with no field named:
+        // it belongs under the name.
+        if (error instanceof ApiRequestError && error.status === 409) {
+          setErrors((prev) => ({ ...prev, name: error.message }))
+          return
+        }
         reportMutationError(error, (path, message) =>
           setErrors((prev) => ({ ...prev, [path]: message }))
-        ),
+        )
+      },
     })
-    if (!mutation.isError) onClose()
   }
 
   return (

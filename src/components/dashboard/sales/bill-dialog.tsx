@@ -19,6 +19,27 @@ import {
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import { CustomerDialog } from "@/components/dashboard/customers/customer-dialog"
 import { PaymentPicker } from "@/components/dashboard/sales/payment"
+import {
+  LineItemsEditor,
+  Total,
+  blankLine,
+  draftFromLines,
+  linePercent,
+  type DraftLine,
+  type Group,
+} from "@/components/dashboard/sales/line-items-editor"
+import {
+  ReceivedNow,
+  emptyReceived,
+  receivedPayload,
+  validateReceived,
+  type ReceivedDraft,
+} from "@/components/dashboard/sales/received-now"
+import {
+  rememberAccount,
+  useAccountFor,
+  useCanSeeAccounts,
+} from "@/components/dashboard/money-pickers"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   reportMutationError,
@@ -26,7 +47,7 @@ import {
   useCustomers,
   useInventoryItems,
 } from "@/lib/queries"
-import { money, quantity, totalsOf } from "@/lib/billing"
+import { quantity, totalsOf } from "@/lib/billing"
 import { billSchema } from "@/lib/validations/sales"
 import type { BillPayment, BillSource } from "@/lib/work-constants"
 import type { BillDTO } from "@/models/bill"
@@ -34,33 +55,39 @@ import type { CustomerDTO } from "@/models/customer"
 
 type Errors = Partial<Record<string, string>>
 
-type DraftLine = {
-  key: string
-  itemId?: string
-  name: string
-  unit: string
-  price: string
-  qty: string
-  /** Only set for inventory lines, to warn before the server refuses. */
-  stock?: number
+/**
+ * A sale started from an estimate ("Convert to sale"). Built on the server
+ * from the saved estimate — never from anything the browser sent — with
+ * stock items priced from the inventory as any sale is. Quantities and the
+ * payment can still be changed before it is saved.
+ */
+export type BillPrefill = {
+  estimateId: string
+  estimateNumber: string
+  source: BillSource
+  customerId: string | null
+  customer: { name: string; phone: string; email: string; address: string; pan: string }
+  lines: { itemId: string | null; name: string; unit: string; price: number; qty: number; discountPct: number }[]
+  withVat: boolean
+  note: string
 }
-
-/** A discount and the lines it was given to. A line takes only one. */
-type Group = { key: string; percent: string; lines: string[] }
-
-let seq = 0
-const nextKey = () => `k${++seq}`
 
 export function BillDialog({
   open,
   onClose,
   onCreated,
   vatRate,
+  today,
+  prefill,
 }: {
   open: boolean
   onClose: () => void
   onCreated?: (bill: BillDTO) => void
   vatRate: number
+  /** The workspace's today, for the due date. */
+  today?: string
+  /** Start from an estimate instead of a blank sheet. */
+  prefill?: BillPrefill
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
@@ -73,7 +100,13 @@ export function BillDialog({
       >
         {/* Mounted only while open, so every bill starts from a clean sheet. */}
         {open ? (
-          <Body onClose={onClose} onCreated={onCreated} vatRate={vatRate} />
+          <Body
+            onClose={onClose}
+            onCreated={onCreated}
+            vatRate={vatRate}
+            today={today ?? new Date().toISOString().slice(0, 10)}
+            prefill={prefill}
+          />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -84,12 +117,18 @@ function Body({
   onClose,
   onCreated,
   vatRate,
+  today,
+  prefill,
 }: {
   onClose: () => void
   onCreated?: (bill: BillDTO) => void
   vatRate: number
+  today: string
+  prefill?: BillPrefill
 }) {
-  const [source, setSource] = React.useState<BillSource | null>(null)
+  const [source, setSource] = React.useState<BillSource | null>(
+    prefill?.source ?? null
+  )
 
   if (!source) {
     return (
@@ -134,6 +173,8 @@ function Body({
       key={source}
       source={source}
       vatRate={vatRate}
+      today={today}
+      prefill={prefill}
       onBack={() => setSource(null)}
       onClose={onClose}
       onCreated={onCreated}
@@ -165,36 +206,53 @@ function SourceCard({
 function Editor({
   source,
   vatRate,
+  today,
+  prefill,
   onBack,
   onClose,
   onCreated,
 }: {
   source: BillSource
   vatRate: number
+  today: string
+  prefill?: BillPrefill
   onBack: () => void
   onClose: () => void
   onCreated?: (bill: BillDTO) => void
 }) {
   const fromInventory = source === "inventory"
 
-  const [customer, setCustomer] = React.useState({
-    name: "",
-    phone: "",
-    email: "",
-    address: "",
-    pan: "",
-  })
-  const [lines, setLines] = React.useState<DraftLine[]>(
-    fromInventory ? [] : [blankLine()]
+  // From an estimate: its party, lines, discounts and notes, ready to adjust.
+  const [fromEstimate] = React.useState(() =>
+    prefill ? draftFromLines(prefill.lines) : null
   )
-  const [groups, setGroups] = React.useState<Group[]>([])
-  const [withVat, setWithVat] = React.useState(false)
+  const [customer, setCustomer] = React.useState(
+    prefill?.customer ?? {
+      name: "",
+      phone: "",
+      email: "",
+      address: "",
+      pan: "",
+    }
+  )
+  const [lines, setLines] = React.useState<DraftLine[]>(
+    fromEstimate?.lines ?? (fromInventory ? [] : [blankLine()])
+  )
+  const [groups, setGroups] = React.useState<Group[]>(fromEstimate?.groups ?? [])
+  const [withVat, setWithVat] = React.useState(prefill?.withVat ?? false)
   const [payment, setPayment] = React.useState<BillPayment>("unpaid")
   const [chequeNo, setChequeNo] = React.useState("")
-  const [note, setNote] = React.useState("")
+  const [note, setNote] = React.useState(prefill?.note ?? "")
   const [errors, setErrors] = React.useState<Errors>({})
-  const [customerId, setCustomerId] = React.useState("")
+  const [customerId, setCustomerId] = React.useState(prefill?.customerId ?? "")
   const [customerDialogOpen, setCustomerDialogOpen] = React.useState(false)
+  // Money taken at the till, and when the rest is due (received-now.tsx).
+  const [received, setReceived] = React.useState<ReceivedDraft>(emptyReceived)
+  // The account last used with how the money came in, else the default one.
+  const fallbackAccount = useAccountFor(
+    payment === "cheque" ? "cheque" : received.method
+  )
+  const canSeeAccounts = useCanSeeAccounts()
 
   const stock = useInventoryItems(fromInventory)
   const customers = useCustomers()
@@ -231,10 +289,7 @@ function Editor({
   const available = stock.data?.items ?? []
 
   /** A line's discount is the percentage of whichever group holds it. */
-  const percentOf = (key: string) => {
-    const group = groups.find((entry) => entry.lines.includes(key))
-    return group ? Number(group.percent) || 0 : 0
-  }
+  const percentOf = (key: string) => linePercent(groups, key)
 
   const priced = lines.map((line) => ({
     price: Number(line.price) || 0,
@@ -243,80 +298,6 @@ function Editor({
   }))
 
   const totals = totalsOf(priced, withVat ? vatRate : 0)
-
-  function addCustomLine() {
-    setLines((prev) => [...prev, blankLine()])
-    setErrors((prev) => ({ ...prev, lines: undefined }))
-  }
-
-  function addStockLine(itemId: string) {
-    const item = available.find((entry) => entry.id === itemId)
-    if (!item) return
-    setLines((prev) => [
-      ...prev,
-      {
-        key: nextKey(),
-        itemId: item.id,
-        name: item.name,
-        unit: item.unit,
-        price: String(item.price),
-        qty: "1",
-        stock: item.stock,
-      },
-    ])
-    setErrors((prev) => ({ ...prev, lines: undefined }))
-  }
-
-  function setLine(key: string, patch: Partial<DraftLine>) {
-    setLines((prev) =>
-      prev.map((line) => (line.key === key ? { ...line, ...patch } : line))
-    )
-    setErrors((prev) => ({ ...prev, lines: undefined }))
-  }
-
-  function removeLine(key: string) {
-    setLines((prev) => prev.filter((line) => line.key !== key))
-    // A discount can't keep pointing at a line that is gone.
-    setGroups((prev) =>
-      prev.map((group) => ({
-        ...group,
-        lines: group.lines.filter((entry) => entry !== key),
-      }))
-    )
-  }
-
-  function toggleInGroup(groupKey: string, lineKey: string) {
-    const target = groups.find((group) => group.key === groupKey)
-    const adding = !target?.lines.includes(lineKey)
-
-    setGroups((prev) =>
-      prev.map((group) => {
-        if (group.key === groupKey) {
-          return {
-            ...group,
-            lines: adding
-              ? [...group.lines, lineKey]
-              : group.lines.filter((entry) => entry !== lineKey),
-          }
-        }
-        // One discount per line: taking it here releases it there.
-        return adding
-          ? { ...group, lines: group.lines.filter((entry) => entry !== lineKey) }
-          : group
-      })
-    )
-  }
-
-  function selectAll(groupKey: string) {
-    const all = lines.map((line) => line.key)
-    setGroups((prev) =>
-      prev.map((group) =>
-        group.key === groupKey
-          ? { ...group, lines: all }
-          : { ...group, lines: [] }
-      )
-    )
-  }
 
   function submit() {
     if (create.isPending) return
@@ -343,23 +324,40 @@ function Editor({
       payment,
       chequeNo: chequeNo || undefined,
       note: note || undefined,
+      ...receivedPayload(payment, totals.total, received, fallbackAccount),
+      // Converting: the server flips the estimate in the same transaction.
+      estimateId: prefill?.estimateId,
     }
 
     const parsed = billSchema.safeParse(payload)
 
+    const next: Errors = {}
     if (!parsed.success) {
-      const next: Errors = {}
       for (const issue of parsed.error.issues) {
         const path = issue.path.join(".") || "root"
         // Every line problem reads as one message above the table.
         next[path.startsWith("lines") ? "lines" : path] ??= issue.message
       }
+    }
+    // The account rules for the money taken now, checked before sending.
+    Object.assign(
+      next,
+      validateReceived(payment, totals.total, received, {
+        fallbackAccountId: fallbackAccount,
+        requireAccount: canSeeAccounts,
+      })
+    )
+    if (!parsed.success || Object.keys(next).length > 0) {
       setErrors(next)
       return
     }
 
     create.mutate(parsed.data, {
       onSuccess: ({ bill }) => {
+        const taken = parsed.data.received
+        if (taken) {
+          rememberAccount(taken.method, taken.accountId ?? taken.allocations?.[0]?.accountId)
+        }
         toast.success(`${bill.number} raised`)
         onCreated?.(bill)
         onClose()
@@ -379,16 +377,24 @@ function Editor({
       <DialogHeader>
         <DialogTitle className="font-heading flex flex-wrap items-center gap-2.5 text-[19px] font-semibold">
           New bill
+          {prefill ? (
+            <span className="border-s-progress/40 text-s-progress rounded-full border bg-[#eef4fd] px-2.5 py-0.5 text-[11.5px] font-medium">
+              from {prefill.estimateNumber}
+            </span>
+          ) : null}
           <span className="border-p-200 bg-p-100 text-p-700 rounded-full border px-2.5 py-0.5 text-[11.5px] font-medium">
             {fromInventory ? "from inventory" : "custom"}
           </span>
-          <button
-            type="button"
-            onClick={onBack}
-            className="text-p-600 text-[12.5px] font-semibold"
-          >
-            change
-          </button>
+          {/* A sale from an estimate keeps the estimate's kind of lines. */}
+          {prefill ? null : (
+            <button
+              type="button"
+              onClick={onBack}
+              className="text-p-600 text-[12.5px] font-semibold"
+            >
+              change
+            </button>
+          )}
         </DialogTitle>
         <DialogDescription className="text-n-500 text-[13.5px]">
           {fromInventory
@@ -510,302 +516,17 @@ function Editor({
           </div>
         </section>
 
-        {/* ---- lines ---- */}
-        <section className="flex flex-col gap-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <FieldLabel>Items</FieldLabel>
-            {fromInventory ? (
-              stock.isPending ? (
-                <Skeleton className="h-9 w-52 rounded-md" />
-              ) : (
-                <select
-                  value=""
-                  onChange={(event) => {
-                    addStockLine(event.target.value)
-                    event.target.value = ""
-                  }}
-                  aria-label="Add an item from stock"
-                  className={cn(
-                    inputClass,
-                    "w-full cursor-pointer py-2 text-[13.5px] sm:w-[280px]"
-                  )}
-                >
-                  <option value="">Add an item from stock…</option>
-                  {available.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name} · {money(item.price)} / {item.unit} ·{" "}
-                      {quantity(item.stock)} left
-                    </option>
-                  ))}
-                </select>
-              )
-            ) : (
-              <button
-                type="button"
-                onClick={addCustomLine}
-                className="text-p-600 text-[12.5px] font-semibold"
-              >
-                + Add line
-              </button>
-            )}
-          </div>
-
-          {lines.length === 0 ? (
-            <div className="border-n-300 text-n-500 rounded-md border border-dashed bg-white px-4 py-6 text-center text-[13px]">
-              {fromInventory
-                ? available.length === 0 && !stock.isPending
-                  ? "There is nothing in the inventory yet. Add stock first, or raise a custom bill."
-                  : "Nothing on the bill yet. Add an item from stock above."
-                : "Nothing on the bill yet."}
-            </div>
-          ) : (
-            <div className="border-n-200 overflow-hidden rounded-[10px] border bg-white">
-              <div className="border-n-200 bg-n-100 hidden grid-cols-[1.6fr_90px_110px_100px_110px_36px] gap-2 border-b px-3 py-2 lg:grid">
-                {["ITEM", "QTY", "RATE", "DISC", "AMOUNT", ""].map((head) => (
-                  <span
-                    key={head}
-                    className="text-n-500 font-mono text-[10.5px] tracking-[0.07em]"
-                  >
-                    {head}
-                  </span>
-                ))}
-              </div>
-
-              {lines.map((line, index) => {
-                const pct = percentOf(line.key)
-                const gross = (Number(line.price) || 0) * (Number(line.qty) || 0)
-                const short =
-                  line.stock !== undefined && (Number(line.qty) || 0) > line.stock
-
-                return (
-                  <div
-                    key={line.key}
-                    className="border-n-200/70 grid gap-2 border-b px-3 py-2.5 lg:grid-cols-[1.6fr_90px_110px_100px_110px_36px] lg:items-center"
-                  >
-                    <div className="flex min-w-0 flex-col gap-1">
-                      {line.itemId ? (
-                        <>
-                          <span className="truncate text-[13.5px] font-semibold">
-                            {index + 1}. {line.name}
-                          </span>
-                          <span
-                            className={cn(
-                              "text-[11.5px]",
-                              short ? "text-s-overdue" : "text-n-500"
-                            )}
-                          >
-                            {short
-                              ? `only ${quantity(line.stock ?? 0)} ${line.unit} in stock`
-                              : `${quantity(line.stock ?? 0)} ${line.unit} in stock`}
-                          </span>
-                        </>
-                      ) : (
-                        <div className="flex gap-2">
-                          <input
-                            value={line.name}
-                            onChange={(event) =>
-                              setLine(line.key, { name: event.target.value })
-                            }
-                            placeholder={`Item ${index + 1}`}
-                            className={cn(inputClass, "w-full py-2 text-[13.5px]")}
-                          />
-                          <input
-                            value={line.unit}
-                            onChange={(event) =>
-                              setLine(line.key, { unit: event.target.value })
-                            }
-                            placeholder="pcs"
-                            className={cn(inputClass, "w-[74px] py-2 text-[13.5px]")}
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <input
-                      type="number"
-                      min={0}
-                      step="any"
-                      inputMode="decimal"
-                      value={line.qty}
-                      onChange={(event) =>
-                        setLine(line.key, { qty: event.target.value })
-                      }
-                      aria-label={`Quantity for line ${index + 1}`}
-                      className={cn(inputClass, "py-2 text-[13.5px]")}
-                    />
-
-                    {line.itemId ? (
-                      <span className="text-n-700 font-mono text-[13px] lg:text-right">
-                        {money(Number(line.price) || 0)}
-                      </span>
-                    ) : (
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        inputMode="decimal"
-                        value={line.price}
-                        onChange={(event) =>
-                          setLine(line.key, { price: event.target.value })
-                        }
-                        aria-label={`Price per piece for line ${index + 1}`}
-                        placeholder="0"
-                        className={cn(inputClass, "py-2 text-[13.5px]")}
-                      />
-                    )}
-
-                    <span
-                      className={cn(
-                        "font-mono text-[13px] lg:text-right",
-                        pct > 0 ? "text-p-700 font-semibold" : "text-n-400"
-                      )}
-                    >
-                      {pct > 0 ? `${quantity(pct)}%` : "—"}
-                    </span>
-
-                    <span className="font-mono text-[13px] font-semibold lg:text-right">
-                      {money(gross - (gross * pct) / 100)}
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={() => removeLine(line.key)}
-                      aria-label={`Remove line ${index + 1}`}
-                      className="text-n-400 hover:text-s-overdue justify-self-start text-[13px] lg:justify-self-end"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-          <FieldError message={errors.lines} />
-        </section>
-
-        {/* ---- discounts ---- */}
-        <section className="flex flex-col gap-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <FieldLabel>Discounts</FieldLabel>
-            <button
-              type="button"
-              onClick={() =>
-                setGroups((prev) => [
-                  ...prev,
-                  { key: nextKey(), percent: "", lines: [] },
-                ])
-              }
-              disabled={lines.length === 0}
-              className="text-p-600 text-[12.5px] font-semibold disabled:opacity-50"
-            >
-              + Add discount
-            </button>
-          </div>
-
-          <p className="text-n-500 m-0 text-[12.5px]">
-            Write a percentage, then tick the lines it applies to. Add a second
-            discount for a different set — each line carries one, so ticking it
-            here takes it off the other.
-          </p>
-
-          {groups.map((group, index) => (
-            <div
-              key={group.key}
-              className="border-n-200 flex flex-col gap-2.5 rounded-[10px] border bg-white p-3"
-            >
-              <div className="flex flex-wrap items-center gap-2.5">
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="any"
-                    inputMode="decimal"
-                    value={group.percent}
-                    onChange={(event) =>
-                      setGroups((prev) =>
-                        prev.map((entry) =>
-                          entry.key === group.key
-                            ? { ...entry, percent: event.target.value }
-                            : entry
-                        )
-                      )
-                    }
-                    aria-label={`Discount ${index + 1} percent`}
-                    placeholder="20"
-                    className={cn(inputClass, "w-[86px] py-2 text-[13.5px]")}
-                  />
-                  <span className="text-n-600 text-[13.5px] font-semibold">
-                    % off
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => selectAll(group.key)}
-                  className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-2.5 py-1.5 text-[12px] font-semibold"
-                >
-                  Select all
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setGroups((prev) =>
-                      prev.map((entry) =>
-                        entry.key === group.key ? { ...entry, lines: [] } : entry
-                      )
-                    )
-                  }
-                  className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-2.5 py-1.5 text-[12px] font-semibold"
-                >
-                  Clear
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setGroups((prev) =>
-                      prev.filter((entry) => entry.key !== group.key)
-                    )
-                  }
-                  className="text-n-500 hover:text-s-overdue ml-auto text-[12.5px] font-semibold"
-                >
-                  Remove
-                </button>
-              </div>
-
-              <div className="flex flex-wrap gap-1.5">
-                {lines.map((line, lineIndex) => {
-                  const mine = group.lines.includes(line.key)
-                  const takenElsewhere =
-                    !mine &&
-                    groups.some(
-                      (entry) =>
-                        entry.key !== group.key && entry.lines.includes(line.key)
-                    )
-
-                  return (
-                    <button
-                      key={line.key}
-                      type="button"
-                      onClick={() => toggleInGroup(group.key, line.key)}
-                      aria-pressed={mine}
-                      className={cn(
-                        "max-w-[220px] truncate rounded-full border px-2.5 py-1 text-[12px] transition-colors",
-                        mine
-                          ? "bg-p-100 border-p-400 text-p-700 font-semibold"
-                          : takenElsewhere
-                            ? "border-n-200 text-n-400 bg-n-100 font-medium"
-                            : "border-n-200 text-n-600 hover:bg-n-100 bg-white font-medium"
-                      )}
-                    >
-                      {lineIndex + 1}. {line.name || "Untitled"}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-        </section>
+        <LineItemsEditor
+          fromInventory={fromInventory}
+          lines={lines}
+          setLines={setLines}
+          groups={groups}
+          setGroups={setGroups}
+          available={available}
+          stockPending={stock.isPending}
+          error={errors.lines}
+          onEdit={() => setErrors((prev) => ({ ...prev, lines: undefined }))}
+        />
 
         {/* ---- vat, note and totals ---- */}
         <section className="grid gap-3.5 lg:grid-cols-[1fr_300px]">
@@ -823,6 +544,28 @@ function Editor({
                 unpaid bill gets marked paid when the money comes in.
               </span>
             </div>
+
+            <ReceivedNow
+              payment={payment}
+              total={totals.total}
+              value={received}
+              onChange={(value) => {
+                setReceived(value)
+                setErrors((prev) =>
+                  Object.fromEntries(
+                    Object.entries(prev).filter(
+                      ([path]) =>
+                        !path.startsWith("received") &&
+                        path !== "accountId" &&
+                        !path.startsWith("allocations")
+                    )
+                  )
+                )
+              }}
+              errors={errors}
+              fallbackAccountId={fallbackAccount}
+              today={today}
+            />
 
             <label className="border-n-200 flex items-start gap-2.5 rounded-[10px] border bg-white p-3">
               <input
@@ -898,39 +641,4 @@ function Editor({
       />
     </>
   )
-}
-
-function Total({
-  label,
-  value,
-  strong,
-}: {
-  label: string
-  value: number
-  strong?: boolean
-}) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <span
-        className={cn(
-          "text-[12.5px]",
-          strong ? "font-heading text-[14px] font-semibold" : "text-n-600"
-        )}
-      >
-        {label}
-      </span>
-      <span
-        className={cn(
-          "font-mono tabular-nums",
-          strong ? "text-[17px] font-semibold" : "text-[13px]"
-        )}
-      >
-        {money(value)}
-      </span>
-    </div>
-  )
-}
-
-function blankLine(): DraftLine {
-  return { key: nextKey(), name: "", unit: "pcs", price: "", qty: "1" }
 }

@@ -45,10 +45,11 @@ export async function POST(request: Request) {
     await connectToDatabase()
     const business = await getWorkspace(viewer)
 
+    // "NIC Asia" and "nic asia" are the same account to whoever picks one.
     const clash = await Account.findOne({
       business: viewer.businessId,
       name: values.name,
-    })
+    }).collation({ locale: "en", strength: 2 })
     if (clash) throw new HttpError(409, "You already have one by that name")
 
     // Exactly one default, so clearing the others is part of setting it.

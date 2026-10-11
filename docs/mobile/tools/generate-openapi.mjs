@@ -33,6 +33,10 @@ const sales = await load("lib/validations/sales")
 const site = await load("lib/validations/site")
 const uploads = await load("lib/validations/uploads")
 const C = await load("lib/work-constants")
+const modules = await load("lib/validations/modules")
+const estimates = await load("lib/validations/estimates")
+const E = await load("lib/estimates")
+const MOD = await load("lib/modules")
 
 const BASE = "https://my-cms-ebon.vercel.app"
 const notes = []
@@ -214,6 +218,9 @@ const BillDTO = z.object({
   vatAmount: z.number(), total: z.number(), note: n(z.string()), paid: z.number(), due: z.number(),
   payment: z.enum(C.BILL_PAYMENTS), chequeNo: n(z.string()), status: z.enum(C.BILL_STATUSES),
   issuedBy: id, createdAt: iso, voidedAt: n(iso),
+  dueOn: n(day).optional().describe("When it falls due; null = the day it was raised (lib/settlement.ts)"),
+  settlement: n(z.enum(["paid", "partly_paid", "unpaid", "overdue"])).optional().describe("null for a quotation or a void bill"),
+  estimateId: n(id).optional().describe("The estimate it was converted from"),
 })
 /** src/lib/quote-review.ts:17-50 */
 const PublicQuote = z.object({
@@ -273,6 +280,9 @@ const PaymentDTO = z.object({
   id, direction: z.enum(C.PAYMENT_DIRECTIONS), party: z.string(), partyId: n(id), accountId: n(id),
   amount: z.number(), method: z.enum(C.PAYMENT_METHODS), reference: n(z.string()), note: n(z.string()),
   paidOn: day, bill: n(z.object({ id, number: z.string() })), createdAt: iso,
+  expenseId: n(id).describe("Set when it is the cash side of an expense (edit it from the expense)"),
+  purchaseId: n(id).optional().describe("Set when it pays off a purchase made on credit"),
+  allocations: z.array(z.object({ accountId: id, amount: z.number() })).optional().describe("Accounts it moved through; empty for cash and older payments"),
 })
 /** src/models/account.ts:69-86 */
 const AccountDTO = z.object({
@@ -1134,7 +1144,7 @@ const reportQuery = [
 op("get", "/api/reports/{report}", {
   tag: "reports", summary: "Run one report (finance group: owner only)", operationId: "runReport", source: "src/app/api/reports/[report]/route.ts:17-51",
   roles: OS, query: reportQuery, ok: { 200: ["ReportResponse", R.report] }, errors: [401, 403, 404, 500],
-  note: "Slugs: src/lib/reports.ts:68-301. Params read by scopeFrom (src/lib/report-runner.ts:32-47).",
+  note: "Slugs: src/lib/reports.ts. Params read by scopeFrom (src/lib/report-runner.ts). Aging: who-owes-you and who-you-owe (finance, owner only; as of today, date range ignored; rows carry href to the party's Ledger tab, plus a final Total row).",
 })
 op("get", "/api/report-groups/{group}", {
   tag: "reports", summary: "Every chart in a group (sales|inventory|finance|employee)", operationId: "reportGroup", source: "src/app/api/report-groups/[group]/route.ts:27-91",
@@ -1180,6 +1190,129 @@ op("post", "/api/admin/invites", {
 op("delete", "/api/admin/invites/{id}", {
   tag: "admin", summary: "Revoke an unused workspace invite", operationId: "adminRevokeInvite", source: "src/app/api/admin/invites/[id]/route.ts:12-37",
   roles: ["superAdmin"], ok: { 200: ["WorkspaceInviteResponse", R.workspaceInvite] }, errors: [401, 403, 404, 409, 429, 500], rateLimit: MUT,
+})
+
+
+// ---- feat/accounting-ledger-estimates (+ modules, accounts from feat/modules-accounts-images) ----
+
+const ModulesState = z.object({
+  modules: z.array(z.enum(MOD.MODULE_KEYS)),
+  state: z.record(z.enum(MOD.MODULE_KEYS), z.boolean()),
+  configured: z.boolean(), configuredAt: n(iso), canEdit: z.boolean(),
+})
+const KhataTone = z.enum(["owe_you", "you_owe", "settled"])
+const EstimateDTO = z.object({
+  id, number: z.string().describe("EST-0001"), source: z.enum(C.BILL_SOURCES), customerId: n(id),
+  customer: z.object({ name: z.string(), phone: n(z.string()), email: n(z.string()), address: n(z.string()), pan: n(z.string()) }),
+  lines: z.array(z.object({ itemId: n(id), name: z.string(), unit: z.string(), price: z.number(), qty: z.number(), discountPct: z.number(), net: z.number() })),
+  vatRate: z.number(), subtotal: z.number(), discountTotal: z.number(), taxable: z.number(), vatAmount: z.number(), total: z.number(),
+  note: n(z.string()), issuedOn: day, validUntil: day,
+  status: z.enum(E.ESTIMATE_STATUSES), state: z.enum([...E.ESTIMATE_STATUSES, "expired"]).describe("status, or 'expired' (derived)"),
+  saleId: n(id), createdAt: iso,
+})
+const Statement = z.object({
+  business: z.object({ name: z.string() }), party: CustomerDTO, today: day,
+  balance: z.number().describe("+ they owe you, − you owe them"), tone: KhataTone,
+  statement: z.object({
+    from: n(day), to: n(day), opening: z.number(), closing: z.number(), billed: z.number(), paid: z.number(),
+    rows: z.array(z.object({ id: z.string(), kind: z.enum(["sale", "received", "settled", "purchase", "paid"]), on: day, what: z.string(), detail: n(z.string()), billed: z.number(), paid: z.number(), running: z.number(), href: n(z.string()) })),
+  }),
+  open: z.array(z.object({ id, kind: z.enum(["sale", "purchase"]), what: z.string(), on: day, dueOn: day, href: n(z.string()), total: z.number(), paid: z.number(), due: z.number(), settlement: z.enum(["paid", "partly_paid", "unpaid", "overdue"]) })),
+  unapplied: z.array(z.object({ id: z.string(), kind: z.string(), what: z.string(), on: day, amount: z.number() })),
+  aging: z.object({ current: z.number(), d1_30: z.number(), d31_60: z.number(), d61_90: z.number(), d90_plus: z.number(), total: z.number(), oldestDays: z.number() }),
+})
+const estimateOne = z.object({ estimate: EstimateDTO })
+
+op("get", "/api/organization/modules", {
+  tag: "organization", summary: "Which sidebar sections the workspace uses (null stored = all on)", operationId: "getModules",
+  source: "src/app/api/organization/modules/route.ts", roles: ALL, ok: { 200: ["ModulesState", ModulesState] }, errors: [401, 403, 404, 500],
+  note: "A display preference only: no endpoint is refused because a section is off.",
+})
+op("put", "/api/organization/modules", {
+  tag: "organization", summary: "Choose the sections (owner or super admin); always stamps modulesConfiguredAt", operationId: "setModules",
+  source: "src/app/api/organization/modules/route.ts", roles: ["owner", "superAdmin (member)"], body: ["ModulesRequest", modules.modulesSchema],
+  ok: { 200: ["ModulesState", ModulesState] }, errors: [...JSONERR, 404], rateLimit: MUT,
+  sideEffects: ["Business.enabledModules + modulesConfiguredAt set; 500 if the write didn't persist"],
+})
+op("get", "/api/khata", {
+  tag: "ledger", summary: "Every party's balance in plain words, plus To collect / To pay", operationId: "khata",
+  source: "src/app/api/khata/route.ts; src/lib/khata.ts; src/lib/ledger.ts loadKhata", roles: OWNER,
+  ok: { 200: ["KhataResponse", z.object({ parties: z.array(z.object({ id, name: z.string(), kind: z.enum(C.PARTY_KINDS), phone: n(z.string()), balance: z.number(), tone: KhataTone })), toCollect: z.number(), toPay: z.number() })] },
+  errors: [401, 403, 500],
+  note: "The single source for party balances on new screens (Ledger tab, Parties list balance, aging, dashboard). /api/customers/{id}/ledger is unchanged.",
+})
+op("get", "/api/customers/{id}/statement", {
+  tag: "ledger", summary: "A party's statement (Ledger tab): opening, rows with running balance, closing, open items, aging", operationId: "partyStatement",
+  source: "src/app/api/customers/[id]/statement/route.ts", roles: OWNER,
+  query: [
+    { name: "from", description: "YYYY-MM-DD (optional)" },
+    { name: "to", description: "YYYY-MM-DD (optional)" },
+    { name: "types", description: "comma list of sales,purchases,payments; never changes the running balance" },
+  ],
+  ok: { 200: ["PartyStatement", Statement] }, errors: [401, 403, 404, 422, 500],
+})
+op("get", "/api/estimates", {
+  tag: "estimates", summary: "Estimates, newest first (max 500)", operationId: "listEstimates", source: "src/app/api/estimates/route.ts",
+  roles: OS, ok: { 200: ["EstimateList", z.object({ estimates: z.array(EstimateDTO) })] }, errors: [401, 403, 500],
+})
+op("post", "/api/estimates", {
+  tag: "estimates", summary: "Create an estimate (Draft, or Sent with send=true)", operationId: "createEstimate", source: "src/app/api/estimates/route.ts",
+  roles: OS, body: ["EstimateRequest", estimates.estimateSchema], ok: { 201: ["EstimateResponse", estimateOne] }, errors: [...JSONERR, 404], rateLimit: MUT,
+  sideEffects: ["Business.estimateSeq += 1 -> EST-0001", "no stock, money, balance or report effect"],
+})
+op("get", "/api/estimates/{id}", {
+  tag: "estimates", summary: "One estimate", operationId: "getEstimate", source: "src/app/api/estimates/[id]/route.ts",
+  roles: OS, ok: { 200: ["EstimateResponse", estimateOne] }, errors: [401, 403, 404, 500],
+})
+op("patch", "/api/estimates/{id}", {
+  tag: "estimates", summary: "Edit (Draft/Sent/Accepted; extending an expired one's date); 409 once Converted", operationId: "updateEstimate",
+  source: "src/app/api/estimates/[id]/route.ts", roles: OS, body: ["EstimateRequest", estimates.estimateSchema],
+  ok: { 200: ["EstimateResponse", estimateOne] }, errors: [...JSONERR, 404, 409], rateLimit: MUT,
+})
+op("delete", "/api/estimates/{id}", {
+  tag: "estimates", summary: "Delete a Draft (owner); 409 otherwise", operationId: "deleteEstimate", source: "src/app/api/estimates/[id]/route.ts",
+  roles: OWNER, ok: { 200: ["DeletedId", R.deletedId] }, errors: [401, 403, 404, 409, 429, 500], rateLimit: MUT,
+})
+op("post", "/api/estimates/{id}/status", {
+  tag: "estimates", summary: "Mark sent / accepted / declined, or reopen (extends an expired date)", operationId: "estimateStatus",
+  source: "src/app/api/estimates/[id]/status/route.ts", roles: OS, body: ["EstimateAction", estimates.estimateActionSchema],
+  ok: { 200: ["EstimateResponse", estimateOne] }, errors: [...JSONERR, 404, 409], rateLimit: MUT,
+})
+op("post", "/api/estimates/{id}/duplicate", {
+  tag: "estimates", summary: "Copy as a new Draft with a new number and dates", operationId: "duplicateEstimate",
+  source: "src/app/api/estimates/[id]/duplicate/route.ts", roles: OS, ok: { 201: ["EstimateResponse", estimateOne] }, errors: [401, 403, 404, 429, 500], rateLimit: MUT,
+})
+op("get", "/api/day-book", {
+  tag: "payments", summary: "Day book: every money movement in a range, newest first, with Money in / out / Net", operationId: "dayBook",
+  source: "src/app/api/day-book/route.ts; src/lib/daybook.ts", roles: OWNER,
+  query: [
+    { name: "from", description: "YYYY-MM-DD (default today)" },
+    { name: "to", description: "YYYY-MM-DD (default = from)" },
+    { name: "accountId", description: "only that account's share" },
+    { name: "type", description: "sale | payment_in | purchase | purchase_payment | expense | payment_out" },
+    { name: "cashOnly", description: "1 = cash only" },
+  ],
+  ok: { 200: ["DayBook", z.object({
+    from: day, to: day, today: day, moneyIn: z.number(), moneyOut: z.number(), net: z.number(),
+    entries: z.array(z.object({ id, on: day, at: z.number(), type: z.enum(["sale", "payment_in", "purchase", "purchase_payment", "expense", "payment_out"]), direction: z.enum(C.PAYMENT_DIRECTIONS), method: z.enum(C.PAYMENT_METHODS), amount: z.number(), party: z.string(), reference: n(z.string()), note: n(z.string()), accounts: z.array(z.string()), href: z.string() })),
+  })] },
+  errors: [401, 403, 404, 422, 500],
+})
+op("get", "/api/accounts/{id}/statement", {
+  tag: "payments", summary: "An account's statement: opening, each in/out with running balance, balance now", operationId: "accountStatement",
+  source: "src/app/api/accounts/[id]/statement/route.ts; src/lib/account-statement.ts", roles: OWNER,
+  query: [{ name: "from", description: "YYYY-MM-DD (optional)" }, { name: "to", description: "YYYY-MM-DD (optional)" }],
+  ok: { 200: ["AccountStatement", z.object({
+    account: z.object({ id, name: z.string(), number: n(z.string()).describe("masked ••••1234"), openingBalance: z.number(), openedOn: n(day), archived: z.boolean() }),
+    today: day, opening: z.number(), closing: z.number(), moneyIn: z.number(), moneyOut: z.number(),
+    rows: z.array(z.object({ id, on: day, at: z.number(), direction: z.enum(C.PAYMENT_DIRECTIONS), amount: z.number(), running: z.number(), what: z.string(), detail: z.string(), href: z.string() })),
+  })] },
+  errors: [401, 403, 404, 422, 500],
+})
+op("patch", "/api/payments/{id}", {
+  tag: "payments", summary: "Correct a payment (accounts re-allocated; 409 for an expense's cash row)", operationId: "updatePayment",
+  source: "src/app/api/payments/[id]/route.ts", roles: OWNER, body: ["PaymentRequest", payments.paymentSchema],
+  ok: { 200: ["PaymentResponse", R.payment] }, errors: [...JSONERR, 404, 409], rateLimit: MUT,
 })
 
 // ---- conversion -------------------------------------------------------------

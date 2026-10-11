@@ -17,7 +17,15 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { dayRangeInZone } from "@/lib/time"
 import { expenseSchema } from "@/lib/validations/expenses"
 import { getWorkspace } from "@/lib/workspace"
-import { ownAccount, ownParty } from "@/lib/money-refs"
+import { ownParty } from "@/lib/money-refs"
+import { fromPaisa, needsAccount, toPaisa } from "@/lib/allocations"
+import { purchasePaidPaisa } from "@/lib/settlement"
+import {
+  allocationsFor,
+  removeAllocations,
+  resolveAllocations,
+  writeAllocations,
+} from "@/lib/allocations-server"
 import { Expense, toExpenseDTO } from "@/models/expense"
 import { Payment } from "@/models/payment"
 import { User } from "@/models/user"
@@ -81,11 +89,83 @@ export async function PATCH(
     }
 
     const partyRef = await ownParty(viewer.businessId, values.partyId)
-    const account = await ownAccount(viewer.businessId, values.accountId)
-
     const lines = await priceLines(viewer.businessId, values.lines)
     const amount =
       values.kind === "stock" ? linesTotal(lines) : (values.amount ?? 0)
+
+    /*
+     * What is paid at the time, after the edit (lib/settlement.ts): what the
+     * form says, or — from a client that doesn't send it — paid in full if it
+     * was, otherwise what was already paid. The rest is owed to the party.
+     */
+    const mirror = expense.payment
+      ? await Payment.findOne({ _id: expense.payment, business: viewer.businessId }).select("amount")
+      : null
+    const amountPaisa = toPaisa(amount)
+    const paidPaisa = purchasePaidPaisa({
+      amountPaisa,
+      paidNowPaisa: values.paidNow === undefined ? undefined : toPaisa(values.paidNow),
+      previous: {
+        amountPaisa: toPaisa(expense.amount),
+        paidPaisa: mirror ? toPaisa(mirror.amount) : 0,
+      },
+    })
+    if (paidPaisa > amountPaisa) {
+      const message = "That is more than it comes to"
+      throw new HttpError(422, message, { paidNow: [message] })
+    }
+    if (paidPaisa < amountPaisa && !partyRef) {
+      const message = "Pick the party you owe the rest to"
+      throw new HttpError(422, message, { partyId: [message] })
+    }
+
+    /*
+     * Which accounts it came out of. A supervisor can't see the accounts, so
+     * their edit keeps whatever the owner chose rather than dropping it: the
+     * one account takes the new amount; a split stays as it is, and only the
+     * owner may change an amount that would no longer add up to it.
+     */
+    let accountId = values.accountId
+    let split = values.allocations
+    if (
+      viewer.role !== "owner" &&
+      needsAccount(values.method) &&
+      !split?.length &&
+      expense.payment
+    ) {
+      const existing =
+        (await allocationsFor(viewer.businessId, [expense.payment])).get(
+          String(expense.payment)
+        ) ?? []
+      if (existing.length > 1) {
+        const total = existing.reduce((sum, row) => sum + toPaisa(row.amount), 0)
+        if (total !== paidPaisa) {
+          throw new HttpError(
+            409,
+            "The owner split this one across accounts, so only they can change its amount."
+          )
+        }
+        split = existing
+        accountId = undefined
+      } else if (existing.length === 1) {
+        accountId = existing[0].accountId
+      }
+    }
+    const allocation =
+      paidPaisa > 0
+        ? await resolveAllocations(viewer.businessId, {
+            method: values.method,
+            amount: fromPaisa(paidPaisa),
+            accountId,
+            allocations: split,
+            requireAccount: viewer.role === "owner",
+          })
+        : { rows: [], account: undefined, allocated: false }
+    const account = allocation.account
+    const dueDate =
+      paidPaisa < amountPaisa && values.dueDate
+        ? dayRangeInZone(values.dueDate, business.timeZone).start
+        : undefined
 
     // Every item either side of the edit: one dropped from the purchase still
     // needs its cost worked out again without it.
@@ -117,10 +197,55 @@ export async function PATCH(
         expense.note = values.note
         expense.spentOn = start
         expense.set("lines", lines)
-        await expense.save({ session })
+        // Only a purchase still partly owed has a due date.
+        if (paidPaisa < amountPaisa && values.dueDate) expense.dueDate = dueDate
+        else if (paidPaisa >= amountPaisa) expense.dueDate = undefined
+
+        // Nothing paid at the time any more: its cash row goes, and with it
+        // the money it took off any account.
+        if (paidPaisa === 0 && expense.payment) {
+          await Payment.deleteOne(
+            { _id: expense.payment, business: viewer.businessId },
+            { session }
+          )
+          await removeAllocations(session, viewer.businessId, expense.payment)
+          expense.payment = undefined
+        }
+        // Something paid now where nothing was: it gets a cash row.
+        if (paidPaisa > 0 && !expense.payment) {
+          const [created] = await Payment.create(
+            [
+              {
+                business: viewer.businessId,
+                direction: "out",
+                party: values.payee,
+                partyRef,
+                account,
+                allocated: allocation.allocated || undefined,
+                amount: fromPaisa(paidPaisa),
+                method: values.method,
+                reference: values.reference,
+                note: values.note,
+                paidOn: start,
+                expense: expense._id,
+                recordedBy: viewer.id,
+              },
+            ],
+            { session }
+          )
+          expense.payment = created._id
+          await writeAllocations(
+            session,
+            { businessId: viewer.businessId, paymentId: created._id, direction: "out" },
+            allocation.rows
+          )
+          await expense.save({ session })
+        } else {
+          await expense.save({ session })
+        }
 
         // The mirrored cash row moves with it, or the two ledgers drift.
-        if (expense.payment) {
+        if (expense.payment && mirror) {
           await Payment.updateOne(
             { _id: expense.payment, business: viewer.businessId },
             {
@@ -128,7 +253,8 @@ export async function PATCH(
                 party: values.payee,
                 partyRef: partyRef ?? null,
                 account: account ?? null,
-                amount,
+                allocated: allocation.allocated,
+                amount: fromPaisa(paidPaisa),
                 method: values.method,
                 reference: values.reference,
                 note: values.note,
@@ -136,6 +262,13 @@ export async function PATCH(
               },
             },
             { session }
+          )
+          // Its accounts are re-read from the new figures: back to cash
+          // drops them, a new amount moves them.
+          await writeAllocations(
+            session,
+            { businessId: viewer.businessId, paymentId: expense.payment, direction: "out" },
+            allocation.rows
           )
         }
 
@@ -162,7 +295,18 @@ export async function PATCH(
       href: "/dashboard/sales",
     })
 
-    return ok({ expense: toExpenseDTO(expense, business.timeZone) })
+    return ok({
+      expense: toExpenseDTO(
+        expense,
+        business.timeZone,
+        viewer.role === "owner"
+          ? allocation.rows.map((row) => ({
+              accountId: String(row.account),
+              amount: row.amount,
+            }))
+          : undefined
+      ),
+    })
   } catch (error) {
     return handleApiError(error)
   }
@@ -187,6 +331,19 @@ export async function DELETE(
     await connectToDatabase()
     const expense = await findOwn(viewer.businessId, viewer.role, id)
 
+    // Payments made later against a purchase on credit point at it; deleting
+    // the purchase would leave them paying for nothing.
+    const settledBy = await Payment.countDocuments({
+      business: viewer.businessId,
+      purchase: expense._id,
+    })
+    if (settledBy > 0) {
+      throw new HttpError(
+        409,
+        `${settledBy} payment${settledBy === 1 ? " was" : "s were"} made against this purchase. Delete ${settledBy === 1 ? "it" : "them"} on the Payments page first.`
+      )
+    }
+
     const touched = (expense.lines ?? []).flatMap((line) =>
       line.item ? [String(line.item)] : []
     )
@@ -203,6 +360,8 @@ export async function DELETE(
             { _id: expense.payment, business: viewer.businessId },
             { session }
           )
+          // The money goes back on the accounts it came out of.
+          await removeAllocations(session, viewer.businessId, expense.payment)
         }
 
         await expense.deleteOne({ session })

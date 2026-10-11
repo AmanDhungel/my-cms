@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { cn } from "cn"
 
 import {
@@ -12,10 +13,12 @@ import {
 } from "@/components/dashboard/date-range-filter"
 import { Pagination, paginate } from "@/components/dashboard/pagination"
 import { ExpensesPanel } from "@/components/dashboard/expenses/expenses-panel"
-import { BillDialog } from "@/components/dashboard/sales/bill-dialog"
+import { BillDialog, type BillPrefill } from "@/components/dashboard/sales/bill-dialog"
+import { EstimatesPanel } from "@/components/dashboard/sales/estimates/estimates-panel"
 import {
   PAYMENT_LABELS,
   PaymentChip,
+  SettleChip,
 } from "@/components/dashboard/sales/payment"
 import { PlusIcon } from "@/components/dashboard/nav-icons"
 import { RowsSkeleton, StatGridSkeleton } from "@/components/dashboard/skeletons"
@@ -45,14 +48,31 @@ export function SalesView({
   vatRate,
   canSeeExpenses,
   today,
+  initialTab,
+  prefill,
+  prefillError,
 }: {
   vatRate: number
   canSeeExpenses: boolean
   today: string
+  /** ?tab=estimates opens the Estimates tab. */
+  initialTab?: "bills" | "expenses" | "estimates"
+  /** "Convert to sale": the bill form opens filled in from the estimate. */
+  prefill?: BillPrefill
+  /** Why an estimate couldn't be converted, shown once. */
+  prefillError?: string
 }) {
   const router = useRouter()
-  const [tab, setTab] = React.useState<"bills" | "expenses">("bills")
-  const [open, setOpen] = React.useState(false)
+  const [tab, setTab] = React.useState<"bills" | "expenses" | "estimates">(
+    initialTab === "expenses" && !canSeeExpenses ? "bills" : (initialTab ?? "bills")
+  )
+  const [open, setOpen] = React.useState(Boolean(prefill))
+  // Set once the bill form saves, so closing it doesn't redirect away.
+  const createdRef = React.useRef(false)
+  // Why a conversion couldn't start, said once when the page opens.
+  React.useEffect(() => {
+    if (prefillError) toast.error(prefillError)
+  }, [prefillError])
   const [search, setSearch] = React.useState("")
   const [filter, setFilter] = React.useState<BillPayment | "all">("all")
   const [range, setRange] = React.useState<DateRange | undefined>()
@@ -124,10 +144,13 @@ export function SalesView({
         }
       />
 
-      {/* One tab is no choice at all, so a supervisor never sees the strip. */}
-      {canSeeExpenses ? (
+      {/* Bills and estimates for everyone who sells; expenses for the owner. */}
+      {(
         <div className="border-n-200 flex w-fit gap-0.5 rounded-md border bg-white p-0.5">
-          {(["bills", "expenses"] as const).map((option) => (
+          {(canSeeExpenses
+            ? (["bills", "expenses", "estimates"] as const)
+            : (["bills", "estimates"] as const)
+          ).map((option) => (
             <button
               key={option}
               type="button"
@@ -144,9 +167,11 @@ export function SalesView({
             </button>
           ))}
         </div>
-      ) : null}
+      )}
 
-      {tab === "expenses" ? (
+      {tab === "estimates" ? (
+        <EstimatesPanel vatRate={vatRate} today={today} />
+      ) : tab === "expenses" ? (
         <ExpensesPanel
           today={today}
           kinds={EXPENSE_KINDS}
@@ -286,6 +311,7 @@ export function SalesView({
                     payment={bill.payment}
                     chequeNo={bill.chequeNo}
                   />
+                  <SettleChip status={bill.settlement} />
                   {[
                     bill.paid > 0 && bill.due > 0
                       ? `${money(bill.paid)} of ${money(bill.total)} paid`
@@ -358,9 +384,21 @@ export function SalesView({
       <BillDialog
         open={open}
         vatRate={vatRate}
-        onClose={() => setOpen(false)}
+        today={today}
+        prefill={prefill}
+        onClose={() => {
+          setOpen(false)
+          // Closing a conversion without saving leaves the estimate as it
+          // was; after a save the bill page is where this goes instead.
+          if (prefill && !createdRef.current) {
+            router.replace("/dashboard/sales?tab=estimates")
+          }
+        }}
         // Straight to the bill, which is where printing and sending live.
-        onCreated={(bill) => router.push(`/dashboard/sales/${bill.id}`)}
+        onCreated={(bill) => {
+          createdRef.current = true
+          router.push(`/dashboard/sales/${bill.id}`)
+        }}
       />
     </DashboardMain>
   )

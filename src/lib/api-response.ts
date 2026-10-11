@@ -14,18 +14,22 @@ export class HttpError extends Error {
   readonly fieldErrors?: ApiError["fieldErrors"]
   /** Optional response headers, e.g. Retry-After on a 429. */
   readonly headers?: Record<string, string>
+  /** Optional extra fields for the body, e.g. the sale a 409 points at. */
+  readonly extra?: Record<string, unknown>
 
   constructor(
     status: number,
     message: string,
     fieldErrors?: ApiError["fieldErrors"],
-    headers?: Record<string, string>
+    headers?: Record<string, string>,
+    extra?: Record<string, unknown>
   ) {
     super(message)
     this.name = "HttpError"
     this.status = status
     this.fieldErrors = fieldErrors
     this.headers = headers
+    this.extra = extra
   }
 }
 
@@ -49,6 +53,12 @@ export function fail(
  */
 export function handleApiError(error: unknown) {
   if (error instanceof HttpError) {
+    if (error.extra) {
+      return NextResponse.json(
+        { error: error.message, fieldErrors: error.fieldErrors, ...error.extra },
+        { status: error.status, headers: error.headers }
+      )
+    }
     return fail(error.message, error.status, error.fieldErrors, error.headers)
   }
 

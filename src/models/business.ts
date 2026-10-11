@@ -1,11 +1,11 @@
 import {
   Schema,
-  model,
-  models,
   type HydratedDocument,
   type InferSchemaType,
   type Model,
 } from "mongoose"
+
+import { defineModel } from "@/lib/model"
 
 import { CREW_SIZES } from "@/lib/validations/auth"
 import {
@@ -15,6 +15,7 @@ import {
 } from "@/lib/work-constants"
 import type { WeekPattern } from "@/lib/week"
 import { servedUrl } from "@/lib/storage/urls"
+import { MODULE_KEYS, isModuleKey, type ModuleKey } from "@/lib/modules"
 
 /**
  * Where the office is, and how far from it a shift may be opened. Absent on
@@ -117,10 +118,30 @@ const businessSchema = new Schema(
      */
     billSeq: { type: Number, required: true, default: 0 },
     /**
+     * The last estimate number handed out (EST-0001…). Absent until the first
+     * estimate: $inc starts a missing counter at 1, so nothing is backfilled.
+     */
+    estimateSeq: { type: Number },
+    /**
      * Set by a super admin. A blocked workspace shuts out everyone in it,
      * whatever their role.
      */
     blockedAt: { type: Date },
+    /**
+     * The sidebar sections this workspace uses (lib/modules.ts). Absent on
+     * every workspace that has never chosen, and absent means all of them:
+     * `default: undefined` stops mongoose writing an empty list that would
+     * read as a choice.
+     */
+    enabledModules: {
+      type: [{ type: String, enum: MODULE_KEYS }],
+      default: undefined,
+    },
+    /**
+     * When the owner (or a super admin) last chose the sections. Absent until
+     * then; the dashboard asks once, on the next visit, while it is.
+     */
+    modulesConfiguredAt: { type: Date },
     /** The user who created the workspace. */
     owner: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
@@ -129,13 +150,9 @@ const businessSchema = new Schema(
 
 export type BusinessDocument = InferSchemaType<typeof businessSchema>
 
-/**
- * `models.Business ??` keeps hot reload from re-registering the model
- * (mongoose throws OverwriteModelError otherwise).
- */
+/** Once per process, and never with a stale schema (lib/model.ts). */
 export const Business: Model<BusinessDocument> =
-  (models.Business as Model<BusinessDocument>) ??
-  model<BusinessDocument>("Business", businessSchema)
+  defineModel<BusinessDocument>("Business", businessSchema)
 
 export type BusinessDTO = {
   id: string
@@ -155,6 +172,9 @@ export type BusinessDTO = {
   logo: { key: string; url: string } | null
   blockedAt: string | null
   ownerId: string
+  /** Sections switched on; null = never chosen, which is all of them. */
+  enabledModules: ModuleKey[] | null
+  modulesConfiguredAt: string | null
 }
 
 export function toBusinessDTO(
@@ -188,5 +208,11 @@ export function toBusinessDTO(
       : null,
     blockedAt: business.blockedAt ? business.blockedAt.toISOString() : null,
     ownerId: String(business.owner),
+    enabledModules: business.enabledModules?.length
+      ? business.enabledModules.filter(isModuleKey)
+      : null,
+    modulesConfiguredAt: business.modulesConfiguredAt
+      ? business.modulesConfiguredAt.toISOString()
+      : null,
   }
 }

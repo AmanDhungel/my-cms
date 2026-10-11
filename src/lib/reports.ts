@@ -220,6 +220,22 @@ export const REPORTS: ReportDef[] = [
     status: "ready",
   },
   {
+    slug: "who-owes-you",
+    group: "finance",
+    title: "Who owes you",
+    subtitle: "What each party still owes, by how late it is — oldest first.",
+    filters: [],
+    status: "ready",
+  },
+  {
+    slug: "who-you-owe",
+    group: "finance",
+    title: "Who you owe",
+    subtitle: "What you still owe each party, by how late it is — oldest first.",
+    filters: [],
+    status: "ready",
+  },
+  {
     slug: "payables",
     group: "finance",
     title: "Outstanding payables",

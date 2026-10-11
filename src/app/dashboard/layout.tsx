@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { EmployeeShell } from "@/components/dashboard/employee-shell";
+import { FirstRunModules } from "@/components/dashboard/modules/modules-chooser";
 import { OwnerShell } from "@/components/dashboard/owner-shell";
 import { loadViewer } from "@/lib/auth/page-guards";
 import { isSuperAdmin } from "@/lib/auth/super-admin";
@@ -19,6 +20,7 @@ import { WorkRequest } from "@/models/request";
 import { Ticket } from "@/models/ticket";
 import { User } from "@/models/user";
 import { servedUrl } from "@/lib/storage/urls"
+import { needsModuleChooser, resolveModules } from "@/lib/modules";
 
 /** Sessions are per-request; nothing under /dashboard may be cached. */
 export const dynamic = "force-dynamic";
@@ -56,6 +58,24 @@ export default async function DashboardLayout({
       </EmployeeShell>
     );
   }
+
+  /*
+   * Asked once: until the owner (or a super admin) has chosen which sections
+   * the workspace uses, they get the chooser instead of the dashboard. It is
+   * decided here, on the server, so the full sidebar never flashes up first.
+   * A supervisor is never asked and sees everything until a choice is made —
+   * which is also how every workspace behaved before sections existed.
+   */
+  if (
+    needsModuleChooser({
+      modulesConfiguredAt: business.modulesConfiguredAt,
+      role: me.role,
+      superAdmin: viewer.superAdmin,
+    })
+  ) {
+    return <FirstRunModules role={me.role} businessName={business.name} />;
+  }
+  const modules = resolveModules(business.enabledModules);
 
   const [
     people,
@@ -105,6 +125,7 @@ export default async function DashboardLayout({
   return (
     <OwnerShell
       viewer={viewer}
+      modules={modules}
       counts={{
         people,
         pendingInvites,

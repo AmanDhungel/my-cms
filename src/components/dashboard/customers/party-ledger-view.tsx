@@ -30,7 +30,14 @@ const KIND_LABELS: Record<LedgerEntry["kind"], string> = {
  * read in, and the only order in which a running balance means anything. What
  * the figure at the bottom says is what they owe today.
  */
-export function PartyLedgerView({ id }: { id: string }) {
+export function PartyLedgerView({
+  id,
+  tabs,
+}: {
+  id: string
+  /** The Overview / Ledger switch on the party page; absent, nothing extra renders. */
+  tabs?: React.ReactNode
+}) {
   const query = usePartyLedger(id)
   const party = query.data?.party
   const ledger = query.data?.ledger
@@ -64,6 +71,8 @@ export function PartyLedgerView({ id }: { id: string }) {
           </Link>
         }
       />
+
+      {tabs}
 
       {query.isPending ? (
         <StatGridSkeleton count={4} />

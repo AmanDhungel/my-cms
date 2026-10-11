@@ -1,6 +1,28 @@
 import { z } from "zod"
 
-import { BILL_PAYMENTS, BILL_SOURCES } from "@/lib/work-constants"
+import { allocationsField } from "@/lib/validations/allocations"
+import { BILL_PAYMENTS, BILL_SOURCES, PAYMENT_METHODS } from "@/lib/work-constants"
+
+const dayKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date")
+
+/**
+ * Money taken at the till as the bill is raised: all of it, or part with the
+ * rest left owing. Recorded as an ordinary "Money in" payment against the
+ * bill, through the same account rules as every other payment.
+ */
+export const receivedSchema = z.object({
+  amount: z.coerce
+    .number<number>()
+    .min(0, "An amount can't be negative")
+    .max(100_000_000, "That amount looks wrong"),
+  method: z.enum(PAYMENT_METHODS),
+  accountId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/, "Pick an account")
+    .optional(),
+  allocations: allocationsField,
+  reference: z.string().trim().max(60, "That reference is very long").optional(),
+})
 
 const objectId = z.string().regex(/^[0-9a-fA-F]{24}$/, "Pick an item")
 
@@ -27,20 +49,26 @@ const lineSchema = z.object({
     .max(100, "100% is the largest discount"),
 })
 
+/** Who a bill (or an estimate) is for: the copy that prints on it. */
+export const saleCustomerSchema = z.object({
+  name: z.string().trim().min(2, "Who is this bill for?").max(140),
+  phone: z.string().trim().max(30).optional(),
+  email: z
+    .union([z.literal(""), z.email("That email doesn't look right")])
+    .optional(),
+  address: z.string().trim().max(200).optional(),
+  pan: z.string().trim().max(30).optional(),
+})
+
+/** One line, as a bill and an estimate both take it. */
+export const saleLineSchema = lineSchema
+
 export const billSchema = z
   .object({
     source: z.enum(BILL_SOURCES),
     /** Set when the bill was raised for a saved customer. */
     customerId: objectId.optional(),
-    customer: z.object({
-      name: z.string().trim().min(2, "Who is this bill for?").max(140),
-      phone: z.string().trim().max(30).optional(),
-      email: z
-        .union([z.literal(""), z.email("That email doesn't look right")])
-        .optional(),
-      address: z.string().trim().max(200).optional(),
-      pan: z.string().trim().max(30).optional(),
-    }),
+    customer: saleCustomerSchema,
     lines: z
       .array(lineSchema)
       .min(1, "Add at least one line")
@@ -55,6 +83,15 @@ export const billSchema = z
       .max(40, "That is longer than a cheque number")
       .optional(),
     note: z.string().trim().max(500).optional(),
+    /** What was paid at the till, if anything (see receivedSchema). */
+    received: receivedSchema.optional(),
+    /** When the rest is due. Absent: the day it is raised. */
+    dueDate: dayKey.optional(),
+    /** The estimate being converted into this sale (models/estimate.ts). */
+    estimateId: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/, "That estimate doesn't exist")
+      .optional(),
   })
   .refine(
     (values) =>

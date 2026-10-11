@@ -1,13 +1,14 @@
 import {
   Schema,
-  model,
-  models,
   type HydratedDocument,
   type InferSchemaType,
   type Model,
 } from "mongoose"
 
 import { round2 } from "@/lib/billing"
+import { defineModel } from "@/lib/model"
+import { settleStatus, type SettleStatus } from "@/lib/settlement"
+import { dayKeyInZone } from "@/lib/time"
 import {
   BILL_PAYMENTS,
   BILL_SOURCES,
@@ -165,6 +166,14 @@ const billSchema = new Schema(
       default: "issued",
     },
     issuedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    /**
+     * When the money is due, as the start of that day in the workspace's
+     * zone. Absent on every bill raised before due dates existed: those fall
+     * due the day they were raised (lib/settlement.ts).
+     */
+    dueDate: { type: Date },
+    /** The estimate this sale was converted from, if any (models/estimate.ts). */
+    estimateRef: { type: Schema.Types.ObjectId, ref: "Estimate" },
     voidedAt: { type: Date },
     voidedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
@@ -180,8 +189,8 @@ billSchema.index({ business: 1, customerRef: 1, createdAt: 1 })
 
 export type BillDocument = InferSchemaType<typeof billSchema>
 
-export const Bill: Model<BillDocument> =
-  (models.Bill as Model<BillDocument>) ?? model<BillDocument>("Bill", billSchema)
+/** Once per process, and never with a stale schema (lib/model.ts). */
+export const Bill: Model<BillDocument> = defineModel<BillDocument>("Bill", billSchema)
 
 export type BillLineDTO = {
   itemId: string | null
@@ -248,12 +257,46 @@ export type BillDTO = {
   issuedBy: string
   createdAt: string
   voidedAt: string | null
+  /** "YYYY-MM-DD" it falls due, in the workspace's zone; null = the day it was raised. */
+  dueOn?: string | null
+  /** Paid / Partly paid / Unpaid / Overdue, where a route knew the date. */
+  settlement?: SettleStatus | null
+  /** The estimate it was converted from. */
+  estimateId?: string | null
 }
 
 export function toBillDTO(
   bill: HydratedDocument<BillDocument>,
   /** Summed from the payments pointing at this bill. */
-  paid = 0
+  paid = 0,
+  /** The workspace's zone and today, for the due date and the status chip. */
+  context?: { timeZone: string; today: string }
+): BillDTO {
+  const dto = toBillDTOCore(bill, paid)
+  if (!context) return dto
+  const raised = dayKeyInZone(bill.createdAt as Date, context.timeZone)
+  const due = bill.dueDate ? dayKeyInZone(bill.dueDate, context.timeZone) : null
+  return {
+    ...dto,
+    dueOn: due,
+    estimateId: bill.estimateRef ? String(bill.estimateRef) : null,
+    // Not money either way yet, or no longer: no chip.
+    settlement:
+      bill.payment === "quotation" || bill.status === "void"
+        ? null
+        : settleStatus({
+            totalPaisa: Math.round(dto.total * 100),
+            paidPaisa: Math.round(dto.paid * 100),
+            duePaisa: Math.round(dto.due * 100),
+            dueOn: due ?? raised,
+            today: context.today,
+          }),
+  }
+}
+
+function toBillDTOCore(
+  bill: HydratedDocument<BillDocument>,
+  paid: number
 ): BillDTO {
   return {
     review: toReviewDTO(bill),

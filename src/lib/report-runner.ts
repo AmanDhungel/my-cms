@@ -4,6 +4,9 @@ import { HttpError } from "@/lib/api-response"
 import { money, round2 } from "@/lib/billing"
 import { kindLabel } from "@/lib/expenses"
 import { paidByBill } from "@/lib/payments"
+import { fromPaisa } from "@/lib/allocations"
+import { AGING_BUCKETS, AGING_LABELS, agingOf, openItems, type AgingBucket } from "@/lib/khata"
+import { khataBalances } from "@/lib/ledger"
 import type { ReportChartData, ReportPayload } from "@/lib/reports"
 import { dayKeyInZone } from "@/lib/time"
 import { weekFor } from "@/lib/week-server"
@@ -109,6 +112,10 @@ export async function buildReport(slug: string, s: Scope): Promise<ReportPayload
       return profit(s)
     case "receivables":
       return receivables(s)
+    case "who-owes-you":
+      return aging("receivable", s)
+    case "who-you-owe":
+      return aging("payable", s)
     case "customer-payments":
       return partyPayments("in", s)
     case "supplier-payments":
@@ -850,7 +857,7 @@ async function expenses(s: Scope): Promise<ReportPayload> {
    * it. Counted here so the report is every rupee that left, and filtered by
    * the back-reference so an expense's own cash row is not counted twice.
    */
-  const loose = (await loadPayments("out", s)).filter((one) => !one.expense)
+  const loose = (await loadPayments("out", s)).filter((one) => !one.expense && !one.purchase)
 
   const buckets = new Map<
     string,
@@ -990,7 +997,7 @@ async function profit(s: Scope): Promise<ReportPayload> {
   // no category, so the only safe reading is that it was spent — which errs
   // towards a smaller profit rather than a flattering one. Its back-reference
   // keeps an expense's own cash row from being counted a second time.
-  const loose = (await loadPayments("out", s)).filter((one) => !one.expense)
+  const loose = (await loadPayments("out", s)).filter((one) => !one.expense && !one.purchase)
   for (const one of loose) add(one.paidOn as Date, one.amount)
 
   for (const key of running.keys()) bucket(key)
@@ -1057,6 +1064,79 @@ async function profit(s: Scope): Promise<ReportPayload> {
         : loose.length > 0
           ? `Revenue is net of VAT and discounts. Goods cost is what the items on each bill were bought for. ${loose.length} payment${loose.length === 1 ? "" : "s"} out entered on the Payments page carries no category, so ${loose.length === 1 ? "it counts" : "they count"} as a running cost.`
           : "Revenue is net of VAT and discounts. Goods cost is what the items on each bill were bought for. Stock purchases are not counted as a running cost — they are counted as they are sold.",
+  }
+}
+
+/**
+ * Who owes you / Who you owe: every party's open balance by how late it is
+ * (Not yet due, 1–30, 31–60, 61–90, over 90 days). Built on the khata
+ * (lib/khata.ts) — the same open items as the party's Ledger tab, so each
+ * row adds up to that party's balance. A bill with no due date falls due the
+ * day it was raised. "As of today": the date range does not apply.
+ */
+async function aging(side: "receivable" | "payable", s: Scope): Promise<ReportPayload> {
+  const today = dayKeyInZone(new Date(), s.zone)
+  const parties = await khataBalances(s.businessId, s.zone)
+  const rows = parties
+    .filter((row) => (side === "receivable" ? row.balance > 0 : row.balance < 0))
+    .map((row) => ({ party: row.party, aging: agingOf(openItems(row.events), today) }))
+    .sort((a, b) => b.aging.oldestDays - a.aging.oldestDays || b.aging.total - a.aging.total)
+
+  const sum = (key: AgingBucket | "total") => rows.reduce((total, row) => total + row.aging[key], 0)
+  const money2 = (paisa: number) => fromPaisa(paisa)
+  const late60 = sum("d61_90") + sum("d90_plus")
+
+  return {
+    slug: side === "receivable" ? "who-owes-you" : "who-you-owe",
+    columns: [
+      { key: "party", label: side === "receivable" ? "Who owes you" : "Who you owe" },
+      { key: "phone", label: "Phone" },
+      ...AGING_BUCKETS.map((bucket) => ({
+        key: bucket,
+        label: AGING_LABELS[bucket],
+        align: "right" as const,
+        format: "money" as const,
+      })),
+      { key: "total", label: "Total", align: "right", format: "money" },
+      { key: "oldest", label: "Oldest (days late)", align: "right", format: "number" },
+    ],
+    rows: [
+      ...rows.map((row) => ({
+        party: row.party.name,
+        phone: row.party.phone ?? null,
+        ...Object.fromEntries(AGING_BUCKETS.map((bucket) => [bucket, money2(row.aging[bucket])])),
+        total: money2(row.aging.total),
+        oldest: Math.max(0, row.aging.oldestDays),
+        href: `/dashboard/customers/${String(row.party._id)}?tab=ledger`,
+      })),
+      ...(rows.length
+        ? [
+            {
+              party: "Total",
+              phone: null,
+              ...Object.fromEntries(AGING_BUCKETS.map((bucket) => [bucket, money2(sum(bucket))])),
+              total: money2(sum("total")),
+              oldest: null,
+            },
+          ]
+        : []),
+    ],
+    stats: [
+      { label: side === "receivable" ? "TO COLLECT" : "TO PAY", value: money(money2(sum("total"))) },
+      { label: "OVER 60 DAYS LATE", value: money(money2(late60)), accent: late60 > 0 },
+      { label: "PARTIES", value: String(rows.length) },
+    ],
+    totals: [{ label: "Total", value: money(money2(sum("total"))) }],
+    chart: {
+      kind: "column",
+      labels: AGING_BUCKETS.map((bucket) => AGING_LABELS[bucket]),
+      series: [{ label: side === "receivable" ? "Owed to you" : "You owe", values: AGING_BUCKETS.map((bucket) => money2(sum(bucket))) }],
+      format: "money",
+    },
+    note:
+      side === "receivable"
+        ? "Money overdue for more than 60 days is the hardest to collect — start with the top of this list. A bill with no due date falls due the day it was raised; payments not tied to a bill count against the oldest bills first."
+        : "Paying the oldest first keeps suppliers on your side. A purchase with no due date falls due the day it was bought.",
   }
 }
 

@@ -4,6 +4,7 @@ import * as React from "react"
 import { toast } from "sonner"
 import { cn } from "cn"
 
+import { SafeImage } from "@/components/dashboard/safe-image"
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import {
   emsDialogContent,
@@ -256,8 +257,7 @@ export function MaintenanceView({ today }: { today: string }) {
             >
               <div className="bg-n-100 border-n-200 size-[52px] shrink-0 overflow-hidden rounded-md border">
                 {row.photos[0] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <SafeImage
                     src={row.photos[0]}
                     alt=""
                     className="size-full object-cover"

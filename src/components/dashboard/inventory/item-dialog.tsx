@@ -51,10 +51,13 @@ export function ItemDialog({
   open,
   onClose,
   item,
+  onCreated,
 }: {
   open: boolean
   onClose: () => void
   item?: ItemDTO
+  /** A new item, once saved — for a form that added it inline. */
+  onCreated?: (item: ItemDTO) => void
 }) {
   /*
    * Escape and a click outside close the dialog without going through the
@@ -88,7 +91,12 @@ export function ItemDialog({
         {/* Mounted only while open, so each visit starts from the item as it
             stands rather than from whatever was typed last time. */}
         {open ? (
-          <Body onClose={onClose} item={item} mayCloseRef={mayCloseRef} />
+          <Body
+            onClose={onClose}
+            item={item}
+            mayCloseRef={mayCloseRef}
+            onCreated={onCreated}
+          />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -99,10 +107,12 @@ function Body({
   onClose,
   item,
   mayCloseRef,
+  onCreated,
 }: {
   onClose: () => void
   item?: ItemDTO
   mayCloseRef: React.RefObject<() => boolean>
+  onCreated?: (item: ItemDTO) => void
 }) {
   const [form, setForm] = React.useState(() => blank(item))
   const viewer = useViewer()
@@ -239,6 +249,7 @@ function Body({
         toast.success(
           item ? `${result.item.name} updated` : `${result.item.name} added`
         )
+        if (!item) onCreated?.(result.item)
         onClose()
       },
       onError: (error) => {
