@@ -3,6 +3,7 @@
 import * as React from "react"
 import { cn } from "cn"
 
+import { SafeImage } from "@/components/dashboard/safe-image"
 import {
   emsDialogContent,
   emsDialogOverlay,
@@ -305,8 +306,7 @@ function Body({
                 aria-label={`Open photo ${index + 1}${photo.uploadedByName ? ` by ${photo.uploadedByName}` : ""}`}
                 className="border-n-200 hover:border-p-400 focus-visible:outline-p-500 aspect-square overflow-hidden rounded-md border bg-white focus-visible:outline-2"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.url} alt="" loading="lazy" className="size-full object-cover" />
+                <SafeImage src={photo.url} alt="" loading="lazy" className="size-full object-cover" />
               </button>
             ))}
           </div>

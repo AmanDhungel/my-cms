@@ -3,6 +3,7 @@
 import * as React from "react"
 import { cn } from "cn"
 
+import { SafeImage } from "@/components/dashboard/safe-image"
 import {
   DeleteCategoryDialog,
   DeleteItemDialog,
@@ -338,8 +339,9 @@ function ItemsPanel({
               className="bg-n-100 border-n-200 size-[44px] shrink-0 overflow-hidden rounded-md border"
             >
               {item.images?.[0] ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                // A picture that no longer loads shows a quiet tile, not a
+                // broken-image glyph (components/dashboard/safe-image.tsx).
+                <SafeImage
                   src={item.images[0].url}
                   alt=""
                   loading="lazy"
