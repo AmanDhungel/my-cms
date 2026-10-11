@@ -829,6 +829,45 @@ Not done (would change existing response shapes): a `code` on the removed/blocke
 
 ---
 
+## 19b. Sections, accounts, the ledger, estimates and the day book (`feat/modules-accounts-images`, `feat/accounting-ledger-estimates`)
+
+All additive: new endpoints, and new **optional** fields on existing requests and responses. Nothing existing changes shape. Money is rupees to two places on the wire and whole paisa inside (`src/lib/allocations.ts`). Dates are `YYYY-MM-DD` in the workspace's zone. Full schemas: `openapi.json`.
+
+### Sections (display only — no endpoint is ever refused because a section is off)
+| Endpoint | Who | Notes |
+|---|---|---|
+| `GET /api/organization/modules` | any member | `{ modules, state, configured, configuredAt, canEdit }`. Nothing stored = all four on. |
+| `PUT /api/organization/modules` | owner, or a super admin in the workspace | `{ modules: ("workspace"\|"operations"\|"sales_stock"\|"reports")[] }`, at least one. Always stamps `modulesConfiguredAt`; 500 if the write didn't persist. |
+
+`GET /api/business` and `GET /api/me` (`business`) also carry `enabledModules` (null = never chosen) and `modulesConfiguredAt`.
+
+### Accounts on payments
+- `POST /api/payments`, `PATCH /api/payments/{id}` (new, owner; 409 for an expense's cash row), `POST/PATCH /api/expenses`: cash names no account (an account sent with cash is dropped). Any other method needs `accountId`, or `allocations: [{accountId, amount}]` adding up exactly; an owner without one gets 422 `"Pick the account this went through"`. Supervisors aren't asked.
+- `PaymentDTO` adds `allocations`, `expenseId` and `purchaseId`; `ExpenseDTO` adds `allocations`, plus `paid`, `paidAtTime`, `due`, `dueOn` and `settlement` on the list.
+
+### Money at the time of a sale or purchase
+- `POST /api/bills`: optional `received: { amount, method, accountId | allocations, reference }`, `dueDate` and `estimateId`. Money taken at the till becomes a Money-in payment against the bill, in the same transaction; more than the total → 422. `payment: "paid"` alone records a cash payment for the total. `BillDTO` adds `dueOn`, `settlement` (paid \| partly_paid \| unpaid \| overdue) and `estimateId`.
+- `POST/PATCH /api/expenses`: optional `paidNow` and `dueDate`. Paid less than the whole = a purchase on credit (a party is required). Omitting `paidNow` on an edit keeps what was paid.
+- `POST/PATCH /api/payments`: optional `purchaseId` (money out) to pay off a credit purchase, never more than is owed. Reports don't count it as a second expense.
+
+### The party ledger ("khata") — owner only
+| Endpoint | Notes |
+|---|---|
+| `GET /api/khata` | Every party: `balance` (+ they owe you, − you owe them), `tone`, plus `toCollect` / `toPay`. |
+| `GET /api/customers/{id}/statement?from&to&types` | Opening → rows (`kind` sale \| received \| settled \| purchase \| paid, `billed`, `paid`, `running`, `href`) → closing. Also `open` items (Total/Paid/Due/`settlement`), `unapplied` money and `aging`. `types` hides rows but never changes a balance. |
+
+The old `GET /api/customers/{id}/ledger` is unchanged. Its balance treats a bill marked "paid" with no payment as still owed; the khata (and the Parties list) treat it as settled.
+
+### Estimates — owner/supervisor (delete: owner)
+`GET/POST /api/estimates`, `GET/PATCH/DELETE /api/estimates/{id}`, `POST /api/estimates/{id}/status` (`{ action: "send"|"accept"|"decline"|"reopen", validUntil? }`), `POST /api/estimates/{id}/duplicate`. Numbers are EST-0001 per workspace. `state` = status, or `"expired"` (Draft/Sent past `validUntil`, derived). Converting: `POST /api/bills` with `estimateId`. The flip to Converted is atomic in the sale's transaction; a second attempt gets 409 `{ error, saleId, saleNumber }`. An estimate moves no stock, money, balance or report total.
+
+### Day book, account statement, aging
+| Endpoint | Notes |
+|---|---|
+| `GET /api/day-book?from&to&accountId&type&cashOnly=1` | Owner. Every payment row in the range, newest first, with `moneyIn` / `moneyOut` / `net`. With `accountId`, only that account's share of a split. |
+| `GET /api/accounts/{id}/statement?from&to` | Owner. Opening balance → each in/out with `running` → closing (= the Accounts-tab balance). |
+| `GET /api/reports/who-owes-you`, `/who-you-owe` | Finance (owner). Per party: not yet due / 1–30 / 31–60 / 61–90 / 90+, total, oldest. A final `Total` row; rows carry `href` to the Ledger tab. As of today. |
+
 ## 20. Endpoint → web screen(s)
 
 Where each endpoint is called from on the web (hooks in `src/lib/queries.ts` and direct `apiFetch`
@@ -907,3 +946,10 @@ calls in components). “—” = not called by any screen (API-only or server-s
 | `GET` · `PUT` · `POST /api/site` | `/dashboard/site` (website builder) |
 | `GET /api/admin/overview`, `PATCH /api/admin/{businesses,users}/{id}`, `POST /api/admin/invites`, `DELETE /api/admin/invites/{id}` | `/admin` |
 | `POST /api/mobile/auth/{login,refresh,logout,logout-all}`, `GET /api/me`, `POST /api/me/password`, `GET /api/nav-counts`, `GET /api/dashboard/summary`, `GET /api/business`, `GET /api/bills/{id}`, `GET /api/projects/{id}` | — (added for the mobile app; the web keeps loading the same data server-side) |
+| `GET` · `PUT /api/organization/modules` | First-visit chooser; Organization settings › Sections |
+| `GET /api/khata` | Parties (strip, balance column, filters); dashboard To collect / To pay |
+| `GET /api/customers/{id}/statement` | Party › Ledger tab (and its printout) |
+| `GET` · `POST` · `PATCH` · `DELETE /api/estimates[/{id}]`, `POST /api/estimates/{id}/{status,duplicate}` | Sales › Estimates tab; `/dashboard/sales/estimates/[id]`; dashboard Open estimates |
+| `GET /api/day-book` | Payments › Day book |
+| `GET /api/accounts/{id}/statement` | Payments › Accounts › Statement |
+| `PATCH /api/payments/{id}` | Payments › Edit |
