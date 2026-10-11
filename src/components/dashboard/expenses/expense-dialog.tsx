@@ -18,8 +18,17 @@ import {
 } from "@/components/ui/dialog"
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import {
-  AccountPicker,
+  AccountAllocationField,
+  allocationPayload,
+  draftFrom,
+  emptyAllocationDraft,
+  previousOf,
+  validateAllocation,
+  type AllocationDraft,
+} from "@/components/dashboard/account-allocation-field"
+import {
   PartyPicker,
+  useCanSeeAccounts,
   useDefaultAccountId,
 } from "@/components/dashboard/money-pickers"
 import { money, quantity } from "@/lib/billing"
@@ -140,7 +149,9 @@ function Body({
   )
   const [payee, setPayee] = React.useState(editing?.payee ?? "")
   const [partyId, setPartyId] = React.useState(editing?.partyId ?? "")
-  const [accountId, setAccountId] = React.useState(editing?.accountId ?? "")
+  const [allocation, setAllocation] = React.useState<AllocationDraft>(() =>
+    editing ? draftFrom(editing) : emptyAllocationDraft
+  )
   const [employeeId, setEmployeeId] = React.useState(
     editing?.employee?.id ?? ""
   )
@@ -174,6 +185,12 @@ function Body({
   const create = useCreateExpense()
   const update = useUpdateExpense(editing?.id ?? "")
   const fallbackAccount = useDefaultAccountId()
+  const canSeeAccounts = useCanSeeAccounts()
+  // On an edit, the low-balance check puts this expense's own money back first.
+  const previous = React.useMemo(
+    () => (editing ? previousOf(editing, "out") : null),
+    [editing]
+  )
   const mutation = editing ? update : create
   // Zod comes with the form, not the page (lib/lazy-schemas.ts).
   React.useEffect(() => {
@@ -255,7 +272,8 @@ function Body({
       kind,
       payee,
       partyId: partyId || undefined,
-      accountId: accountId || fallbackAccount || undefined,
+      // Nothing for cash; one account, or a split, for anything else.
+      ...allocationPayload(allocation, method, fallbackAccount),
       employeeId: payroll && employeeId ? employeeId : undefined,
       amount: buying ? undefined : amount || 0,
       method,
@@ -271,14 +289,27 @@ function Body({
         : [],
     })
 
+    const next: Errors = {}
     if (!parsed.success) {
-      const next: Errors = {}
       for (const issue of parsed.error.issues) {
         // A line's own complaint is shown against the list, not against a
         // field called "lines.0.qty" that nobody can see.
         const path = issue.path.join(".") || "root"
         next[path.startsWith("lines") ? "lines" : path] ??= issue.message
       }
+    }
+    // The same account rules the server applies (a supervisor, who can't
+    // see the accounts, is not asked for one).
+    Object.assign(
+      next,
+      validateAllocation(allocation, {
+        method,
+        amount: total,
+        fallbackAccountId: fallbackAccount,
+        requireAccount: canSeeAccounts,
+      })
+    )
+    if (!parsed.success || Object.keys(next).length > 0) {
       setErrors(next)
       return
     }
@@ -411,7 +442,7 @@ function Body({
         <div
           className={cn(
             "grid gap-3.5",
-            buying ? "sm:grid-cols-3" : "sm:grid-cols-2 lg:grid-cols-4"
+            buying ? "sm:grid-cols-2" : "sm:grid-cols-3"
           )}
         >
           {buying ? null : (
@@ -450,19 +481,21 @@ function Body({
             <FieldError message={errors.spentOn} />
           </label>
 
-          <AccountPicker
-            value={accountId}
-            onChange={setAccountId}
-            error={errors.accountId}
-          />
-
           <label className="flex flex-col gap-[7px]">
             <FieldLabel>Method</FieldLabel>
             <select
               value={method}
-              onChange={(event) =>
-                setMethod(event.target.value as PaymentMethod)
-              }
+              onChange={(event) => {
+                const next = event.target.value as PaymentMethod
+                setMethod(next)
+                // Cash comes out of no account: whatever was picked goes.
+                if (next === "cash") setAllocation(emptyAllocationDraft)
+                setErrors((prev) => ({
+                  ...prev,
+                  accountId: undefined,
+                  allocations: undefined,
+                }))
+              }}
               className={cn(inputClass, "cursor-pointer")}
             >
               {PAYMENT_METHODS.map((option) => (
@@ -473,6 +506,27 @@ function Body({
             </select>
           </label>
         </div>
+
+        <AccountAllocationField
+          method={method}
+          amount={total}
+          direction="out"
+          value={allocation}
+          onChange={(next) => {
+            setAllocation(next)
+            setErrors((prev) =>
+              Object.fromEntries(
+                Object.entries(prev).filter(
+                  ([path]) =>
+                    path !== "accountId" && !path.startsWith("allocations")
+                )
+              )
+            )
+          }}
+          errors={errors}
+          previous={previous}
+          fallbackAccountId={fallbackAccount}
+        />
 
         <div className="grid gap-3.5 sm:grid-cols-2">
           <label className="flex flex-col gap-[7px]">

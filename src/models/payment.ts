@@ -64,6 +64,15 @@ const paymentSchema = new Schema(
      * now on names one.
      */
     account: { type: Schema.Types.ObjectId, ref: "Account" },
+    /**
+     * True once the accounts this moved through are recorded as
+     * PaymentAllocation rows. A balance then reads those rows, not
+     * `account` above — which stays set when there is exactly one, for
+     * whatever still reads it, and is empty for a split. Absent on every
+     * payment from before allocations, which keep counting against
+     * `account` as they always did.
+     */
+    allocated: { type: Boolean },
     /** Set when the payment was recorded against a bill. */
     bill: { type: Schema.Types.ObjectId, ref: "Bill" },
     /**
@@ -106,7 +115,15 @@ export type PaymentDTO = {
   /** "YYYY-MM-DD" in the workspace's zone, which is how it was entered. */
   paidOn: string
   bill: { id: string; number: string } | null
+  /** Set when this is the cash side of an expense, which is edited from there. */
+  expenseId: string | null
   createdAt: string
+  /**
+   * The accounts it moved through and how much through each. Empty for cash
+   * and for a payment recorded before allocations (then `accountId` says
+   * where it went). Present only where a route loaded them.
+   */
+  allocations?: { accountId: string; amount: number }[]
 }
 
 type MaybePopulated =
@@ -126,7 +143,8 @@ function numbered(ref: MaybePopulated) {
 
 export function toPaymentDTO(
   payment: HydratedDocument<PaymentDocument>,
-  timeZone: string
+  timeZone: string,
+  allocations?: { accountId: string; amount: number }[]
 ): PaymentDTO {
   return {
     id: String(payment._id),
@@ -140,6 +158,8 @@ export function toPaymentDTO(
     note: payment.note ?? null,
     paidOn: dayKeyInZone(payment.paidOn, timeZone),
     bill: numbered(payment.bill as MaybePopulated),
+    expenseId: payment.expense ? String(payment.expense) : null,
     createdAt: (payment.createdAt as Date).toISOString(),
+    ...(allocations ? { allocations } : {}),
   }
 }

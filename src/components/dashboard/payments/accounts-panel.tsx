@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { money } from "@/lib/billing"
+import { maskAccountNumber } from "@/lib/allocations"
 import {
   reportMutationError,
   useAccounts,
@@ -156,7 +157,12 @@ export function AccountsPanel({ today }: { today: string }) {
                   ) : null}
                 </span>
                 <span className="text-n-500 truncate text-xs">
-                  {[KIND_LABELS[account.kind], account.reference, account.detail]
+                  {/* The number masked to its last four; the full one is on Edit. */}
+                  {[
+                    KIND_LABELS[account.kind],
+                    maskAccountNumber(account.reference),
+                    account.detail,
+                  ]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>

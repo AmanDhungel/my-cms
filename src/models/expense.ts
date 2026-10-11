@@ -140,6 +140,11 @@ export type ExpenseDTO = {
   lines: PurchaseLineDTO[]
   recordedBy: { id: string; name: string } | null
   createdAt: string
+  /**
+   * The accounts its cash row moved through (see PaymentDTO.allocations).
+   * Present only where a route loaded them.
+   */
+  allocations?: { accountId: string; amount: number }[]
 }
 
 type MaybePopulated =
@@ -159,7 +164,8 @@ function named(ref: MaybePopulated) {
 
 export function toExpenseDTO(
   expense: HydratedDocument<ExpenseDocument>,
-  timeZone: string
+  timeZone: string,
+  allocations?: { accountId: string; amount: number }[]
 ): ExpenseDTO {
   return {
     id: String(expense._id),
@@ -183,5 +189,6 @@ export function toExpenseDTO(
     })),
     recordedBy: named(expense.recordedBy as MaybePopulated),
     createdAt: (expense.createdAt as Date).toISOString(),
+    ...(allocations ? { allocations } : {}),
   }
 }

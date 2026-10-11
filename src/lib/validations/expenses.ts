@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { allocationsField } from "@/lib/validations/allocations"
 import { EXPENSE_KINDS, PAYMENT_METHODS } from "@/lib/work-constants"
 
 const dayKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date")
@@ -28,6 +29,8 @@ export const expenseSchema = z
     partyId: objectId.optional(),
     /** Which bank, wallet or drawer it came out of. */
     accountId: objectId.optional(),
+    /** A split across several accounts, instead of `accountId`. */
+    allocations: allocationsField,
     /**
      * Ignored for a stock purchase, whose amount is the sum of its lines —
      * the server works that out so the two can never disagree.

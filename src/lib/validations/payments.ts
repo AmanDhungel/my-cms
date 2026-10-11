@@ -1,5 +1,6 @@
 import { z } from "zod"
 
+import { allocationsField } from "@/lib/validations/allocations"
 import { PAYMENT_DIRECTIONS, PAYMENT_METHODS } from "@/lib/work-constants"
 
 const dayKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date")
@@ -27,6 +28,8 @@ export const paymentSchema = z
     partyId: objectId,
     /** Which bank, wallet or drawer it moved through. */
     accountId: objectId,
+    /** A split across several accounts, instead of `accountId`. */
+    allocations: allocationsField,
     method: z.enum(PAYMENT_METHODS),
     reference: z.string().trim().max(60, "That reference is very long").optional(),
     note: z.string().trim().max(500).optional(),

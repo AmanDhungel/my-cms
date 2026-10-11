@@ -15,7 +15,12 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { dayRangeInZone } from "@/lib/time"
 import { expenseSchema } from "@/lib/validations/expenses"
 import { getWorkspace } from "@/lib/workspace"
-import { ownAccount, ownParty } from "@/lib/money-refs"
+import { ownParty } from "@/lib/money-refs"
+import {
+  allocationsFor,
+  resolveAllocations,
+  writeAllocations,
+} from "@/lib/allocations-server"
 import { Expense, toExpenseDTO } from "@/models/expense"
 import { Payment } from "@/models/payment"
 import { User } from "@/models/user"
@@ -51,9 +56,25 @@ export async function GET() {
       .sort({ spentOn: -1, createdAt: -1 })
       .limit(500)
 
+    // The accounts each one's cash row moved through, for an edit to start
+    // from. Only the owner sees accounts at all.
+    const allocations =
+      viewer.role === "owner"
+        ? await allocationsFor(
+            viewer.businessId,
+            expenses.flatMap((expense) => (expense.payment ? [expense.payment] : []))
+          )
+        : new Map<string, { accountId: string; amount: number }[]>()
+
     return ok({
       expenses: expenses.map((expense) =>
-        toExpenseDTO(expense, business.timeZone)
+        toExpenseDTO(
+          expense,
+          business.timeZone,
+          viewer.role === "owner"
+            ? (allocations.get(String(expense.payment)) ?? [])
+            : undefined
+        )
       ),
     })
   } catch (error) {
@@ -104,11 +125,21 @@ export async function POST(request: Request) {
     }
 
     const partyRef = await ownParty(viewer.businessId, values.partyId)
-    const account = await ownAccount(viewer.businessId, values.accountId)
-
     const lines = await priceLines(viewer.businessId, values.lines)
     const amount =
       values.kind === "stock" ? linesTotal(lines) : (values.amount ?? 0)
+
+    // Which accounts it came out of (lib/allocations.ts): none for cash; one,
+    // or a split that adds up to the amount, for anything else. A supervisor
+    // can't see the accounts, so is not made to name one.
+    const allocation = await resolveAllocations(viewer.businessId, {
+      method: values.method,
+      amount,
+      accountId: values.accountId,
+      allocations: values.allocations,
+      requireAccount: viewer.role === "owner",
+    })
+    const account = allocation.account
 
     const session = await mongoose.startSession()
     let expenseId: mongoose.Types.ObjectId | undefined
@@ -152,6 +183,7 @@ export async function POST(request: Request) {
               // account, or the two views of one payment disagree.
               partyRef,
               account,
+              allocated: allocation.allocated || undefined,
               amount,
               method: values.method,
               reference: values.reference,
@@ -168,6 +200,13 @@ export async function POST(request: Request) {
 
         expense.payment = payment._id
         await expense.save({ session })
+
+        // Money out of each account it was paid from, with the row itself.
+        await writeAllocations(
+          session,
+          { businessId: viewer.businessId, paymentId: payment._id, direction: "out" },
+          allocation.rows
+        )
 
         // Costs are averaged from the ledger, so this has to see the row
         // just written — hence inside the transaction, not after it.
@@ -200,7 +239,21 @@ export async function POST(request: Request) {
       href: "/dashboard/sales",
     })
 
-    return ok({ expense: toExpenseDTO(saved, business.timeZone) }, 201)
+    return ok(
+      {
+        expense: toExpenseDTO(
+          saved,
+          business.timeZone,
+          viewer.role === "owner"
+            ? allocation.rows.map((row) => ({
+                accountId: String(row.account),
+                amount: row.amount,
+              }))
+            : undefined
+        ),
+      },
+      201
+    )
   } catch (error) {
     return handleApiError(error)
   }

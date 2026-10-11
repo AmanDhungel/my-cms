@@ -17,7 +17,14 @@ import { connectToDatabase } from "@/lib/mongodb"
 import { dayRangeInZone } from "@/lib/time"
 import { expenseSchema } from "@/lib/validations/expenses"
 import { getWorkspace } from "@/lib/workspace"
-import { ownAccount, ownParty } from "@/lib/money-refs"
+import { ownParty } from "@/lib/money-refs"
+import { needsAccount, toPaisa } from "@/lib/allocations"
+import {
+  allocationsFor,
+  removeAllocations,
+  resolveAllocations,
+  writeAllocations,
+} from "@/lib/allocations-server"
 import { Expense, toExpenseDTO } from "@/models/expense"
 import { Payment } from "@/models/payment"
 import { User } from "@/models/user"
@@ -81,11 +88,50 @@ export async function PATCH(
     }
 
     const partyRef = await ownParty(viewer.businessId, values.partyId)
-    const account = await ownAccount(viewer.businessId, values.accountId)
-
     const lines = await priceLines(viewer.businessId, values.lines)
     const amount =
       values.kind === "stock" ? linesTotal(lines) : (values.amount ?? 0)
+
+    /*
+     * Which accounts it came out of. A supervisor can't see the accounts, so
+     * their edit keeps whatever the owner chose rather than dropping it: the
+     * one account takes the new amount; a split stays as it is, and only the
+     * owner may change an amount that would no longer add up to it.
+     */
+    let accountId = values.accountId
+    let split = values.allocations
+    if (
+      viewer.role !== "owner" &&
+      needsAccount(values.method) &&
+      !split?.length &&
+      expense.payment
+    ) {
+      const existing =
+        (await allocationsFor(viewer.businessId, [expense.payment])).get(
+          String(expense.payment)
+        ) ?? []
+      if (existing.length > 1) {
+        const total = existing.reduce((sum, row) => sum + toPaisa(row.amount), 0)
+        if (total !== toPaisa(amount)) {
+          throw new HttpError(
+            409,
+            "The owner split this one across accounts, so only they can change its amount."
+          )
+        }
+        split = existing
+        accountId = undefined
+      } else if (existing.length === 1) {
+        accountId = existing[0].accountId
+      }
+    }
+    const allocation = await resolveAllocations(viewer.businessId, {
+      method: values.method,
+      amount,
+      accountId,
+      allocations: split,
+      requireAccount: viewer.role === "owner",
+    })
+    const account = allocation.account
 
     // Every item either side of the edit: one dropped from the purchase still
     // needs its cost worked out again without it.
@@ -128,6 +174,7 @@ export async function PATCH(
                 party: values.payee,
                 partyRef: partyRef ?? null,
                 account: account ?? null,
+                allocated: allocation.allocated,
                 amount,
                 method: values.method,
                 reference: values.reference,
@@ -136,6 +183,13 @@ export async function PATCH(
               },
             },
             { session }
+          )
+          // Its accounts are re-read from the new figures: back to cash
+          // drops them, a new amount moves them.
+          await writeAllocations(
+            session,
+            { businessId: viewer.businessId, paymentId: expense.payment, direction: "out" },
+            allocation.rows
           )
         }
 
@@ -162,7 +216,18 @@ export async function PATCH(
       href: "/dashboard/sales",
     })
 
-    return ok({ expense: toExpenseDTO(expense, business.timeZone) })
+    return ok({
+      expense: toExpenseDTO(
+        expense,
+        business.timeZone,
+        viewer.role === "owner"
+          ? allocation.rows.map((row) => ({
+              accountId: String(row.account),
+              amount: row.amount,
+            }))
+          : undefined
+      ),
+    })
   } catch (error) {
     return handleApiError(error)
   }
@@ -203,6 +268,8 @@ export async function DELETE(
             { _id: expense.payment, business: viewer.businessId },
             { session }
           )
+          // The money goes back on the accounts it came out of.
+          await removeAllocations(session, viewer.businessId, expense.payment)
         }
 
         await expense.deleteOne({ session })

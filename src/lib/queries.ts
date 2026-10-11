@@ -672,6 +672,19 @@ export function useCreatePayment() {
   })
 }
 
+export function useUpdatePayment(id: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<{ payment: PaymentDTO }>(`/api/payments/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => invalidateMoney(client),
+  })
+}
+
 export function useDeletePayment(id: string) {
   const client = useQueryClient()
 
@@ -682,10 +695,14 @@ export function useDeletePayment(id: string) {
   })
 }
 
-/** A payment can settle a bill, so the bills list moves with the ledger. */
+/**
+ * A payment can settle a bill, so the bills list moves with the ledger; and
+ * it moves the balance of every account it went through.
+ */
 function invalidateMoney(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["payments"] })
   void client.invalidateQueries({ queryKey: ["bills"] })
+  void client.invalidateQueries({ queryKey: ["accounts"] })
 }
 
 /* ----------------------------------------------------------------- expenses */
@@ -742,6 +759,8 @@ function invalidateSpend(client: QueryClient) {
   void client.invalidateQueries({ queryKey: ["expenses"] })
   void client.invalidateQueries({ queryKey: ["payments"] })
   void client.invalidateQueries({ queryKey: ["inventory"] })
+  // The money came out of an account, whose balance shows on the Accounts tab.
+  void client.invalidateQueries({ queryKey: ["accounts"] })
 }
 
 /* -------------------------------------------------------------- maintenance */

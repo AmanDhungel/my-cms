@@ -8,6 +8,7 @@ import {
 } from "mongoose"
 
 import { ACCOUNT_KINDS, type AccountKind } from "@/lib/work-constants"
+import { fromPaisa, toPaisa } from "@/lib/allocations"
 
 export { ACCOUNT_KINDS, type AccountKind }
 
@@ -108,9 +109,10 @@ export function toAccountDTO(
       : null,
     isDefault: account.isDefault,
     archived: Boolean(account.archivedAt),
-    balance: Math.round((opening + totals.received - totals.paidOut) * 100) / 100,
-    received: Math.round(totals.received * 100) / 100,
-    paidOut: Math.round(totals.paidOut * 100) / 100,
+    // In whole paisa, then back to rupees: no floating-point drift.
+    balance: fromPaisa(toPaisa(opening) + toPaisa(totals.received) - toPaisa(totals.paidOut)),
+    received: fromPaisa(toPaisa(totals.received)),
+    paidOut: fromPaisa(toPaisa(totals.paidOut)),
     movements: totals.movements,
     createdAt: (account.createdAt as Date).toISOString(),
   }

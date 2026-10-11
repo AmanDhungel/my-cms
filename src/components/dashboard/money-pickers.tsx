@@ -114,7 +114,7 @@ export function PartyPicker({
  * fallback` — so what is shown and what is saved cannot disagree.
  */
 /** Whether this viewer may see the accounts at all. Owners only. */
-function useCanSeeAccounts() {
+export function useCanSeeAccounts() {
   const { data } = useSession()
   return data?.user?.role === "owner"
 }

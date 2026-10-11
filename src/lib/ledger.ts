@@ -6,6 +6,8 @@ import { Account, type AccountTotals } from "@/models/account"
 import { Bill } from "@/models/bill"
 import { Expense } from "@/models/expense"
 import { Payment } from "@/models/payment"
+import { PaymentAllocation } from "@/models/payment-allocation"
+import { fromPaisa } from "@/lib/allocations"
 
 /**
  * Running totals: what a party owes, and what an account holds.
@@ -31,30 +33,51 @@ export async function accountTotals(
    * Every expense mirrors itself onto the payments ledger as money out, so
    * counting both would take the same rupee off an account twice. Payments
    * are the cash record; expenses are what the cash was for.
+   *
+   * Two kinds of payment row (lib/allocations.ts):
+   *   - one recorded since allocations existed counts through its
+   *     PaymentAllocation rows — one per account, or several for a split;
+   *   - one from before counts, as it always did, against the single account
+   *     it names. Nothing was backfilled, so these keep their balances.
+   *
+   * Summed as whole paisa, so a balance never picks up a floating-point
+   * hair from adding rupee amounts.
    */
-  const rows = await Payment.aggregate<{
-    _id: { account: unknown; direction: string }
-    total: number
-    n: number
-  }>([
-    { $match: { business, account: { $ne: null } } },
-    {
-      $group: {
-        _id: { account: "$account", direction: "$direction" },
-        total: { $sum: "$amount" },
-        n: { $sum: 1 },
-      },
+  const paisa = { $sum: { $round: [{ $multiply: ["$amount", 100] }, 0] } }
+  type Row = { _id: { account: unknown; direction: string }; paisa: number; n: number }
+  const group = {
+    $group: {
+      _id: { account: "$account", direction: "$direction" },
+      paisa,
+      n: { $sum: 1 },
     },
+  }
+
+  const [legacy, allocated] = await Promise.all([
+    Payment.aggregate<Row>([
+      { $match: { business, account: { $ne: null }, allocated: { $ne: true } } },
+      group,
+    ]),
+    PaymentAllocation.aggregate<Row>([{ $match: { business } }, group]),
   ])
 
-  const totals = new Map<string, AccountTotals>()
-  for (const row of rows) {
+  const sums = new Map<string, { inPaisa: number; outPaisa: number; movements: number }>()
+  for (const row of [...legacy, ...allocated]) {
     const key = String(row._id.account)
-    const at = totals.get(key) ?? { received: 0, paidOut: 0, movements: 0 }
-    if (row._id.direction === "in") at.received += row.total
-    else at.paidOut += row.total
+    const at = sums.get(key) ?? { inPaisa: 0, outPaisa: 0, movements: 0 }
+    if (row._id.direction === "in") at.inPaisa += row.paisa
+    else at.outPaisa += row.paisa
     at.movements += row.n
-    totals.set(key, at)
+    sums.set(key, at)
+  }
+
+  const totals = new Map<string, AccountTotals>()
+  for (const [key, at] of sums) {
+    totals.set(key, {
+      received: fromPaisa(at.inPaisa),
+      paidOut: fromPaisa(at.outPaisa),
+      movements: at.movements,
+    })
   }
   return totals
 }

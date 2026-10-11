@@ -18,12 +18,27 @@ import {
 } from "@/components/ui/dialog"
 import { FieldError, FieldLabel, inputClass } from "@/components/auth/field"
 import {
-  AccountPicker,
+  AccountAllocationField,
+  allocationPayload,
+  draftFrom,
+  emptyAllocationDraft,
+  previousOf,
+  validateAllocation,
+  type AllocationDraft,
+} from "@/components/dashboard/account-allocation-field"
+import {
   PartyPicker,
+  useCanSeeAccounts,
   useDefaultAccountId,
 } from "@/components/dashboard/money-pickers"
 import { money } from "@/lib/billing"
-import { reportMutationError, useBills, useCreatePayment } from "@/lib/queries"
+import {
+  reportMutationError,
+  useBills,
+  useCreatePayment,
+  useUpdatePayment,
+} from "@/lib/queries"
+import type { PaymentDTO } from "@/models/payment"
 import { paymentSchema } from "@/lib/validations/payments"
 import {
   PAYMENT_METHODS,
@@ -44,11 +59,14 @@ export function PaymentDialog({
   open,
   onClose,
   today,
+  editing = null,
 }: {
   open: boolean
   onClose: () => void
   /** The workspace's today, so the date starts on its calendar not the browser's. */
   today: string
+  /** A payment to correct; absent to record a new one. */
+  editing?: PaymentDTO | null
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? null : onClose())}>
@@ -61,7 +79,7 @@ export function PaymentDialog({
       >
         <DialogHeader>
           <DialogTitle className="font-heading text-[19px] font-semibold">
-            Record a payment
+            {editing ? "Edit payment" : "Record a payment"}
           </DialogTitle>
           <DialogDescription className="text-n-500 text-[13.5px]">
             Money that has actually changed hands, either way.
@@ -69,7 +87,7 @@ export function PaymentDialog({
         </DialogHeader>
         {/* Mounted only while open, so each entry starts from a clean sheet. */}
         {open ? (
-          <Body onClose={onClose} today={today} />
+          <Body onClose={onClose} today={today} editing={editing} />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -79,29 +97,49 @@ export function PaymentDialog({
 function Body({
   onClose,
   today,
+  editing,
 }: {
   onClose: () => void
   today: string
+  editing: PaymentDTO | null
 }) {
-  const [direction, setDirection] = React.useState<PaymentDirection>("in")
-  const [party, setParty] = React.useState("")
-  const [partyId, setPartyId] = React.useState("")
-  const [accountId, setAccountId] = React.useState("")
-  const [amount, setAmount] = React.useState("")
-  const [method, setMethod] = React.useState<PaymentMethod>("cash")
-  const [reference, setReference] = React.useState("")
-  const [note, setNote] = React.useState("")
-  const [paidOn, setPaidOn] = React.useState(today)
-  const [billId, setBillId] = React.useState("")
+  const [direction, setDirection] = React.useState<PaymentDirection>(
+    editing?.direction ?? "in"
+  )
+  const [party, setParty] = React.useState(editing?.party ?? "")
+  const [partyId, setPartyId] = React.useState(editing?.partyId ?? "")
+  const [allocation, setAllocation] = React.useState<AllocationDraft>(() =>
+    editing ? draftFrom(editing) : emptyAllocationDraft
+  )
+  const [amount, setAmount] = React.useState(
+    editing ? String(editing.amount) : ""
+  )
+  const [method, setMethod] = React.useState<PaymentMethod>(
+    editing?.method ?? "cash"
+  )
+  const [reference, setReference] = React.useState(editing?.reference ?? "")
+  const [note, setNote] = React.useState(editing?.note ?? "")
+  const [paidOn, setPaidOn] = React.useState(editing?.paidOn ?? today)
+  const [billId, setBillId] = React.useState(editing?.bill?.id ?? "")
   const [errors, setErrors] = React.useState<Errors>({})
 
   const bills = useBills()
   const create = useCreatePayment()
+  const update = useUpdatePayment(editing?.id ?? "")
+  const mutation = editing ? update : create
   const fallbackAccount = useDefaultAccountId()
+  const canSeeAccounts = useCanSeeAccounts()
+  // On an edit, the low-balance check puts this payment's own money back first.
+  const previous = React.useMemo(
+    () => (editing ? previousOf(editing, editing.direction) : null),
+    [editing]
+  )
 
-  // Anything still owed on, whether nothing has been paid yet or half has.
+  // Anything still owed on, whether nothing has been paid yet or half has —
+  // and, on an edit, the bill this one is already against.
   const settleable = (bills.data?.bills ?? []).filter(
-    (bill) => bill.status === "issued" && bill.due > 0
+    (bill) =>
+      (bill.status === "issued" && bill.due > 0) || bill.id === editing?.bill?.id
   )
 
   const chosen = settleable.find((bill) => bill.id === billId)
@@ -115,13 +153,14 @@ function Body({
   }
 
   function submit() {
-    if (create.isPending) return
+    if (mutation.isPending) return
 
     const parsed = paymentSchema.safeParse({
       direction,
       party,
       partyId: partyId || undefined,
-      accountId: accountId || fallbackAccount || undefined,
+      // Nothing for cash; one account, or a split, for anything else.
+      ...allocationPayload(allocation, method, fallbackAccount),
       amount: amount || 0,
       method,
       reference: reference || undefined,
@@ -130,21 +169,36 @@ function Body({
       billId: direction === "in" && billId ? billId : undefined,
     })
 
+    const next: Errors = {}
     if (!parsed.success) {
-      const next: Errors = {}
       for (const issue of parsed.error.issues) {
         next[issue.path.join(".") || "root"] ??= issue.message
       }
+    }
+    // The same account rules the server applies, so the message lands here
+    // rather than in a toast.
+    Object.assign(
+      next,
+      validateAllocation(allocation, {
+        method,
+        amount: Number(amount) || 0,
+        fallbackAccountId: fallbackAccount,
+        requireAccount: canSeeAccounts,
+      })
+    )
+    if (!parsed.success || Object.keys(next).length > 0) {
       setErrors(next)
       return
     }
 
-    create.mutate(parsed.data, {
+    mutation.mutate(parsed.data, {
       onSuccess: ({ payment }) => {
         toast.success(
-          payment.direction === "in"
-            ? `${money(payment.amount)} in from ${payment.party}`
-            : `${money(payment.amount)} out to ${payment.party}`
+          editing
+            ? "Payment updated"
+            : payment.direction === "in"
+              ? `${money(payment.amount)} in from ${payment.party}`
+              : `${money(payment.amount)} out to ${payment.party}`
         )
         onClose()
       },
@@ -210,7 +264,7 @@ function Body({
           </label>
         </div>
 
-        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3.5 sm:grid-cols-3">
           <label className="flex flex-col gap-[7px]">
             <FieldLabel>Date</FieldLabel>
             <input
@@ -230,9 +284,17 @@ function Body({
             <FieldLabel>Method</FieldLabel>
             <select
               value={method}
-              onChange={(event) =>
-                setMethod(event.target.value as PaymentMethod)
-              }
+              onChange={(event) => {
+                const next = event.target.value as PaymentMethod
+                setMethod(next)
+                // Cash moves through no account: whatever was picked goes.
+                if (next === "cash") setAllocation(emptyAllocationDraft)
+                setErrors((prev) => ({
+                  ...prev,
+                  accountId: undefined,
+                  allocations: undefined,
+                }))
+              }}
               className={cn(inputClass, "cursor-pointer")}
             >
               {PAYMENT_METHODS.map((option) => (
@@ -242,12 +304,6 @@ function Body({
               ))}
             </select>
           </label>
-
-          <AccountPicker
-            value={accountId}
-            onChange={setAccountId}
-            error={errors.accountId}
-          />
 
           <label className="flex flex-col gap-[7px]">
             <FieldLabel>
@@ -263,6 +319,27 @@ function Body({
             <FieldError message={errors.reference} />
           </label>
         </div>
+
+        <AccountAllocationField
+          method={method}
+          amount={Number(amount) || 0}
+          direction={direction}
+          value={allocation}
+          onChange={(next) => {
+            setAllocation(next)
+            setErrors((prev) =>
+              Object.fromEntries(
+                Object.entries(prev).filter(
+                  ([path]) =>
+                    path !== "accountId" && !path.startsWith("allocations")
+                )
+              )
+            )
+          }}
+          errors={errors}
+          previous={previous}
+          fallbackAccountId={fallbackAccount}
+        />
 
         {direction === "in" ? (
           <div className="border-n-200 flex flex-col gap-2.5 rounded-[10px] border bg-white p-3">
@@ -330,10 +407,14 @@ function Body({
         <button
           type="button"
           onClick={submit}
-          disabled={create.isPending}
+          disabled={mutation.isPending}
           className="bg-p-500 rounded-md px-[18px] py-2.5 text-sm font-semibold text-white hover:brightness-[1.06] disabled:opacity-60"
         >
-          {create.isPending ? "Saving…" : "Record payment"}
+          {mutation.isPending
+            ? "Saving…"
+            : editing
+              ? "Save changes"
+              : "Record payment"}
         </button>
       </DialogFooter>
     </>

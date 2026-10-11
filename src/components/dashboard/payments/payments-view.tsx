@@ -68,6 +68,7 @@ export function PaymentsView({ today }: { today: string }) {
   const [search, setSearch] = React.useState("")
   const [page, setPage] = React.useState(1)
   const [deleting, setDeleting] = React.useState<PaymentDTO | null>(null)
+  const [editing, setEditing] = React.useState<PaymentDTO | null>(null)
 
   const query = usePayments()
   const payments = query.data?.payments ?? []
@@ -230,7 +231,7 @@ export function PaymentsView({ today }: { today: string }) {
             </div>
           </div>
 
-          <div className="border-n-200 bg-n-100 hidden grid-cols-[110px_1.4fr_150px_120px_90px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
+          <div className="border-n-200 bg-n-100 hidden grid-cols-[110px_1.4fr_150px_120px_140px] gap-3.5 border-b px-[18px] py-2.5 lg:grid">
             {["DATE", "PARTY", "METHOD", "AMOUNT", ""].map((head) => (
               <span
                 key={head}
@@ -244,7 +245,7 @@ export function PaymentsView({ today }: { today: string }) {
           {rows.rows.map((payment) => (
             <div
               key={payment.id}
-              className="border-n-200/70 hover:bg-n-50 grid gap-3.5 border-b px-[18px] py-3.5 lg:grid-cols-[110px_1.4fr_150px_120px_90px] lg:items-center"
+              className="border-n-200/70 hover:bg-n-50 grid gap-3.5 border-b px-[18px] py-3.5 lg:grid-cols-[110px_1.4fr_150px_120px_140px] lg:items-center"
             >
               <span className="text-n-600 text-[12.5px]">
                 {formatDay(payment.paidOn)}
@@ -278,7 +279,17 @@ export function PaymentsView({ today }: { today: string }) {
                 {payment.direction === "in" ? "+" : "−"} {money(payment.amount)}
               </span>
 
-              <div className="lg:justify-self-end">
+              <div className="flex gap-2 lg:justify-self-end">
+                {/* An expense's cash side is corrected from the expense. */}
+                {payment.expenseId ? null : (
+                  <button
+                    type="button"
+                    onClick={() => setEditing(payment)}
+                    className="border-n-300 text-n-700 hover:bg-n-100 rounded-md border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold"
+                  >
+                    Edit
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setDeleting(payment)}
@@ -395,6 +406,16 @@ export function PaymentsView({ today }: { today: string }) {
         onClose={() => setOpen(false)}
         today={today}
       />
+
+      {editing ? (
+        <PaymentDialog
+          key={editing.id}
+          open
+          editing={editing}
+          onClose={() => setEditing(null)}
+          today={today}
+        />
+      ) : null}
 
       {deleting ? (
         <DeleteDialog

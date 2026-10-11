@@ -12,6 +12,7 @@ import { getWorkspace } from "@/lib/workspace"
 import { Account, toAccountDTO } from "@/models/account"
 import { Expense } from "@/models/expense"
 import { Payment } from "@/models/payment"
+import { PaymentAllocation } from "@/models/payment-allocation"
 
 export const runtime = "nodejs"
 
@@ -34,11 +35,12 @@ export async function PATCH(
     const business = await getWorkspace(viewer)
     const account = await findOwn(viewer.businessId, id)
 
+    // "NIC Asia" and "nic asia" are the same account to whoever picks one.
     const clash = await Account.findOne({
       business: viewer.businessId,
       name: values.name,
       _id: { $ne: account._id },
-    })
+    }).collation({ locale: "en", strength: 2 })
     if (clash) throw new HttpError(409, "You already have one by that name")
 
     if (values.isDefault) {
@@ -88,16 +90,20 @@ export async function DELETE(
     await connectToDatabase()
     const account = await findOwn(viewer.businessId, id)
 
-    const [payments, expenses] = await Promise.all([
+    // A split names its accounts only in its allocation rows, so those
+    // count too. Nothing here ever deletes a payment or an allocation.
+    const [payments, expenses, allocations] = await Promise.all([
       Payment.countDocuments({ business: viewer.businessId, account: id }),
       Expense.countDocuments({ business: viewer.businessId, account: id }),
+      PaymentAllocation.countDocuments({ business: viewer.businessId, account: id }),
     ])
+    const movements = payments + expenses + allocations
 
-    if (payments + expenses > 0) {
+    if (movements > 0) {
       account.archivedAt = new Date()
       account.isDefault = false
       await account.save()
-      return ok({ id, archived: true, movements: payments + expenses })
+      return ok({ id, archived: true, movements })
     }
 
     await account.deleteOne()
