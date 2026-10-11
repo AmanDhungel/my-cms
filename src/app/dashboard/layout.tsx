@@ -20,7 +20,7 @@ import { WorkRequest } from "@/models/request";
 import { Ticket } from "@/models/ticket";
 import { User } from "@/models/user";
 import { servedUrl } from "@/lib/storage/urls"
-import { resolveModules } from "@/lib/modules";
+import { needsModuleChooser, resolveModules } from "@/lib/modules";
 
 /** Sessions are per-request; nothing under /dashboard may be cached. */
 export const dynamic = "force-dynamic";
@@ -67,8 +67,11 @@ export default async function DashboardLayout({
    * which is also how every workspace behaved before sections existed.
    */
   if (
-    !business.modulesConfiguredAt &&
-    (me.role === "owner" || viewer.superAdmin)
+    needsModuleChooser({
+      modulesConfiguredAt: business.modulesConfiguredAt,
+      role: me.role,
+      superAdmin: viewer.superAdmin,
+    })
   ) {
     return <FirstRunModules role={me.role} businessName={business.name} />;
   }

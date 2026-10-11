@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "cn"
+import { Loader2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { SignOutButton } from "@/components/dashboard/sign-out-button"
@@ -37,6 +38,10 @@ export function ModulesChooser({
 }) {
   const router = useRouter()
   const save = useSaveModules()
+  // The dashboard is re-rendered on the server once the save lands; the
+  // button stays busy until that has arrived, so it can't be pressed twice.
+  const [refreshing, startRefresh] = useTransition()
+  const busy = save.isPending || refreshing
   const startsCustom =
     initial !== null && MODULE_KEYS.some((key) => !initial[key])
   const [mode, setMode] = useState<"all" | "custom">(
@@ -51,13 +56,20 @@ export function ModulesChooser({
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
-    if (nothingPicked || save.isPending) return
+    if (nothingPicked || busy) return
     save.mutate(chosen, {
-      onSuccess: () => {
+      onSuccess: (saved) => {
+        // Only what the server confirms it stored counts as saved.
+        if (!saved.configured) {
+          toast.error("The sections couldn't be saved. Try again.")
+          return
+        }
         toast.success("Sections saved")
         onSaved?.()
-        // The sidebar and dashboard are rendered on the server from this.
-        router.refresh()
+        // The gate, the sidebar and the dashboard are all decided on the
+        // server, so re-render it in place — same URL, no new history
+        // entry, which is also why Back can't return to the chooser.
+        startRefresh(() => router.refresh())
       },
       onError: (error) => reportMutationError(error),
     })
@@ -144,10 +156,18 @@ export function ModulesChooser({
       <div className="flex justify-end">
         <button
           type="submit"
-          disabled={nothingPicked || save.isPending}
+          disabled={nothingPicked || busy}
+          aria-busy={busy}
           className={primaryButtonClass}
         >
-          {save.isPending ? "Saving…" : submitLabel}
+          {busy ? (
+            <>
+              <Loader2Icon aria-hidden className="size-4 animate-spin" />
+              Saving…
+            </>
+          ) : (
+            submitLabel
+          )}
         </button>
       </div>
     </form>

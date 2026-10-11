@@ -1,11 +1,11 @@
 import {
   Schema,
-  model,
-  models,
   type HydratedDocument,
   type InferSchemaType,
   type Model,
 } from "mongoose"
+
+import { defineModel } from "@/lib/model"
 
 import { CREW_SIZES } from "@/lib/validations/auth"
 import {
@@ -145,13 +145,9 @@ const businessSchema = new Schema(
 
 export type BusinessDocument = InferSchemaType<typeof businessSchema>
 
-/**
- * `models.Business ??` keeps hot reload from re-registering the model
- * (mongoose throws OverwriteModelError otherwise).
- */
+/** Once per process, and never with a stale schema (lib/model.ts). */
 export const Business: Model<BusinessDocument> =
-  (models.Business as Model<BusinessDocument>) ??
-  model<BusinessDocument>("Business", businessSchema)
+  defineModel<BusinessDocument>("Business", businessSchema)
 
 export type BusinessDTO = {
   id: string

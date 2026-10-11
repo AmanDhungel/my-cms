@@ -1,11 +1,11 @@
 import {
   Schema,
-  model,
-  models,
   type HydratedDocument,
   type InferSchemaType,
   type Model,
 } from "mongoose"
+
+import { defineModel } from "@/lib/model"
 
 import { dayKeyInZone } from "@/lib/time"
 import {
@@ -99,8 +99,7 @@ paymentSchema.index({ bill: 1, direction: 1 })
 export type PaymentDocument = InferSchemaType<typeof paymentSchema>
 
 export const Payment: Model<PaymentDocument> =
-  (models.Payment as Model<PaymentDocument>) ??
-  model<PaymentDocument>("Payment", paymentSchema)
+  defineModel<PaymentDocument>("Payment", paymentSchema)
 
 export type PaymentDTO = {
   id: string

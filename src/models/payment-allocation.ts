@@ -1,10 +1,10 @@
 import {
   Schema,
-  model,
-  models,
   type InferSchemaType,
   type Model,
 } from "mongoose"
+
+import { defineModel } from "@/lib/model"
 
 import { PAYMENT_DIRECTIONS } from "@/lib/work-constants"
 
@@ -44,5 +44,4 @@ paymentAllocationSchema.index({ business: 1, account: 1 })
 export type PaymentAllocationDocument = InferSchemaType<typeof paymentAllocationSchema>
 
 export const PaymentAllocation: Model<PaymentAllocationDocument> =
-  (models.PaymentAllocation as Model<PaymentAllocationDocument>) ??
-  model<PaymentAllocationDocument>("PaymentAllocation", paymentAllocationSchema)
+  defineModel<PaymentAllocationDocument>("PaymentAllocation", paymentAllocationSchema)

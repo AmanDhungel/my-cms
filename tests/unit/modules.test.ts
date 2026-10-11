@@ -7,6 +7,8 @@ import {
   chooserSections,
   enabledList,
   isPathTurnedOff,
+  modulesUpdate,
+  needsModuleChooser,
   moduleForPath,
   resolveModules,
   visibleSections,
@@ -148,5 +150,30 @@ describe("sidebar filtering", () => {
     assert.ok(owner?.pages.includes("Payments"))
     assert.ok(!supervisor?.pages.includes("Payments"))
     assert.ok(!chooserSections("owner")[0].pages.includes("Dashboard"))
+  })
+})
+
+describe("first-visit chooser (Part 1 regression)", () => {
+  it("the save always stamps modulesConfiguredAt — 'Use everything' included", () => {
+    const now = new Date("2026-10-11T08:00:00Z")
+    const everything = modulesUpdate(["workspace", "operations", "sales_stock", "reports"], now)
+    assert.equal(everything.$set.modulesConfiguredAt, now)
+    assert.deepEqual(everything.$set.enabledModules, ["workspace", "operations", "sales_stock", "reports"])
+    const custom = modulesUpdate(["reports", "sales_stock"], now)
+    assert.equal(custom.$set.modulesConfiguredAt, now)
+    assert.deepEqual(custom.$set.enabledModules, ["sales_stock", "reports"])
+  })
+
+  it("the gate asks the owner and a super admin, never a supervisor", () => {
+    assert.equal(needsModuleChooser({ modulesConfiguredAt: null, role: "owner", superAdmin: false }), true)
+    assert.equal(needsModuleChooser({ modulesConfiguredAt: undefined, role: "supervisor", superAdmin: true }), true)
+    assert.equal(needsModuleChooser({ modulesConfiguredAt: null, role: "supervisor", superAdmin: false }), false)
+  })
+
+  it("the gate flips once a save has stamped the workspace", () => {
+    const business: { modulesConfiguredAt: Date | null } = { modulesConfiguredAt: null }
+    assert.equal(needsModuleChooser({ ...business, role: "owner", superAdmin: false }), true)
+    Object.assign(business, modulesUpdate(["workspace"], new Date()).$set)
+    assert.equal(needsModuleChooser({ ...business, role: "owner", superAdmin: false }), false)
   })
 })

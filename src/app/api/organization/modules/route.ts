@@ -1,7 +1,7 @@
 import { handleApiError, HttpError, ok, readJson } from "@/lib/api-response"
 import { requireUser } from "@/lib/auth/guards"
 import { isSuperAdmin } from "@/lib/auth/super-admin"
-import { enabledList, resolveModules } from "@/lib/modules"
+import { enabledList, modulesUpdate, resolveModules } from "@/lib/modules"
 import { connectToDatabase } from "@/lib/mongodb"
 import { modulesSchema } from "@/lib/validations/modules"
 import { Business, type BusinessDocument } from "@/models/business"
@@ -71,10 +71,16 @@ export async function PUT(request: Request) {
 
     const business = await Business.findOneAndUpdate(
       { _id: viewer.businessId },
-      { $set: { enabledModules: modules, modulesConfiguredAt: new Date() } },
+      modulesUpdate(modules, new Date()),
       { new: true, runValidators: true }
     ).select("enabledModules modulesConfiguredAt")
     if (!business) throw new HttpError(404, "That workspace no longer exists")
+    // Read back, never assumed: a write that silently stored nothing (a
+    // stale schema in a long-running dev server did exactly that) must not
+    // be reported as saved, or the chooser would just ask again.
+    if (!business.modulesConfiguredAt) {
+      throw new HttpError(500, "The sections couldn't be saved. Try again.")
+    }
 
     return ok(modulesBody(business, true))
   } catch (error) {

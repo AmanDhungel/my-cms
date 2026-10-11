@@ -233,3 +233,31 @@ export function chooserSections(role: string) {
       .map((item) => item.label),
   }))
 }
+
+/**
+ * Whether the dashboard asks "How do you want to use EMS?" instead of
+ * rendering the shell: only until a choice has been stamped, and only for
+ * someone allowed to make it (the owner, or a super admin).
+ */
+export function needsModuleChooser(input: {
+  modulesConfiguredAt: Date | string | null | undefined
+  role: string
+  superAdmin: boolean
+}): boolean {
+  if (input.modulesConfiguredAt) return false
+  return input.role === "owner" || input.superAdmin
+}
+
+/**
+ * The write behind a choice. It always stamps `modulesConfiguredAt` —
+ * "Use everything" included, where the list is simply all four — since that
+ * stamp is what stops the chooser coming back.
+ */
+export function modulesUpdate(modules: readonly ModuleKey[], now: Date) {
+  return {
+    $set: {
+      enabledModules: MODULE_KEYS.filter((key) => modules.includes(key)),
+      modulesConfiguredAt: now,
+    },
+  }
+}
